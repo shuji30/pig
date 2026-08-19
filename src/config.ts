@@ -48,3 +48,7 @@ export const CLOTH_COLORS = [
   '#5b5560',
 ];
 export const HAIR_STYLE_NAMES = ['ショート', 'ボブ', 'ツインテール', 'ロング', 'ぼうず'];
+
+/** ロココ調の金彩に使う色 */
+export const GOLD = '#c9a24a';
+export const GOLD_LIGHT = '#e8cf95';

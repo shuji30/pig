@@ -12,35 +12,35 @@ export const CATEGORY_ORDER: FurnitureCategory[] = ['seat', 'table', 'storage', 
 
 export const FURNITURE: FurnitureDef[] = [
   // ---- すわる ----
-  { id: 'chair', name: 'いす', category: 'seat', shape: 'chair', size: [1, 1], height: 40, color: '#c98a52', seatHeight: 20 },
-  { id: 'chair-pink', name: 'ピンクいす', category: 'seat', shape: 'chair', size: [1, 1], height: 40, color: '#ef8fb4', accent: '#fff0f5', seatHeight: 20 },
-  { id: 'stool', name: 'まるいす', category: 'seat', shape: 'chair', size: [1, 1], height: 24, color: '#8fc0d8', seatHeight: 20 },
-  { id: 'sofa', name: 'ソファ', category: 'seat', shape: 'sofa', size: [2, 1], height: 40, color: '#7d9ff0', accent: '#b9cbfa', seatHeight: 20 },
-  { id: 'sofa-long', name: 'ながソファ', category: 'seat', shape: 'sofa', size: [3, 1], height: 40, color: '#f0a97d', accent: '#ffd9bd', seatHeight: 20 },
-  { id: 'bed', name: 'ベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 46, color: '#a97fc4', accent: '#fdf6ff', seatHeight: 18 },
+  { id: 'chair', name: 'ロココいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20 },
+  { id: 'chair-pink', name: 'ローズいす', category: 'seat', shape: 'chair', size: [1, 1], height: 52, color: '#f4e2e6', accent: '#d98aa6', seatHeight: 20 },
+  { id: 'stool', name: 'まるいす', category: 'seat', shape: 'chair', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#a9c4dc', seatHeight: 20 },
+  { id: 'sofa', name: 'カナッペ', category: 'seat', shape: 'sofa', size: [2, 1], height: 48, color: '#f3e6d2', accent: '#a9c4dc', seatHeight: 20 },
+  { id: 'sofa-long', name: 'ながいカナッペ', category: 'seat', shape: 'sofa', size: [3, 1], height: 48, color: '#f3e6d2', accent: '#b7d4c4', seatHeight: 20 },
+  { id: 'bed', name: 'ロココベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#f2e4ea', accent: '#fdf8f2', seatHeight: 18 },
 
   // ---- つくえ ----
-  { id: 'table-round', name: 'まるテーブル', category: 'table', shape: 'table', size: [1, 1], height: 30, color: '#d9b184' },
-  { id: 'table-dining', name: 'ダイニング', category: 'table', shape: 'table', size: [2, 2], height: 32, color: '#c08a56' },
-  { id: 'desk', name: 'デスク', category: 'table', shape: 'table', size: [2, 1], height: 34, color: '#e0d6c8' },
-  { id: 'lowtable', name: 'ローテーブル', category: 'table', shape: 'table', size: [2, 1], height: 18, color: '#8f7a68' },
+  { id: 'table-round', name: 'ねこあしテーブル', category: 'table', shape: 'table', size: [1, 1], height: 32, color: '#e9d9bd', accent: '#eae2d4' },
+  { id: 'table-dining', name: '大理石テーブル', category: 'table', shape: 'table', size: [2, 2], height: 34, color: '#e5d3b3', accent: '#ece4d6' },
+  { id: 'desk', name: 'ビューロー', category: 'table', shape: 'table', size: [2, 1], height: 36, color: '#dcc7a4', accent: '#ece4d6' },
+  { id: 'lowtable', name: 'ソファテーブル', category: 'table', shape: 'table', size: [2, 1], height: 20, color: '#e9d9bd', accent: '#eae2d4' },
 
   // ---- しゅうのう ----
-  { id: 'shelf', name: 'ほんだな', category: 'storage', shape: 'box', size: [1, 1], height: 76, color: '#b98a5c', accent: '#7a5636' },
-  { id: 'cabinet', name: 'キャビネット', category: 'storage', shape: 'box', size: [2, 1], height: 44, color: '#eae2d6', accent: '#c9bdac' },
-  { id: 'fridge', name: 'れいぞうこ', category: 'storage', shape: 'box', size: [1, 1], height: 70, color: '#f2f4f6', accent: '#c4ccd4' },
-  { id: 'box', name: 'もくばこ', category: 'storage', shape: 'box', size: [1, 1], height: 22, color: '#cfa06a', accent: '#a87d4c' },
+  { id: 'shelf', name: 'ブックキャビネット', category: 'storage', shape: 'box', size: [1, 1], height: 78, color: '#f2e7d5', accent: '#e0cdae' },
+  { id: 'cabinet', name: 'コモード', category: 'storage', shape: 'box', size: [2, 1], height: 46, color: '#f4ead9', accent: '#e3d2b6' },
+  { id: 'fridge', name: 'きんのれいぞうこ', category: 'storage', shape: 'box', size: [1, 1], height: 70, color: '#f8f3ea', accent: '#e6dccb' },
+  { id: 'box', name: 'ほうせきばこ', category: 'storage', shape: 'box', size: [1, 1], height: 24, color: '#e8cdae', accent: '#f2ddc0' },
 
   // ---- かざり ----
-  { id: 'plant', name: 'かんようしょくぶつ', category: 'deco', shape: 'plant', size: [1, 1], height: 62, color: '#c47d5a', accent: '#4fa35a' },
-  { id: 'plant-small', name: 'ミニサボテン', category: 'deco', shape: 'plant', size: [1, 1], height: 30, color: '#d8a06a', accent: '#6fbf63' },
-  { id: 'lamp', name: 'フロアライト', category: 'deco', shape: 'lamp', size: [1, 1], height: 84, color: '#8a8177', accent: '#ffe9a8' },
-  { id: 'tv', name: 'テレビ', category: 'deco', shape: 'tv', size: [2, 1], height: 48, color: '#3d3a40', accent: '#7fd4e8' },
+  { id: 'plant', name: 'ゴールドのはちうえ', category: 'deco', shape: 'plant', size: [1, 1], height: 64, color: '#e0cba8', accent: '#5d9e63' },
+  { id: 'plant-small', name: 'ミニはちうえ', category: 'deco', shape: 'plant', size: [1, 1], height: 32, color: '#e0cba8', accent: '#6fbf63' },
+  { id: 'lamp', name: 'キャンドルスタンド', category: 'deco', shape: 'lamp', size: [1, 1], height: 86, color: '#cfa855', accent: '#fdf3d2' },
+  { id: 'tv', name: 'きんぶちテレビ', category: 'deco', shape: 'tv', size: [2, 1], height: 50, color: '#cfa855', accent: '#3a4a6b' },
 
   // ---- ゆか ----
-  { id: 'rug', name: 'ラグ', category: 'floor', shape: 'rug', size: [2, 2], height: 0, color: '#ef8fb4', accent: '#fff3f7', walkable: true },
-  { id: 'rug-big', name: 'おおきいラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#8fd3c4', accent: '#f2fbf8', walkable: true },
-  { id: 'mat', name: 'マット', category: 'floor', shape: 'rug', size: [2, 1], height: 0, color: '#7d9ff0', accent: '#e8eeff', walkable: true },
+  { id: 'rug', name: 'ロココラグ', category: 'floor', shape: 'rug', size: [2, 2], height: 0, color: '#c98aa6', accent: '#f8eef2', walkable: true },
+  { id: 'rug-big', name: 'おおきいロココラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#cbb392', accent: '#f6eee0', walkable: true },
+  { id: 'mat', name: 'マット', category: 'floor', shape: 'rug', size: [2, 1], height: 0, color: '#a9c4dc', accent: '#eef4fa', walkable: true },
 ];
 
 const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));

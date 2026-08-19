@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TILE_H, TILE_W } from '../config';
+import { GOLD, GOLD_LIGHT, TILE_H, TILE_W } from '../config';
 import { rotatedSize } from '../core/iso';
 import type { FurnitureDef, Rotation } from '../types';
 import { shade, tint, toInt } from './color';
@@ -170,6 +170,26 @@ class IsoPainter {
     });
   }
 
+  /** 小さな飾り鋲（クッションのくるみボタンなど） */
+  stud(u: number, v: number, z: number, r: number, color: number | string) {
+    const [gx, gy] = this.map(u, v);
+    this.ops.push({
+      gx0: gx - 0.01,
+      gx1: gx + 0.01,
+      gy0: gy - 0.01,
+      gy1: gy + 0.01,
+      z0: z,
+      z1: z + 0.4,
+      draw: () => {
+        const pt = this.sp(gx, gy, z);
+        this.g.fillStyle(shade(color, 0.7), 1);
+        this.g.fillEllipse(pt.x, pt.y + 0.6, r * 2, r);
+        this.g.fillStyle(shade(color, 1.08), 1);
+        this.g.fillEllipse(pt.x, pt.y, r * 1.5, r * 0.75);
+      },
+    });
+  }
+
   /** 溜めた描画を前後関係の順に実行する */
   flush() {
     const sorted: Op[] = [];
@@ -195,9 +215,73 @@ class IsoPainter {
   }
 }
 
-/** 見た目の最大高さ（テクスチャの縦幅を決めるため） */
+/** 見た目の最大高さ（テクスチャの縦幅を決めるため。頂部の飾りぶんの余裕を含む） */
 function maxZOf(def: FurnitureDef): number {
-  return def.shape === 'rug' ? 2 : def.height + 4;
+  return def.shape === 'rug' ? 2 : def.height + 14;
+}
+
+/**
+ * 猫脚（カブリオレレッグ）。曲線は描けないので、外→内→外と3段に振った箱で S 字を近似する。
+ * (cu, cv) は脚の中心、(du, dv) はその脚が向いている外側の向き。
+ */
+function cabriole(
+  p: IsoPainter,
+  cu: number,
+  cv: number,
+  du: number,
+  dv: number,
+  s: number,
+  h: number,
+  color: number | string,
+) {
+  const out = s * 0.42;
+  const box = (
+    ou: number,
+    ov: number,
+    half: number,
+    z0: number,
+    z1: number,
+    col: number | string,
+  ) => p.box(cu + ou - half, cv + ov - half, cu + ou + half, cv + ov + half, z0, z1, col);
+
+  // 膝（外へ張り出す） -> 中間（内へ絞る） -> 足首（また外へ） -> 金の脚先
+  box(du * out, dv * out, s * 0.5, h * 0.6, h, color);
+  box(0, 0, s * 0.42, h * 0.28, h * 0.64, shade(color, 0.95));
+  box(du * out * 0.7, dv * out * 0.7, s * 0.4, h * 0.1, h * 0.32, color);
+  box(du * out * 0.7, dv * out * 0.7, s * 0.46, 0, h * 0.12, GOLD);
+}
+
+/** 4隅に猫脚を立てる */
+function cabrioleLegs(p: IsoPainter, W: number, D: number, s: number, h: number, color: number | string) {
+  const m = s * 0.85;
+  cabriole(p, m, m, -1, -1, s, h, color);
+  cabriole(p, W - m, m, 1, -1, s, h, color);
+  cabriole(p, m, D - m, -1, 1, s, h, color);
+  cabriole(p, W - m, D - m, 1, 1, s, h, color);
+}
+
+/** くるみボタン留めのクッション */
+function tufted(
+  p: IsoPainter,
+  u0: number,
+  v0: number,
+  u1: number,
+  v1: number,
+  z: number,
+  thickness: number,
+  fabric: number | string,
+) {
+  p.box(u0, v0, u1, v1, z, z + thickness, fabric);
+  const top = z + thickness;
+  const cols = Math.max(1, Math.round((u1 - u0) / 0.34));
+  const rows = Math.max(1, Math.round((v1 - v0) / 0.34));
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const u = u0 + ((i + 0.5) * (u1 - u0)) / cols;
+      const v = v0 + ((j + 0.5) * (v1 - v0)) / rows;
+      p.stud(u, v, top + 0.3, 2.1, GOLD);
+    }
+  }
 }
 
 function paint(painter: IsoPainter, def: FurnitureDef) {
@@ -209,67 +293,120 @@ function paint(painter: IsoPainter, def: FurnitureDef) {
 
   switch (def.shape) {
     case 'rug': {
+      // 縁 -> 内側の地 -> 中央のメダイヨン、という段構えの絨毯
       painter.flat(0, 0, W, D, shade(c, 1));
-      painter.flat(0.18, 0.18, W - 0.18, D - 0.18, ac);
-      painter.outlineFlat(0, 0, W, D, shade(c, 0.7));
+      painter.flat(0.16, 0.16, W - 0.16, D - 0.16, ac);
+      const r = Math.min(W, D) * 0.26;
+      painter.flat(W / 2 - r, D / 2 - r, W / 2 + r, D / 2 + r, shade(c, 1));
+      painter.flat(W / 2 - r * 0.52, D / 2 - r * 0.52, W / 2 + r * 0.52, D / 2 + r * 0.52, tint(c, 0.55));
+      painter.outlineFlat(0, 0, W, D, shade(c, 0.68));
+      painter.outlineFlat(0.16, 0.16, W - 0.16, D - 0.16, GOLD);
       break;
     }
     case 'box': {
-      painter.box(0, 0, W, D, 0, H, c);
-      // 前面の扉パネルは footprint の外へわずかに出して、回転しても前後関係が崩れないようにする
-      painter.box(0.08, D, W - 0.08, D + 0.03, H * 0.1, H * 0.9, ac);
-      painter.box(-0.04, -0.04, W + 0.04, D + 0.04, H, H + 3, shade(c, 0.92));
+      // 背の低いものは猫脚のコモード、高いものは金の台輪に載せる
+      const onLegs = H <= 50;
+      const bodyZ = onLegs ? 11 : 5;
+      if (onLegs) cabrioleLegs(painter, W, D, 0.16, bodyZ + 2, c);
+      else painter.box(-0.02, -0.02, W + 0.02, D + 0.02, 0, bodyZ, GOLD);
+
+      painter.box(0.03, 0.03, W - 0.03, D - 0.03, bodyZ, H - 5, c);
+      // 正面の金彩パネル（footprint の外へ出して回転しても前後が崩れないようにする）
+      painter.box(0.1, D - 0.03, W - 0.1, D + 0.02, bodyZ + 5, H - 10, GOLD);
+      painter.box(0.17, D + 0.02, W - 0.17, D + 0.04, bodyZ + 8, H - 13, tint(c, 0.3));
       if (H >= 50) {
-        painter.box(0.05, D, W - 0.05, D + 0.05, H * 0.36, H * 0.36 + 3, shade(ac, 0.8));
-        painter.box(0.05, D, W - 0.05, D + 0.05, H * 0.66, H * 0.66 + 3, shade(ac, 0.8));
+        const mid = (bodyZ + H) / 2;
+        painter.box(0.07, D - 0.03, W - 0.07, D + 0.03, mid, mid + 3, GOLD);
       }
+      // コーニス（天板まわりの金の繰形）
+      painter.box(-0.06, -0.06, W + 0.06, D + 0.06, H - 5, H - 2, GOLD);
+      painter.box(-0.03, -0.03, W + 0.03, D + 0.03, H - 2, H, tint(ac, 0.35));
       break;
     }
     case 'table': {
-      const legTop = Math.max(2, H - 5);
-      const leg = 0.17;
-      const dark = shade(c, 0.8);
-      painter.box(0.08, 0.08, 0.08 + leg, 0.08 + leg, 0, legTop, dark);
-      painter.box(W - 0.08 - leg, 0.08, W - 0.08, 0.08 + leg, 0, legTop, dark);
-      painter.box(0.08, D - 0.08 - leg, 0.08 + leg, D - 0.08, 0, legTop, dark);
-      painter.box(W - 0.08 - leg, D - 0.08 - leg, W - 0.08, D - 0.08, 0, legTop, dark);
-      painter.box(-0.04, -0.04, W + 0.04, D + 0.04, legTop, H, c);
+      const legH = Math.max(6, H - 8);
+      cabrioleLegs(painter, W, D, 0.18, legH, c);
+      painter.box(0.12, 0.12, W - 0.12, D - 0.12, legH - 6, legH, c); // 幕板
+      painter.box(-0.05, -0.05, W + 0.05, D + 0.05, legH, legH + 3, GOLD);
+      painter.box(-0.02, -0.02, W + 0.02, D + 0.02, legH + 3, H, ac); // 大理石の甲板
       break;
     }
     case 'chair': {
-      const dark = shade(c, 0.78);
-      const leg = 0.15;
-      painter.box(0.12, 0.12, 0.12 + leg, 0.12 + leg, 0, seatZ, dark);
-      painter.box(W - 0.12 - leg, 0.12, W - 0.12, 0.12 + leg, 0, seatZ, dark);
-      painter.box(0.12, D - 0.12 - leg, 0.12 + leg, D - 0.12, 0, seatZ, dark);
-      painter.box(W - 0.12 - leg, D - 0.12 - leg, W - 0.12, D - 0.12, 0, seatZ, dark);
-      painter.box(0.06, 0.06, W - 0.06, D - 0.06, seatZ, seatZ + 4, c);
-      if (H > seatZ + 8) painter.box(0.09, 0.02, W - 0.09, 0.28, seatZ + 4, H, c);
-      if (def.accent) painter.box(0.16, 0.34, W - 0.16, D - 0.1, seatZ + 4, seatZ + 7, ac);
+      cabrioleLegs(painter, W, D, 0.15, seatZ, c);
+      painter.box(0.09, 0.09, W - 0.09, D - 0.09, seatZ - 3, seatZ + 1, c);
+      painter.box(-0.02, -0.02, W + 0.02, D + 0.02, seatZ + 1, seatZ + 3, GOLD);
+      tufted(painter, 0.13, 0.13, W - 0.13, D - 0.13, seatZ + 3, 5, ac);
+
+      if (H > seatZ + 14) {
+        painter.box(0.13, 0.07, W - 0.13, 0.2, seatZ + 3, H - 6, c);
+        painter.box(0.21, 0.2, W - 0.21, 0.24, seatZ + 7, H - 11, ac);
+        // 笠木（トップレール）とその中央の彫刻
+        painter.box(0.1, 0.05, W - 0.1, 0.22, H - 6, H - 1, GOLD);
+        painter.blob(W / 2, 0.14, H - 1, 5.6, 4.4, GOLD_LIGHT);
+      }
       break;
     }
     case 'sofa': {
-      painter.box(0.03, 0.03, W - 0.03, D - 0.03, 0, seatZ, c);
-      painter.box(0.03, 0.03, W - 0.03, 0.32, seatZ, H, c);
-      painter.box(0.03, 0.32, 0.3, D - 0.03, seatZ, seatZ + 11, shade(c, 0.95));
-      painter.box(W - 0.3, 0.32, W - 0.03, D - 0.03, seatZ, seatZ + 11, shade(c, 0.95));
-      for (let i = 0; i < W; i++) {
-        painter.box(i + 0.34, 0.36, i + 0.94, D - 0.08, seatZ, seatZ + 6, ac);
+      const frameZ = Math.max(6, seatZ - 8);
+      cabrioleLegs(painter, W, D, 0.16, frameZ, c);
+      painter.box(0.05, 0.05, W - 0.05, D - 0.05, frameZ - 4, seatZ, c);
+      painter.box(-0.02, -0.02, W + 0.02, D + 0.02, seatZ, seatZ + 2, GOLD);
+
+      // 背もたれ（張地 + 笠木の彫刻）
+      painter.box(0.05, 0.05, W - 0.05, 0.3, seatZ + 2, H - 5, c);
+      painter.box(0.15, 0.3, W - 0.15, 0.34, seatZ + 5, H - 9, ac);
+      painter.box(0.03, 0.03, W - 0.03, 0.32, H - 5, H - 1, GOLD);
+      painter.blob(W / 2, 0.18, H - 1, 6.4, 4.8, GOLD_LIGHT);
+      painter.blob(W * 0.22, 0.18, H - 1, 3.6, 3, GOLD_LIGHT);
+      painter.blob(W * 0.78, 0.18, H - 1, 3.6, 3, GOLD_LIGHT);
+
+      // 肘掛け（外側に巻き込むイメージで2段）
+      for (const side of [0, 1]) {
+        const u0 = side === 0 ? 0.05 : W - 0.28;
+        const u1 = side === 0 ? 0.28 : W - 0.05;
+        painter.box(u0, 0.34, u1, D - 0.05, seatZ + 2, seatZ + 13, c);
+        painter.box(u0 - 0.02, 0.32, u1 + 0.02, D - 0.03, seatZ + 13, seatZ + 15, GOLD);
+      }
+
+      // 座面クッションは肘掛けの内側にきっちり収める
+      const inner0 = 0.32;
+      const inner1 = W - 0.32;
+      const n = Math.max(1, Math.round(W));
+      const cw = (inner1 - inner0) / n;
+      for (let i = 0; i < n; i++) {
+        tufted(painter, inner0 + i * cw + 0.03, 0.36, inner0 + (i + 1) * cw - 0.03, D - 0.1, seatZ + 2, 6, ac);
       }
       break;
     }
     case 'bed': {
-      painter.box(0.03, 0.03, W - 0.03, D - 0.03, 0, 12, c);
-      painter.box(0.03, 0.03, W - 0.03, 0.3, 12, H, shade(c, 0.92));
-      painter.box(0.07, 0.32, W - 0.07, D - 0.07, 12, 24, ac);
-      painter.box(0.18, 0.4, W - 0.18, 0.95, 24, 31, tint(ac, 0.15));
+      cabrioleLegs(painter, W, D, 0.17, 10, c);
+      painter.box(0.05, 0.05, W - 0.05, D - 0.05, 6, 16, c);
+      painter.box(-0.02, -0.02, W + 0.02, D + 0.02, 16, 17, GOLD);
+
+      // ヘッドボード
+      painter.box(0.05, 0.05, W - 0.05, 0.26, 17, H - 5, c);
+      painter.box(0.17, 0.26, W - 0.17, 0.3, 22, H - 9, tint(ac, 0.1));
+      painter.box(0.03, 0.03, W - 0.03, 0.28, H - 5, H - 1, GOLD);
+      painter.blob(W / 2, 0.16, H - 1, 6.8, 5.2, GOLD_LIGHT);
+      painter.blob(W * 0.2, 0.16, H - 1, 3.6, 3, GOLD_LIGHT);
+      painter.blob(W * 0.8, 0.16, H - 1, 3.6, 3, GOLD_LIGHT);
+
+      // フットボード
+      painter.box(0.05, D - 0.2, W - 0.05, D - 0.05, 17, 30, c);
+      painter.box(0.03, D - 0.22, W - 0.03, D - 0.03, 30, 33, GOLD);
+
+      // 寝具
+      painter.box(0.1, 0.3, W - 0.1, D - 0.22, 17, 27, ac);
+      painter.box(0.2, 0.36, W - 0.2, 0.9, 27, 34, tint(ac, 0.2));
+      painter.box(0.1, 0.94, W - 0.1, D - 0.22, 27, 31, tint(c, 0.15));
       break;
     }
     case 'plant': {
-      const potH = Math.max(8, H * 0.24);
-      painter.box(0.3, 0.3, 0.7, 0.7, 0, potH, c);
-      painter.box(0.26, 0.26, 0.74, 0.74, potH, potH + 3, shade(c, 0.85));
-      const leafZ = potH + 4;
+      const potH = Math.max(11, H * 0.27);
+      painter.box(0.34, 0.34, 0.66, 0.66, 0, 4, GOLD);
+      painter.box(0.3, 0.3, 0.7, 0.7, 4, potH, c);
+      painter.box(0.25, 0.25, 0.75, 0.75, potH, potH + 4, GOLD);
+      const leafZ = potH + 5;
       const span = H - leafZ;
       painter.blob(0.5, 0.5, leafZ + span * 0.35, span * 0.28, span * 0.22, shade(ac, 0.82));
       painter.blob(0.34, 0.6, leafZ + span * 0.6, span * 0.26, span * 0.2, ac);
@@ -278,18 +415,22 @@ function paint(painter: IsoPainter, def: FurnitureDef) {
       break;
     }
     case 'lamp': {
-      const dark = shade(c, 0.8);
-      painter.box(0.34, 0.34, 0.66, 0.66, 0, 4, dark);
-      painter.box(0.45, 0.45, 0.55, 0.55, 4, H - 18, dark);
-      painter.box(0.24, 0.24, 0.76, 0.76, H - 18, H, ac);
+      painter.box(0.3, 0.3, 0.7, 0.7, 0, 5, c);
+      painter.box(0.37, 0.37, 0.63, 0.63, 5, 11, GOLD_LIGHT);
+      painter.box(0.46, 0.46, 0.54, 0.54, 11, H - 24, c);
+      painter.box(0.38, 0.38, 0.62, 0.62, H - 26, H - 20, GOLD_LIGHT);
+      painter.box(0.3, 0.3, 0.7, 0.7, H - 20, H - 16, c);
+      // ろうそくと炎
+      painter.box(0.42, 0.42, 0.58, 0.58, H - 16, H - 5, ac);
+      painter.blob(0.5, 0.5, H - 3, 3.4, 4.2, '#ffd77a');
       break;
     }
     case 'tv': {
-      const dark = shade(c, 0.7);
-      painter.box(W / 2 - 0.28, 0.38, W / 2 + 0.28, 0.62, 0, 10, dark);
-      painter.box(0.06, 0.3, W - 0.06, 0.62, 10, H, c);
-      // 画面は本体の正面にぴったり接して置く（重なるとテクスチャ内の順序が破綻する）
-      painter.box(0.1, 0.62, W - 0.1, 0.66, 14, H - 5, ac);
+      painter.box(W / 2 - 0.3, 0.42, W / 2 + 0.3, 0.58, 0, 6, c);
+      painter.box(W / 2 - 0.08, 0.46, W / 2 + 0.08, 0.54, 6, 13, c);
+      painter.box(0.05, 0.34, W - 0.05, 0.6, 13, H, c); // 金の額縁
+      painter.box(0.13, 0.6, W - 0.13, 0.63, 17, H - 5, ac); // 画面
+      painter.blob(W / 2, 0.47, H, 6.4, 4.8, GOLD_LIGHT); // 額縁上部の彫刻
       break;
     }
   }

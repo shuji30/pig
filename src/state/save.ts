@@ -1,5 +1,5 @@
 import { CLOTH_COLORS, HAIR_COLORS, ROOM_H, ROOM_W, SAVE_KEY, SAVE_VERSION, SKIN_COLORS } from '../config';
-import { DEFAULT_LAYOUT, STARTER_INVENTORY } from '../data/furniture';
+import { DEFAULT_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
 import type { PlacedFurniture, SaveData } from '../types';
 
 let uidSeq = 0;
@@ -44,10 +44,17 @@ export function load(): SaveData {
     const parsed = JSON.parse(raw) as SaveData;
     if (!parsed || parsed.version !== SAVE_VERSION || !Array.isArray(parsed.items)) return defaultSave();
     const base = defaultSave();
+    // カタログから消えた家具が残っていても壊れないよう、知らない id は捨てる
+    const items = parsed.items.filter((i) => findDef(i?.defId) !== undefined);
+    const inventory: Record<string, number> = {};
+    for (const [id, n] of Object.entries(parsed.inventory ?? {})) {
+      if (findDef(id) !== undefined) inventory[id] = n;
+    }
     return {
       ...base,
       ...parsed,
-      inventory: { ...parsed.inventory },
+      items,
+      inventory,
       avatar: { ...base.avatar, ...parsed.avatar, look: { ...base.avatar.look, ...parsed.avatar?.look } },
     };
   } catch {
