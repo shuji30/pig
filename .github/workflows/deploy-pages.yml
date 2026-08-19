@@ -34,11 +34,8 @@ jobs:
       # tsc --noEmit + vite build（出力は dist/）
       - run: npm run build
 
-      # Pages の有効化（Settings → Pages → Source: GitHub Actions）は初回だけ手作業。
-      # GITHUB_TOKEN からは有効化できないため、ここでは既存の設定を読むだけにする
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
+      # configure-pages は base_url を教えてもらうためのステップだが、
+      # vite の base は './' 固定なので不要。Pages 未設定でもビルドが緑になるよう省く
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
