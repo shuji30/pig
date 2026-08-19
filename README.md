@@ -32,9 +32,23 @@ npm run build      # 型チェック + 本番ビルド（dist/ に出力）
 npm run preview    # ビルド結果の確認
 ```
 
-`vite.config.ts` の `base` は `./` なので、`dist/` をそのまま GitHub Pages などの
-静的ホスティングに置けば動きます。画像アセットは一切使わず、家具もアバターも
-実行時にコードから描画しているため、追加のファイルはありません。
+`vite.config.ts` の `base` は `./` なので、`dist/` をそのままサブディレクトリ配信の
+静的ホスティングに置けます。画像アセットは一切使わず、家具もアバターも実行時に
+コードから描画しているため、追加のファイルはありません。
+
+## GitHub Pages への公開
+
+`.github/workflows/deploy-pages.yml` が、既定ブランチへの push（と手動実行）で
+`npm run build` を走らせ、`dist/` を GitHub Pages へ配信します。公開先は
+<https://shuji30.github.io/pig/> です。
+
+初回だけリポジトリ側の設定が必要です（ワークフローの `configure-pages` が自動で
+有効化を試みますが、失敗する場合は手動で）。
+
+1. Settings → Pages → **Build and deployment** の Source を **GitHub Actions** にする
+2. Actions タブから *Deploy to GitHub Pages* を実行（または既定ブランチへ push）
+
+既定ブランチを変えたときは、ワークフローの `on.push.branches` も合わせて直してください。
 
 ## 構成
 
