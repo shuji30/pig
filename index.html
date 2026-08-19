@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#ffd9e8" />
+    <title>ピグっぽい箱庭 ─ My Little Room</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%A0%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Phaser のキャンバスがここに入る -->
+      <div id="game" aria-label="ゲーム画面"></div>
+
+      <!-- 上部バー -->
+      <header id="topbar">
+        <div class="brand">🏠 My Little Room</div>
+        <div id="hint" class="hint">床をクリックして歩こう</div>
+        <div class="spacer"></div>
+        <button id="btn-help" class="icon-btn" title="あそびかた">❓</button>
+      </header>
+
+      <!-- 右下のメインメニュー -->
+      <div id="zoombar">
+        <button id="btn-zoom-in" class="icon-btn" title="ズームイン">＋</button>
+        <button id="btn-zoom-out" class="icon-btn" title="ズームアウト">−</button>
+        <button id="btn-center" class="icon-btn" title="アバターに戻る">🎯</button>
+      </div>
+
+      <nav id="toolbar">
+        <button class="tool" data-panel="furniture"><span>🪑</span>かぐ</button>
+        <button class="tool" data-panel="wardrobe"><span>👕</span>きせかえ</button>
+        <button class="tool" data-panel="room"><span>🎨</span>もようがえ</button>
+      </nav>
+
+      <!-- チャット -->
+      <form id="chatbar" autocomplete="off">
+        <input id="chat-input" type="text" maxlength="60" placeholder="ひとこと言ってみる…" />
+        <button type="submit" class="send">💬</button>
+      </form>
+
+      <!-- 家具パネル -->
+      <section class="panel" id="panel-furniture" hidden>
+        <div class="panel-head">
+          <h2>かぐ</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <div class="tabs" id="furniture-tabs"></div>
+        <div class="grid" id="furniture-grid"></div>
+        <p class="note">アイテムを選んで部屋をクリックで設置。<b>R</b>で回転、<b>Esc</b>でやめる。</p>
+      </section>
+
+      <!-- きせかえパネル -->
+      <section class="panel" id="panel-wardrobe" hidden>
+        <div class="panel-head">
+          <h2>きせかえ</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <div id="wardrobe-body"></div>
+        <label class="namefield">なまえ
+          <input id="avatar-name" type="text" maxlength="10" />
+        </label>
+      </section>
+
+      <!-- もようがえパネル -->
+      <section class="panel" id="panel-room" hidden>
+        <div class="panel-head">
+          <h2>もようがえ</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <div id="room-body"></div>
+        <button id="btn-reset" class="danger">部屋をリセットする</button>
+      </section>
+
+      <!-- あそびかた -->
+      <section class="panel" id="panel-help" hidden>
+        <div class="panel-head">
+          <h2>あそびかた</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <ul class="help">
+          <li>床を<b>クリック</b>するとアバターがそこまで歩きます。</li>
+          <li>イスやソファ、ベッドをクリックすると<b>座る</b>ことができます。</li>
+          <li>「かぐ」から家具を選び、部屋をクリックで<b>設置</b>。<b>R</b>で回転。</li>
+          <li>置いてある家具をクリックすると<b>移動・回転・しまう</b>ができます。</li>
+          <li>背景を<b>ドラッグ</b>でカメラ移動、<b>ホイール</b>でズーム。</li>
+          <li>下の入力欄でしゃべると<b>吹き出し</b>が出ます。</li>
+          <li>変更は自動的にブラウザへ保存されます。</li>
+        </ul>
+      </section>
+
+      <!-- 配置モードのバー -->
+      <div id="placebar" class="ctxbar" hidden>
+        <span id="placebar-name">家具</span>
+        <button data-act="rotate">↻ 回転</button>
+        <button data-act="cancel">やめる</button>
+      </div>
+
+      <!-- 家具選択中のバー -->
+      <div id="selbar" class="ctxbar" hidden>
+        <span id="selbar-name">家具</span>
+        <button data-act="rotate">↻ 回転</button>
+        <button data-act="move">✥ 移動</button>
+        <button data-act="store">📦 しまう</button>
+        <button data-act="deselect">閉じる</button>
+      </div>
+
+      <div id="toast" class="toast" hidden></div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

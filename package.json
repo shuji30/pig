@@ -1,0 +1,20 @@
+{
+  "name": "pig-sandbox",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ブラウザで遊べるアメーバピグ風の箱庭ゲーム",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^6.3.6"
+  }
+}
