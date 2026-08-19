@@ -42,14 +42,21 @@ npm run preview    # ビルド結果の確認
 `npm run build` を走らせ、`dist/` を GitHub Pages へ配信します。公開先は
 <https://shuji30.github.io/pig/> です。
 
-**初回だけ手作業が必要です。** Pages の有効化はワークフローの `GITHUB_TOKEN` では
-できないため、次の設定を先に済ませてください。
+**初回だけ手作業が必要です。** Pages の有効化はワークフローの `GITHUB_TOKEN` から
+できない（`Resource not accessible by integration`）ため、先に次の設定を済ませてください。
+これが未設定のあいだ、`build` ジョブは成功しますが `deploy` ジョブが
+`Ensure GitHub Pages has been enabled` で失敗します。
 
-1. Settings → Pages → **Build and deployment** の Source を **GitHub Actions** にする
+1. <https://github.com/shuji30/pig/settings/pages> を開き、**Build and deployment**
+   の Source を **GitHub Actions** にする
    - このリポジトリは private です。private リポジトリの Pages は有料プラン
      （Pro / Team 以上）が必要なので、Free プランの場合は Settings → General →
      Danger Zone からリポジトリを public にすると使えるようになります。
-2. Actions タブから *Deploy to GitHub Pages* を実行（または既定ブランチへ push）
+2. Actions タブ → *Deploy to GitHub Pages* → **Run workflow** で再実行
+   （既定ブランチへ push しても同じ）
+
+`build` ジョブは Pages の設定に関係なく完走するので、有効化前でも実行結果の
+Artifacts から `github-pages`（`dist/` の中身）をダウンロードできます。
 
 既定ブランチを変えたときは、ワークフローの `on.push.branches` も合わせて直してください。
 
