@@ -34,11 +34,16 @@ jobs:
       # tsc --noEmit + vite build（出力は dist/）
       - run: npm run build
 
-      # configure-pages は base_url を教えてもらうためのステップだが、
-      # vite の base は './' 固定なので不要。Pages 未設定でもビルドが緑になるよう省く
+      # 先に成果物を上げてしまうことで、Pages 側の設定に失敗してもビルドの結果は残る
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
+      # Pages がまだ作られていない場合に作成する（public リポジトリなら GITHUB_TOKEN で可能）
+      - name: Enable Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
   deploy:
     needs: build
