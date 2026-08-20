@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
-import { shade, toInt } from '../render/color';
+import { shade, tint, toInt } from '../render/color';
 import type { AvatarLook } from '../types';
 
 type Tile = { gx: number; gy: number };
@@ -27,6 +27,13 @@ export class Avatar {
   private frame = 0;
   private animTime = 0;
   private dirty = true;
+
+  /** まばたき（閉じている間だけ true） */
+  private blinking = false;
+  private blinkTimer = 1800;
+  /** 立ち止まっているときの呼吸 */
+  private breathFrame = 0;
+  private breathTime = 0;
 
   /** 重ね順の計算を場に委譲する（家具との前後関係を正しく出すため） */
   private depthResolver: ((box: { gx0: number; gx1: number; gy0: number; gy1: number }) => number) | null = null;
@@ -166,7 +173,7 @@ export class Avatar {
 
   /** 吹き出しの下端の高さ */
   private get bubbleBaseY(): number {
-    return this.sittingOn !== null ? -70 : -88;
+    return this.sittingOn !== null ? -76 : -92;
   }
 
   update(deltaMs: number) {
@@ -199,6 +206,24 @@ export class Avatar {
       const f = Math.floor(this.animTime / 130) % 4;
       if (f !== this.frame) {
         this.frame = f;
+        this.dirty = true;
+      }
+    }
+
+    // まばたき
+    this.blinkTimer -= deltaMs;
+    if (this.blinkTimer <= 0) {
+      this.blinking = !this.blinking;
+      this.blinkTimer = this.blinking ? 120 : 2400 + Math.random() * 2800;
+      this.dirty = true;
+    }
+
+    // 立ち止まっているときの呼吸（胸から上だけ 1px 上下する）
+    if (!this.target) {
+      this.breathTime += deltaMs;
+      const bf = Math.floor(this.breathTime / 520) % 2;
+      if (bf !== this.breathFrame) {
+        this.breathFrame = bf;
         this.dirty = true;
       }
     }
@@ -263,7 +288,7 @@ export class Avatar {
     const back = this.facingBack;
     g.clear();
     this.bodyWrap.setScale(this.flip ? -1 : 1, 1);
-    this.label.setY(sitting ? -48 : -66);
+    this.label.setY(sitting ? -54 : -70);
     if (this.bubble) this.bubble.setY(this.bubbleBaseY - this.bubbleHeight / 2);
 
     const skin = toInt(look.skin);
@@ -271,99 +296,173 @@ export class Avatar {
     const pants = toInt(look.pants);
     const shoes = toInt(look.shoes);
     const hair = toInt(look.hair);
+    const ribbon = shirt;
 
-    const swing = sitting ? 0 : [0, 2.2, 0, -2.2][this.frame];
-    const bob = sitting ? 0 : [0, -1, 0, -1][this.frame];
+    const swing = sitting ? 0 : [0, 2.4, 0, -2.4][this.frame];
+    const walkBob = sitting || !this.target ? 0 : [0, -1, 0, -1][this.frame];
+    // 立ち止まっているときだけ呼吸させる
+    const breathe = sitting || this.target ? 0 : [0, -1][this.breathFrame];
 
-    // 立ちは足元、座りは座面が原点。腰の高さ hipY を基準に組み立てる
-    const hipY = sitting ? -1 : bob - 19;
-    const legLen = sitting ? 11 : 17;
-    const shoeY = hipY + legLen - 3;
+    // 腰の高さ。立ちは足元、座りは座面が原点
+    const hipY = sitting ? -1 : walkBob - 14;
+    const legLen = sitting ? 9 : 12;
+    const upper = hipY + breathe; // 胸から上の基準
+    const headY = upper - 28;
+    const HEAD_R = 13;
 
-    // 影（床に立っているときだけ）
+    // 影
     if (!sitting) {
-      g.fillStyle(0x000000, 0.16);
-      g.fillEllipse(0, 1, 26, 11);
+      g.fillStyle(0x000000, 0.15);
+      g.fillEllipse(0, 1, 30, 12);
     }
 
-    // 後ろ髪（ロング）
+    // 後ろに流れる髪（ロング・ふんわりは体より先に描く）
     if (look.hairStyle === 3) {
       g.fillStyle(shade(hair, 0.9), 1);
-      g.fillRoundedRect(-10, hipY - 31, 20, 34, 8);
+      g.fillRoundedRect(-12, headY - 4, 24, 40, 11);
+    } else if (look.hairStyle === 5) {
+      g.fillStyle(shade(hair, 0.9), 1);
+      g.fillRoundedRect(-13, headY - 2, 26, 30, 12);
     }
 
-    // 脚
+    // 脚（短くて丸い）
     g.fillStyle(pants, 1);
-    g.fillRoundedRect(-7.5 + swing * 0.6, hipY, 6.5, legLen, 3);
-    g.fillRoundedRect(1 - swing * 0.6, hipY, 6.5, legLen, 3);
+    g.fillRoundedRect(-8 + swing * 0.55, hipY, 6.6, legLen, 3.3);
+    g.fillRoundedRect(1.4 - swing * 0.55, hipY, 6.6, legLen, 3.3);
     // 靴
     g.fillStyle(shoes, 1);
-    g.fillRoundedRect(-8.5 + swing * 0.8, shoeY, 8, 5, 2.5);
-    g.fillRoundedRect(0.5 - swing * 0.8, shoeY, 8, 5, 2.5);
+    g.fillRoundedRect(-9.4 + swing * 0.75, hipY + legLen - 4, 8.8, 5.6, 2.8);
+    g.fillRoundedRect(0.6 - swing * 0.75, hipY + legLen - 4, 8.8, 5.6, 2.8);
 
-    // 胴
+    // 胴（ころんと丸い）
     g.fillStyle(shirt, 1);
-    g.fillRoundedRect(-10, hipY - 17, 20, 18, 6);
-    // 袖・腕
-    g.fillStyle(shade(shirt, 0.9), 1);
-    g.fillRoundedRect(-13, hipY - 15 + swing * 0.5, 5, 11, 2.5);
-    g.fillRoundedRect(8, hipY - 15 - swing * 0.5, 5, 11, 2.5);
+    g.fillRoundedRect(-8.5, upper - 15, 17, 16 - breathe, 7);
+    // 襟（胴の輪郭を締める）
+    g.fillStyle(tint(shirt, 0.4), 1);
+    g.fillRoundedRect(-6, upper - 15.5, 12, 3.4, 1.7);
+    // 腕と手
+    g.fillStyle(shade(shirt, 0.92), 1);
+    g.fillRoundedRect(-12.4, upper - 13 + swing * 0.45, 5, 10, 2.5);
+    g.fillRoundedRect(7.4, upper - 13 - swing * 0.45, 5, 10, 2.5);
     g.fillStyle(skin, 1);
-    g.fillCircle(-10.5, hipY - 3 + swing * 0.5, 2.6);
-    g.fillCircle(10.5, hipY - 3 - swing * 0.5, 2.6);
+    g.fillCircle(-9.9, upper - 3 + swing * 0.45, 3);
+    g.fillCircle(9.9, upper - 3 - swing * 0.45, 3);
 
-    // 首と頭
-    g.fillStyle(shade(skin, 0.92), 1);
-    g.fillRect(-3, hipY - 20, 6, 4);
+    // 頭（首なしの2頭身）
     g.fillStyle(skin, 1);
-    g.fillCircle(0, hipY - 29, 10.5);
+    g.fillCircle(0, headY, HEAD_R);
+    g.fillStyle(shade(skin, 0.95), 1);
+    g.fillEllipse(0, headY + 8.5, 19, 8); // あごのかげ
 
     // 髪
+    const drawHairCap = () => {
+      g.fillStyle(hair, 1);
+      if (back) {
+        // 後ろ姿は頭ぜんたいが髪。分け目とつやを入れて平坦にしない
+        g.fillCircle(0, headY, HEAD_R + 0.8);
+        g.fillStyle(shade(hair, 1.22), 0.5);
+        g.fillEllipse(-2.5, headY - 6.5, 13, 4.2);
+        g.fillStyle(shade(hair, 0.82), 0.6);
+        g.fillEllipse(0, headY + 6, 3, 12);
+      } else {
+        g.slice(0, headY, HEAD_R + 0.8, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
+        g.fillPath();
+        // 前髪をふんわり3つの丸で（目にかぶらない高さに置く）
+        g.fillCircle(-7.4, headY - 6.4, 5.2);
+        g.fillCircle(0, headY - 5.2, 5.6);
+        g.fillCircle(7.4, headY - 6.4, 5.2);
+      }
+    };
+    const bow = (x: number, y: number, r: number) => {
+      g.fillStyle(ribbon, 1);
+      g.fillCircle(x - r * 0.85, y, r);
+      g.fillCircle(x + r * 0.85, y, r);
+      g.fillStyle(shade(ribbon, 0.85), 1);
+      g.fillCircle(x, y, r * 0.5);
+    };
+
+    drawHairCap();
     g.fillStyle(hair, 1);
     switch (look.hairStyle) {
       case 0: // ショート
-        g.slice(0, hipY - 29, 11, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
-        g.fillPath();
-        g.fillRoundedRect(-11, hipY - 31, 4, 10, 2);
-        g.fillRoundedRect(7, hipY - 31, 4, 10, 2);
+        g.fillRoundedRect(-14.2, headY - 7, 5, 12, 2.5);
+        g.fillRoundedRect(9.2, headY - 7, 5, 12, 2.5);
         break;
       case 1: // ボブ
-        g.slice(0, hipY - 29, 11.5, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
-        g.fillPath();
-        g.fillRoundedRect(-12, hipY - 33, 5, 16, 2.5);
-        g.fillRoundedRect(7, hipY - 33, 5, 16, 2.5);
+        g.fillRoundedRect(-14.6, headY - 8, 5.4, 19, 2.7);
+        g.fillRoundedRect(9.2, headY - 8, 5.4, 19, 2.7);
+        g.fillCircle(-11.9, headY + 10, 2.9);
+        g.fillCircle(11.9, headY + 10, 2.9);
         break;
       case 2: // ツインテール
-        g.slice(0, hipY - 29, 11.5, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
-        g.fillPath();
-        g.fillCircle(-13, hipY - 25, 5.5);
-        g.fillCircle(13, hipY - 25, 5.5);
-        g.fillRoundedRect(-16, hipY - 25, 6, 14, 3);
-        g.fillRoundedRect(10, hipY - 25, 6, 14, 3);
+        g.fillRoundedRect(-14.2, headY - 7, 5, 13, 2.5);
+        g.fillRoundedRect(9.2, headY - 7, 5, 13, 2.5);
+        g.fillCircle(-16, headY + 4, 6.2);
+        g.fillCircle(16, headY + 4, 6.2);
+        g.fillCircle(-17.2, headY + 12, 4.4);
+        g.fillCircle(17.2, headY + 12, 4.4);
+        bow(-14.6, headY - 5.5, 3.4);
+        bow(14.6, headY - 5.5, 3.4);
         break;
       case 3: // ロング
-        g.slice(0, hipY - 29, 11.5, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
-        g.fillPath();
-        g.fillRoundedRect(-12, hipY - 33, 5, 22, 2.5);
-        g.fillRoundedRect(7, hipY - 33, 5, 22, 2.5);
+        g.fillRoundedRect(-14.8, headY - 8, 5.6, 26, 2.8);
+        g.fillRoundedRect(9.2, headY - 8, 5.6, 26, 2.8);
+        bow(0, headY + 14, 3.6);
         break;
-      default: // ぼうず
-        g.slice(0, hipY - 30, 10.5, Phaser.Math.DegToRad(185), Phaser.Math.DegToRad(355), false);
-        g.fillPath();
+      case 4: // おだんご
+        g.fillRoundedRect(-13.4, headY - 6, 4.4, 9, 2.2);
+        g.fillRoundedRect(9, headY - 6, 4.4, 9, 2.2);
+        g.fillCircle(0, headY - HEAD_R - 3.4, 6.4);
+        g.fillStyle(shade(hair, 1.1), 1);
+        g.fillCircle(-1.6, headY - HEAD_R - 5, 2.6);
+        bow(0, headY - HEAD_R + 3, 3.2);
         break;
+      default: // ふんわり
+        g.fillCircle(-13.2, headY - 4, 5.4);
+        g.fillCircle(-15, headY + 4, 5);
+        g.fillCircle(-13.6, headY + 12, 4.4);
+        g.fillCircle(13.2, headY - 4, 5.4);
+        g.fillCircle(15, headY + 4, 5);
+        g.fillCircle(13.6, headY + 12, 4.4);
+        break;
+    }
+    // 髪のつやめき
+    if (!back) {
+      g.fillStyle(shade(hair, 1.28), 0.55);
+      g.fillEllipse(-3.5, headY - 8.5, 11, 3.4);
     }
 
     // 顔（正面のみ）
     if (!back) {
-      g.fillStyle(0x40323a, 1);
-      g.fillEllipse(-3.6, hipY - 28, 2.4, 3);
-      g.fillEllipse(3.6, hipY - 28, 2.4, 3);
-      g.fillStyle(0xe08fa0, 0.5);
-      g.fillEllipse(-6.6, hipY - 25, 4, 2.4);
-      g.fillEllipse(6.6, hipY - 25, 4, 2.4);
-      g.lineStyle(1.2, 0x9c6f7d, 1);
+      const eyeY = headY + 2.2;
+      if (this.blinking) {
+        g.lineStyle(1.6, 0x5a4250, 1);
+        g.beginPath();
+        g.arc(-5.6, eyeY, 3, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340));
+        g.strokePath();
+        g.beginPath();
+        g.arc(5.6, eyeY, 3, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340));
+        g.strokePath();
+      } else {
+        // 大きな目 + ハイライト
+        g.fillStyle(0x4a3542, 1);
+        g.fillEllipse(-5.6, eyeY, 6, 7.4);
+        g.fillEllipse(5.6, eyeY, 6, 7.4);
+        g.fillStyle(0xffffff, 0.95);
+        g.fillEllipse(-7, eyeY - 1.9, 2.6, 2.8);
+        g.fillEllipse(4.2, eyeY - 1.9, 2.6, 2.8);
+        g.fillStyle(0xffffff, 0.6);
+        g.fillEllipse(-4.4, eyeY + 2, 1.6, 1.6);
+        g.fillEllipse(6.8, eyeY + 2, 1.6, 1.6);
+      }
+      // ほお
+      g.fillStyle(0xf2879f, 0.42);
+      g.fillEllipse(-9.4, eyeY + 5.4, 6.2, 3.4);
+      g.fillEllipse(9.4, eyeY + 5.4, 6.2, 3.4);
+      // 小さな笑顔
+      g.lineStyle(1.5, 0xa8697a, 1);
       g.beginPath();
-      g.arc(0, hipY - 24.5, 2.6, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160));
+      g.arc(0, eyeY + 5.6, 2.9, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(155));
       g.strokePath();
     }
   }

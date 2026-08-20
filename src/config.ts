@@ -47,7 +47,7 @@ export const CLOTH_COLORS = [
   '#f5f2ee',
   '#5b5560',
 ];
-export const HAIR_STYLE_NAMES = ['ショート', 'ボブ', 'ツインテール', 'ロング', 'ぼうず'];
+export const HAIR_STYLE_NAMES = ['ショート', 'ボブ', 'ツインテール', 'ロング', 'おだんご', 'ふんわり'];
 
 /** ロココ調の金彩に使う色 */
 export const GOLD = '#c9a24a';
