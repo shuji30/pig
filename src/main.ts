@@ -11,6 +11,10 @@ new Phaser.Game({
     width: '100%',
     height: '100%',
   },
+  // ピンチ操作のため複数の指を受け取る
+  input: {
+    activePointers: 3,
+  },
   render: {
     antialias: true,
     roundPixels: false,

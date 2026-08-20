@@ -37,6 +37,9 @@ export class RoomScene extends Phaser.Scene {
   private selectedUid: string | null = null;
 
   private userZoomed = false;
+  /** 2本指の間隔と中点。ピンチ中だけ値が入る */
+  private pinch: { dist: number; mx: number; my: number } | null = null;
+  private pinching = false;
   private pointerDownAt: { x: number; y: number } | null = null;
   private dragging = false;
   private lastPointer = { x: 0, y: 0 };
@@ -127,8 +130,8 @@ export class RoomScene extends Phaser.Scene {
       if (!this.userZoomed) this.applyFitZoom();
     });
 
-    this.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      this.zoomBy(dy > 0 ? 0.9 : 1.1);
+    this.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
+      this.zoomAt(dy > 0 ? 0.9 : 1.1, p.x, p.y);
     });
   }
 
@@ -152,6 +155,30 @@ export class RoomScene extends Phaser.Scene {
     cam.setZoom(Phaser.Math.Clamp(cam.zoom * factor, 0.45, 2.4));
   }
 
+  /**
+   * 画面上の一点を固定したまま拡大縮小する（指やカーソルの下がずれない）。
+   * Phaser のカメラは「画面中央のワールド座標 = scroll + 画面サイズ/2」で、
+   * 中央からのずれだけが zoom で割られる。つまり
+   *   world = scroll + W/2 + (screen - W/2) / zoom
+   * なので、その点を固定するには zoom 変更ぶんだけ scroll を戻せばよい。
+   */
+  private zoomAt(factor: number, screenX: number, screenY: number) {
+    const cam = this.cameras.main;
+    const z0 = cam.zoom;
+    this.zoomBy(factor);
+    const z1 = cam.zoom;
+    if (z1 === z0) return;
+    const k = 1 / z0 - 1 / z1;
+    cam.scrollX += (screenX - cam.width / 2) * k;
+    cam.scrollY += (screenY - cam.height / 2) * k;
+  }
+
+  /** 押されている指（マウスは含まない） */
+  private downPointers(): Phaser.Input.Pointer[] {
+    const list = [this.input.pointer1, this.input.pointer2, this.input.pointer3];
+    return list.filter((p): p is Phaser.Input.Pointer => !!p && p.isDown);
+  }
+
   /** アバターを画面中央に映す */
   centerOnAvatar() {
     this.cameras.main.pan(this.avatar.container.x, this.avatar.container.y - 40, 300, 'Sine.easeInOut');
@@ -171,11 +198,25 @@ export class RoomScene extends Phaser.Scene {
       this.pointerDownAt = { x: p.x, y: p.y };
       this.lastPointer = { x: p.x, y: p.y };
       this.dragging = false;
+      const downs = this.downPointers();
+      if (downs.length >= 2) {
+        this.beginPinch(downs);
+        return;
+      }
+      // 指1本から始まったので、ピンチ状態は解除しておく。
+      // touchcancel などで離した指を取りこぼしても、次の操作で復帰できる
+      this.pinching = false;
+      this.pinch = null;
       // タッチでは pointermove が来ないことがあるので、押した位置でゴーストを更新する
       if (this.mode !== 'idle') this.updateGhost(screenToTile(p.worldX, p.worldY));
     });
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      const downs = this.downPointers();
+      if (downs.length >= 2) {
+        this.updatePinch(downs);
+        return;
+      }
       if (p.isDown && this.pointerDownAt) {
         const moved = Phaser.Math.Distance.Between(this.pointerDownAt.x, this.pointerDownAt.y, p.x, p.y);
         if (moved > DRAG_THRESHOLD) this.dragging = true;
@@ -192,6 +233,16 @@ export class RoomScene extends Phaser.Scene {
     });
 
     this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      // ピンチで動かした指を離しただけのときは、クリックとして扱わない
+      if (this.pinching) {
+        this.pointerDownAt = null;
+        this.dragging = false;
+        if (this.downPointers().length === 0) {
+          this.pinching = false;
+          this.pinch = null;
+        }
+        return;
+      }
       const wasDrag = this.dragging;
       this.pointerDownAt = null;
       this.dragging = false;
@@ -202,6 +253,10 @@ export class RoomScene extends Phaser.Scene {
     this.input.on('pointerupoutside', () => {
       this.pointerDownAt = null;
       this.dragging = false;
+      if (this.downPointers().length === 0) {
+        this.pinching = false;
+        this.pinch = null;
+      }
     });
 
     const kb = this.input.keyboard;
@@ -215,6 +270,37 @@ export class RoomScene extends Phaser.Scene {
       if (this.mode !== 'idle') this.cancelPlacing();
       else this.deselect();
     });
+  }
+
+  private beginPinch(downs: Phaser.Input.Pointer[]) {
+    const [a, b] = downs;
+    this.pinching = true;
+    this.dragging = true; // 単指ドラッグやクリックと混ざらないようにする
+    this.pinch = {
+      dist: Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y),
+      mx: (a.x + b.x) / 2,
+      my: (a.y + b.y) / 2,
+    };
+  }
+
+  /** 2本指の間隔で拡大縮小し、中点の移動でスクロールする */
+  private updatePinch(downs: Phaser.Input.Pointer[]) {
+    const [a, b] = downs;
+    const dist = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const prev = this.pinch;
+    if (!prev) {
+      this.beginPinch(downs);
+      return;
+    }
+    const cam = this.cameras.main;
+    cam.scrollX -= (mx - prev.mx) / cam.zoom;
+    cam.scrollY -= (my - prev.my) / cam.zoom;
+    if (prev.dist > 4 && dist > 4) this.zoomAt(dist / prev.dist, mx, my);
+    this.pinch = { dist, mx, my };
+    this.pinching = true;
+    this.dragging = true;
   }
 
   private handleClick(worldX: number, worldY: number) {
