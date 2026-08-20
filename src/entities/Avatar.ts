@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
 import { shade, tint, toInt } from '../render/color';
+import { getMotion, type FaceKind, type MotionDef, type MotionKind } from '../data/motions';
 import type { AvatarLook } from '../types';
 
 type Tile = { gx: number; gy: number };
@@ -10,6 +11,7 @@ type Tile = { gx: number; gy: number };
 export class Avatar {
   readonly container: Phaser.GameObjects.Container;
   private readonly bodyWrap: Phaser.GameObjects.Container;
+  private readonly shadow: Phaser.GameObjects.Graphics;
   private readonly gfx: Phaser.GameObjects.Graphics;
   private readonly label: Phaser.GameObjects.Text;
   private bubble: Phaser.GameObjects.Container | null = null;
@@ -35,6 +37,11 @@ export class Avatar {
   private breathFrame = 0;
   private breathTime = 0;
 
+  /** 再生中のモーション */
+  private motion: { def: MotionDef; time: number } | null = null;
+  /** 頭の上に出す文字 */
+  private glyph?: Phaser.GameObjects.Text;
+
   /** 重ね順の計算を場に委譲する（家具との前後関係を正しく出すため） */
   private depthResolver: ((box: { gx0: number; gx1: number; gy0: number; gy1: number }) => number) | null = null;
 
@@ -53,6 +60,7 @@ export class Avatar {
     this.look = { ...look };
     this.tile = { gx, gy };
 
+    this.shadow = scene.add.graphics();
     this.gfx = scene.add.graphics();
     this.bodyWrap = scene.add.container(0, 0, [this.gfx]);
     this.label = scene.add
@@ -65,7 +73,7 @@ export class Avatar {
       .setStroke('#6b4a58', 3);
 
     const p = tileCenter(gx, gy);
-    this.container = scene.add.container(p.x, p.y, [this.bodyWrap, this.label]);
+    this.container = scene.add.container(p.x, p.y, [this.shadow, this.bodyWrap, this.label]);
     this.updateDepth();
     this.redraw();
   }
@@ -176,6 +184,48 @@ export class Avatar {
     return this.sittingOn !== null ? -76 : -92;
   }
 
+  /** モーションを再生する（歩行や着席は止めない） */
+  playMotion(kind: MotionKind) {
+    const def = getMotion(kind);
+    this.motion = { def, time: 0 };
+    this.dirty = true;
+    this.glyph?.destroy();
+    this.glyph = undefined;
+    if (def.glyph) this.showGlyph(def.glyph, def.duration);
+  }
+
+  stopMotion() {
+    if (!this.motion) return;
+    this.motion = null;
+    this.glyph?.destroy();
+    this.glyph = undefined;
+    this.bodyWrap.setPosition(0, 0);
+    this.bodyWrap.setAngle(0);
+    this.dirty = true;
+  }
+
+  private showGlyph(char: string, duration: number) {
+    const y0 = this.sittingOn !== null ? -46 : -60;
+    const glyph = this.scene.add
+      .text(15, y0, char, {
+        fontFamily: '"Hiragino Maru Gothic ProN", "Yu Gothic UI", sans-serif',
+        fontSize: '17px',
+        color: '#ffffff',
+      })
+      .setOrigin(0.5, 1);
+    this.glyph = glyph;
+    this.container.add(glyph);
+    const one = 900;
+    this.scene.tweens.add({
+      targets: glyph,
+      y: y0 - 26,
+      alpha: 0,
+      duration: one,
+      ease: 'Sine.easeOut',
+      repeat: Math.max(0, Math.ceil(duration / one) - 1),
+    });
+  }
+
   update(deltaMs: number) {
     const dt = deltaMs / 1000;
 
@@ -208,6 +258,13 @@ export class Avatar {
         this.frame = f;
         this.dirty = true;
       }
+    }
+
+    // モーション
+    if (this.motion) {
+      this.motion.time += deltaMs;
+      this.dirty = true;
+      if (this.motion.time >= this.motion.def.duration) this.stopMotion();
     }
 
     // まばたき
@@ -287,7 +344,6 @@ export class Avatar {
     const sitting = this.sittingOn !== null;
     const back = this.facingBack;
     g.clear();
-    this.bodyWrap.setScale(this.flip ? -1 : 1, 1);
     this.label.setY(sitting ? -54 : -70);
     if (this.bubble) this.bubble.setY(this.bubbleBaseY - this.bubbleHeight / 2);
 
@@ -307,13 +363,124 @@ export class Avatar {
     const hipY = sitting ? -1 : walkBob - 14;
     const legLen = sitting ? 9 : 12;
     const upper = hipY + breathe; // 胸から上の基準
-    const headY = upper - 28;
+    let headY = upper - 28;
     const HEAD_R = 13;
 
-    // 影
+    // ---- モーションによる姿勢 ----
+    const m = this.motion;
+    const kind = m?.def.kind;
+    const p = m ? Math.min(1, m.time / m.def.duration) : 0;
+    let face: FaceKind = m?.def.face ?? 'normal';
+    // 腕を上げる量（0 = 下ろす, 1 = 上げる）
+    let liftL = 0;
+    let liftR = 0;
+    let handIn = 0; // 手を体の中心へ寄せる量(px)
+    let dxL = 0; // 腕を外／内へずらす量(px)
+    let dxR = 0;
+    let handYFix: number | null = null;
+    let headDip = 0; // 頭をうつむかせる量(px)
+    // コンテナごと動かすぶん（ジャンプ・傾き・横ゆれ）
+    let tx = 0;
+    let ty = 0;
+    let angle = 0;
+    let sy = 1;
+
+    switch (kind) {
+      case 'wave': {
+        liftR = 1;
+        liftL = 0.05;
+        dxR = Math.sin(p * Math.PI * 7) * 2.6;
+        break;
+      }
+      case 'clap': {
+        const open = Math.abs(Math.sin(p * Math.PI * 7));
+        liftL = liftR = 0.45;
+        dxL = dxR = -4;
+        handIn = 6.4 - open * 4.2;
+        handYFix = upper - 9;
+        break;
+      }
+      case 'bow': {
+        const k = Math.sin(p * Math.PI);
+        angle = 14 * k * (this.flip ? -1 : 1);
+        ty = 1.6 * k;
+        sy = 1 - 0.06 * k;
+        headDip = 3.4 * k;
+        liftL = liftR = 0.1;
+        break;
+      }
+      case 'joy': {
+        const j = Math.abs(Math.sin(p * Math.PI * 3));
+        ty = -10 * j;
+        sy = 1 + 0.04 * j;
+        liftL = liftR = 0.75 + j * 0.25;
+        break;
+      }
+      case 'dance': {
+        const w = Math.sin(p * Math.PI * 5);
+        tx = w * 4.5;
+        angle = w * 8 * (this.flip ? -1 : 1);
+        liftL = 0.5 + w * 0.45;
+        liftR = 0.5 - w * 0.45;
+        break;
+      }
+      case 'laugh': {
+        tx = Math.sin(p * Math.PI * 16) * 1.3;
+        ty = -Math.abs(Math.sin(p * Math.PI * 8)) * 2;
+        liftL = liftR = 0.3;
+        break;
+      }
+      case 'love': {
+        liftL = liftR = 0.8;
+        dxL = dxR = -2;
+        handIn = 6;
+        handYFix = upper - 22;
+        ty = -Math.abs(Math.sin(p * Math.PI * 2)) * 2;
+        break;
+      }
+      case 'surprised': {
+        const j = p < 0.32 ? Math.sin((p / 0.32) * Math.PI) : 0;
+        ty = -11 * j;
+        liftL = liftR = 0.55 + j * 0.3;
+        dxL = dxR = 1;
+        break;
+      }
+      case 'sad': {
+        const k = Math.min(1, p * 3);
+        ty = 2.4 * k;
+        sy = 1 - 0.05 * k;
+        headDip = 2.6 * k;
+        break;
+      }
+      case 'sleep': {
+        const b = Math.sin(p * Math.PI * 4);
+        ty = b * 0.9;
+        headDip = 2;
+        break;
+      }
+      default:
+        break;
+    }
+
+    headY += headDip;
+
+    // 歩いている間は上半身だけ動かす（位置がずれると座標がおかしくなるため）
+    if (this.target) {
+      tx = 0;
+      ty = 0;
+      angle = 0;
+      sy = 1;
+    }
+    this.bodyWrap.setPosition(tx, ty);
+    this.bodyWrap.setAngle(angle);
+    this.bodyWrap.setScale(this.flip ? -1 : 1, sy);
+
+    // 影は床に置いたまま。跳ぶと小さくなる
+    this.shadow.clear();
     if (!sitting) {
-      g.fillStyle(0x000000, 0.15);
-      g.fillEllipse(0, 1, 30, 12);
+      const air = Math.max(0, -ty);
+      this.shadow.fillStyle(0x000000, Math.max(0.05, 0.15 - air * 0.007));
+      this.shadow.fillEllipse(tx * 0.4, 1, 30 - air * 0.9, 12 - air * 0.36);
     }
 
     // 後ろに流れる髪（ロング・ふんわりは体より先に描く）
@@ -340,13 +507,19 @@ export class Avatar {
     // 襟（胴の輪郭を締める）
     g.fillStyle(tint(shirt, 0.4), 1);
     g.fillRoundedRect(-6, upper - 15.5, 12, 3.4, 1.7);
-    // 腕と手
-    g.fillStyle(shade(shirt, 0.92), 1);
-    g.fillRoundedRect(-12.4, upper - 13 + swing * 0.45, 5, 10, 2.5);
-    g.fillRoundedRect(7.4, upper - 13 - swing * 0.45, 5, 10, 2.5);
-    g.fillStyle(skin, 1);
-    g.fillCircle(-9.9, upper - 3 + swing * 0.45, 3);
-    g.fillCircle(9.9, upper - 3 - swing * 0.45, 3);
+    // 腕と手。上げるほど外側へ逃がす（頭の後ろに隠れないように）
+    const arm = (side: -1 | 1, lift: number, swingOff: number, dx: number) => {
+      const cx = side * (9.9 + lift * 6 + dx);
+      const ay = upper - 13 - lift * 16 + swingOff;
+      const hx = side * (9.9 + lift * 6.5 + dx - handIn);
+      const hy = handYFix ?? ay + (1 - lift) * 10;
+      g.fillStyle(shade(shirt, 0.92), 1);
+      g.fillRoundedRect(cx - 2.5, ay, 5, 10, 2.5);
+      g.fillStyle(skin, 1);
+      g.fillCircle(hx, hy, 3);
+    };
+    arm(-1, liftL, swing * 0.45, dxL);
+    arm(1, liftR, -swing * 0.45, dxR);
 
     // 頭（首なしの2頭身）
     g.fillStyle(skin, 1);
@@ -435,35 +608,103 @@ export class Avatar {
     // 顔（正面のみ）
     if (!back) {
       const eyeY = headY + 2.2;
-      if (this.blinking) {
-        g.lineStyle(1.6, 0x5a4250, 1);
+      const closedArc = (cx: number, up: boolean) => {
         g.beginPath();
-        g.arc(-5.6, eyeY, 3, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340));
+        if (up) g.arc(cx, eyeY, 3.2, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340));
+        else g.arc(cx, eyeY + 0.6, 3.4, Phaser.Math.DegToRad(15), Phaser.Math.DegToRad(165));
         g.strokePath();
-        g.beginPath();
-        g.arc(5.6, eyeY, 3, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340));
-        g.strokePath();
-      } else {
-        // 大きな目 + ハイライト
+      };
+      const roundEye = (cx: number, w: number, h: number) => {
         g.fillStyle(0x4a3542, 1);
-        g.fillEllipse(-5.6, eyeY, 6, 7.4);
-        g.fillEllipse(5.6, eyeY, 6, 7.4);
+        g.fillEllipse(cx, eyeY, w, h);
         g.fillStyle(0xffffff, 0.95);
-        g.fillEllipse(-7, eyeY - 1.9, 2.6, 2.8);
-        g.fillEllipse(4.2, eyeY - 1.9, 2.6, 2.8);
+        g.fillEllipse(cx - 1.4, eyeY - 1.9, w * 0.44, h * 0.38);
         g.fillStyle(0xffffff, 0.6);
-        g.fillEllipse(-4.4, eyeY + 2, 1.6, 1.6);
-        g.fillEllipse(6.8, eyeY + 2, 1.6, 1.6);
+        g.fillEllipse(cx + 1.2, eyeY + 2, w * 0.27, h * 0.22);
+      };
+      const heartEye = (cx: number) => {
+        const r = 7.4;
+        g.fillStyle(0xf0577c, 1);
+        g.fillCircle(cx - r * 0.26, eyeY - r * 0.2, r * 0.34);
+        g.fillCircle(cx + r * 0.26, eyeY - r * 0.2, r * 0.34);
+        g.fillTriangle(cx - r * 0.55, eyeY - r * 0.06, cx + r * 0.55, eyeY - r * 0.06, cx, eyeY + r * 0.55);
+        g.fillStyle(0xffffff, 0.85);
+        g.fillEllipse(cx - r * 0.24, eyeY - r * 0.26, 1.8, 1.6);
+      };
+
+      const blinkNow = this.blinking && (face === 'normal' || face === 'love' || face === 'surprised');
+      if (blinkNow || face === 'happy' || face === 'laugh') {
+        g.lineStyle(1.7, 0x5a4250, 1);
+        closedArc(-5.6, true);
+        closedArc(5.6, true);
+      } else if (face === 'sleep') {
+        g.lineStyle(1.7, 0x5a4250, 1);
+        closedArc(-5.6, false);
+        closedArc(5.6, false);
+      } else if (face === 'love') {
+        heartEye(-5.6);
+        heartEye(5.6);
+      } else if (face === 'surprised') {
+        roundEye(-5.6, 6.6, 8.6);
+        roundEye(5.6, 6.6, 8.6);
+      } else if (face === 'sad') {
+        roundEye(-5.6, 5.6, 6.4);
+        roundEye(5.6, 5.6, 6.4);
+        g.fillStyle(0x8fd0ef, 0.9);
+        g.fillEllipse(-8.8, eyeY + 3.6, 2.4, 3.6);
+      } else {
+        roundEye(-5.6, 6, 7.4);
+        roundEye(5.6, 6, 7.4);
       }
+
+      // まゆ（しょんぼり・びっくりのときだけ足す）
+      if (face === 'sad' || face === 'surprised') {
+        const outer = eyeY - (face === 'sad' ? 5.6 : 7.6);
+        const inner = eyeY - (face === 'sad' ? 4.2 : 8.2);
+        g.lineStyle(1.3, 0x8a6a76, 0.9);
+        g.beginPath();
+        g.moveTo(-8.8, outer);
+        g.lineTo(-3.2, inner);
+        g.strokePath();
+        g.beginPath();
+        g.moveTo(8.8, outer);
+        g.lineTo(3.2, inner);
+        g.strokePath();
+      }
+
       // ほお
-      g.fillStyle(0xf2879f, 0.42);
+      g.fillStyle(0xf2879f, face === 'love' || face === 'laugh' ? 0.6 : 0.42);
       g.fillEllipse(-9.4, eyeY + 5.4, 6.2, 3.4);
       g.fillEllipse(9.4, eyeY + 5.4, 6.2, 3.4);
-      // 小さな笑顔
-      g.lineStyle(1.5, 0xa8697a, 1);
-      g.beginPath();
-      g.arc(0, eyeY + 5.6, 2.9, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(155));
-      g.strokePath();
+
+      // くち
+      const mouthY = eyeY + 5.6;
+      if (face === 'laugh') {
+        g.fillStyle(0x9c5566, 1);
+        g.slice(0, mouthY - 0.6, 4.2, 0, Math.PI, false);
+        g.fillPath();
+        g.fillStyle(0xf58ba2, 1);
+        g.fillEllipse(0, mouthY + 2.2, 4.4, 2.2);
+      } else if (face === 'surprised') {
+        g.fillStyle(0x9c5566, 1);
+        g.fillEllipse(0, mouthY + 0.6, 3.4, 4.2);
+      } else if (face === 'sad') {
+        g.lineStyle(1.5, 0xa8697a, 1);
+        g.beginPath();
+        g.arc(0, mouthY + 3, 2.9, Phaser.Math.DegToRad(205), Phaser.Math.DegToRad(335));
+        g.strokePath();
+      } else if (face === 'sleep') {
+        g.lineStyle(1.4, 0xa8697a, 0.9);
+        g.beginPath();
+        g.moveTo(-1.8, mouthY);
+        g.lineTo(1.8, mouthY);
+        g.strokePath();
+      } else {
+        g.lineStyle(1.5, 0xa8697a, 1);
+        g.beginPath();
+        g.arc(0, mouthY, face === 'happy' ? 3.4 : 2.9, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(155));
+        g.strokePath();
+      }
     }
   }
 }

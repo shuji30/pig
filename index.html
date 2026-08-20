@@ -33,6 +33,7 @@
 
       <nav id="toolbar">
         <button class="tool" data-panel="furniture"><span>🪑</span>かぐ</button>
+        <button class="tool" data-panel="emote"><span>😊</span>きもち</button>
         <button class="tool" data-panel="wardrobe"><span>👕</span>きせかえ</button>
         <button class="tool" data-panel="room"><span>🎨</span>もようがえ</button>
       </nav>
@@ -52,6 +53,16 @@
         <div class="tabs" id="furniture-tabs"></div>
         <div class="grid" id="furniture-grid"></div>
         <p class="note">アイテムを選んで部屋をクリックで設置。<b>R</b>で回転、<b>Esc</b>でやめる。</p>
+      </section>
+
+      <!-- きもち（エモート）パネル -->
+      <section class="panel" id="panel-emote" hidden>
+        <div class="panel-head">
+          <h2>きもち</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <div class="grid" id="emote-grid"></div>
+        <p class="note">タップするとアバターが動きます。座ったままでもできます。</p>
       </section>
 
       <!-- きせかえパネル -->
@@ -89,6 +100,7 @@
           <li>置いてある家具をクリックすると<b>移動・回転・しまう</b>ができます。</li>
           <li>背景を<b>ドラッグ</b>でカメラ移動、<b>ホイール</b>でズーム。</li>
           <li>下の入力欄でしゃべると<b>吹き出し</b>が出ます。</li>
+          <li>「きもち」から<b>てをふる・おじぎ・よろこぶ</b>などのモーションが出せます。</li>
           <li>変更は自動的にブラウザへ保存されます。</li>
         </ul>
       </section>

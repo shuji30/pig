@@ -292,6 +292,11 @@ button.danger {
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.08);
 }
 
+.item .emoji {
+  font-size: 27px;
+  line-height: 1.15;
+}
+
 .item canvas {
   width: 56px;
   height: 46px;

@@ -85,13 +85,14 @@ export class RoomScene extends Phaser.Scene {
         else this.cancelPlacing();
       },
       onSelAction: (act) => this.selAction(act),
+      onEmote: (kind) => this.avatar.playMotion(kind),
       onZoom: (factor) => this.zoomBy(factor),
       onCenter: () => this.centerOnAvatar(),
       onPanelOpen: (name) => {
         this.deselect();
         if (this.mode !== 'idle') this.cancelPlacing();
-        // きせかえ中はパネルでアバターが隠れるので、上のほうへ寄せる
-        if (name === 'wardrobe') this.focusAvatar();
+        // きせかえ・きもち はアバターが見えないと選べないので、上のほうへ寄せる
+        if (name === 'wardrobe' || name === 'emote') this.focusAvatar();
       },
     });
     this.ui.setLook(this.save.avatar.look);

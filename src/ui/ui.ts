@@ -8,10 +8,11 @@ import {
   WALL_STYLES,
 } from '../config';
 import { CATEGORY_LABEL, CATEGORY_ORDER, FURNITURE } from '../data/furniture';
+import { MOTIONS, type MotionKind } from '../data/motions';
 import { makeIconCanvas } from '../render/furnitureTexture';
 import type { AvatarLook, FurnitureCategory } from '../types';
 
-export type PanelName = 'furniture' | 'wardrobe' | 'room' | 'help';
+export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'help';
 
 export interface UiHandlers {
   onPickFurniture(defId: string): void;
@@ -23,6 +24,7 @@ export interface UiHandlers {
   onPlaceAction(act: 'rotate' | 'cancel'): void;
   onSelAction(act: 'rotate' | 'move' | 'store' | 'deselect'): void;
   onPanelOpen(name: PanelName): void;
+  onEmote(kind: MotionKind): void;
   onZoom(factor: number): void;
   onCenter(): void;
 }
@@ -48,6 +50,7 @@ export class Ui {
     private readonly handlers: UiHandlers,
   ) {
     this.buildTabs();
+    this.buildEmotes();
     this.buildWardrobe();
     this.buildRoomPanel();
     this.wireChrome();
@@ -109,6 +112,23 @@ export class Ui {
         this.renderCatalog();
       });
       tabs.appendChild(b);
+    }
+  }
+
+  private buildEmotes() {
+    const grid = $('emote-grid');
+    grid.innerHTML = '';
+    for (const m of MOTIONS) {
+      const btn = document.createElement('button');
+      btn.className = 'item';
+      const icon = document.createElement('span');
+      icon.className = 'emoji';
+      icon.textContent = m.icon;
+      const name = document.createElement('span');
+      name.textContent = m.label;
+      btn.append(icon, name);
+      btn.addEventListener('click', () => this.handlers.onEmote(m.kind));
+      grid.appendChild(btn);
     }
   }
 
