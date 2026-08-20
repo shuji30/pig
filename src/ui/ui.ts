@@ -121,6 +121,7 @@ export class Ui {
     for (const m of MOTIONS) {
       const btn = document.createElement('button');
       btn.className = 'item';
+      btn.dataset.kind = m.kind;
       const icon = document.createElement('span');
       icon.className = 'emoji';
       icon.textContent = m.icon;
@@ -266,6 +267,13 @@ export class Ui {
   setInventory(inv: Record<string, number>) {
     this.inventory = inv;
     this.renderCatalog();
+  }
+
+  /** 繰り返し再生中のモーションのボタンを光らせる */
+  setActiveEmote(kind: MotionKind | null) {
+    document.querySelectorAll<HTMLElement>('#emote-grid .item').forEach((el) => {
+      el.classList.toggle('selected', kind !== null && el.dataset.kind === kind);
+    });
   }
 
   setPicked(defId: string | null) {

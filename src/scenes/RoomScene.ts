@@ -3,6 +3,7 @@ import { ROOM_H, ROOM_W, TILE_H, TILE_W, WALL_H } from '../config';
 import { depthFor, gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { getDef } from '../data/furniture';
+import type { MotionKind } from '../data/motions';
 import { Avatar } from '../entities/Avatar';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { getFurnitureTexture } from '../render/furnitureTexture';
@@ -108,8 +109,18 @@ export class RoomScene extends Phaser.Scene {
     this.setupInput();
   }
 
+  private lastLoopEmote: MotionKind | null = null;
+
   override update(_time: number, delta: number) {
     this.avatar.update(delta);
+    // 繰り返し再生の開始・終了に合わせてボタンとヒントを切り替える
+    const loop = this.avatar.loopingMotion;
+    if (loop !== this.lastLoopEmote) {
+      this.lastLoopEmote = loop;
+      this.ui.setActiveEmote(loop);
+      if (loop) this.ui.setHint('もう一度おすと やめるよ');
+      else this.setHint();
+    }
   }
 
   // ---------------- カメラ ----------------

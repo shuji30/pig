@@ -94,6 +94,8 @@ export class Avatar {
 
   /** 経路（現在地の次のマスから終点まで）を渡して歩かせる */
   walk(path: Tile[], onArrive?: () => void) {
+    // 寝たまま／踊ったまま歩き出さないように、繰り返し中のものは解除する
+    if (this.motion?.def.loop) this.stopMotion();
     this.path = [...path];
     this.target = null;
     this.onArrive = onArrive ?? null;
@@ -186,12 +188,22 @@ export class Avatar {
 
   /** モーションを再生する（歩行や着席は止めない） */
   playMotion(kind: MotionKind) {
+    // 繰り返し中のものをもう一度押したら止める
+    if (this.motion?.def.loop && this.motion.def.kind === kind) {
+      this.stopMotion();
+      return;
+    }
     const def = getMotion(kind);
     this.motion = { def, time: 0 };
     this.dirty = true;
     this.glyph?.destroy();
     this.glyph = undefined;
-    if (def.glyph) this.showGlyph(def.glyph, def.duration);
+    if (def.glyph) this.showGlyph(def.glyph, def.duration, def.loop === true);
+  }
+
+  /** 繰り返し再生中のモーション（無ければ null） */
+  get loopingMotion(): MotionKind | null {
+    return this.motion?.def.loop ? this.motion.def.kind : null;
   }
 
   stopMotion() {
@@ -204,7 +216,7 @@ export class Avatar {
     this.dirty = true;
   }
 
-  private showGlyph(char: string, duration: number) {
+  private showGlyph(char: string, duration: number, forever = false) {
     const y0 = this.sittingOn !== null ? -46 : -60;
     const glyph = this.scene.add
       .text(15, y0, char, {
@@ -222,7 +234,7 @@ export class Avatar {
       alpha: 0,
       duration: one,
       ease: 'Sine.easeOut',
-      repeat: Math.max(0, Math.ceil(duration / one) - 1),
+      repeat: forever ? -1 : Math.max(0, Math.ceil(duration / one) - 1),
     });
   }
 
@@ -264,7 +276,10 @@ export class Avatar {
     if (this.motion) {
       this.motion.time += deltaMs;
       this.dirty = true;
-      if (this.motion.time >= this.motion.def.duration) this.stopMotion();
+      if (this.motion.time >= this.motion.def.duration) {
+        if (this.motion.def.loop) this.motion.time -= this.motion.def.duration;
+        else this.stopMotion();
+      }
     }
 
     // まばたき
