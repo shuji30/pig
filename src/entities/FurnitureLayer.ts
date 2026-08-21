@@ -1,9 +1,15 @@
 import Phaser from 'phaser';
-import { depthFor, gridToScreen, rotatedSize } from '../core/iso';
+import { sortForDraw, type DepthItem } from '../core/depthSort';
+import { gridToScreen, rotatedSize } from '../core/iso';
 import { boxOf, canPlaceBox, type PlacementQuery } from '../core/placement';
 import { findDef, getDef } from '../data/furniture';
 import { getFurnitureTexture } from '../render/furnitureTexture';
 import type { FurnitureDef, PlacedFurniture, Rotation } from '../types';
+
+/** 床に敷くもの（ラグなど）の深さ。壁のもの(-1960) より手前、床(-1900) より手前 */
+const RUG_DEPTH = -1800;
+/** 家具1段ぶんの深さの間隔。アバターはこのすき間に入る */
+export const DEPTH_STEP = 10;
 
 export interface Footprint {
   gx: number;
@@ -44,12 +50,41 @@ export class FurnitureLayer {
     return this.items;
   }
 
+  /**
+   * 家具どうしの重なり順を決め直す。
+   * スカラーひとつでは表せない配置があるので、
+   * 「画面上で重なりうる」組にだけ辺を張ってトポロジカルソートする
+   * （`core/depthSort.ts`）。並び順は入力順に依存しない。
+   */
+  restack() {
+    const solid: DepthItem[] = [];
+    let rug = 0;
+    for (const item of this.items) {
+      const def = getDef(item.defId);
+      const sprite = this.sprites.get(item.uid);
+      if (!sprite) continue;
+      if (def.walkable) {
+        // 床に敷くものは家具より必ず奥。敷いた順に重ねる
+        sprite.setDepth(RUG_DEPTH + rug * 0.01);
+        rug += 1;
+        continue;
+      }
+      const f = this.footprint(item);
+      solid.push({ uid: item.uid, gx: f.gx, gy: f.gy, w: f.w, d: f.d, height: def.height });
+    }
+    const ordered = sortForDraw(solid);
+    for (let i = 0; i < ordered.length; i++) {
+      this.sprites.get(ordered[i].uid)?.setDepth(i * DEPTH_STEP);
+    }
+  }
+
   setItems(items: PlacedFurniture[]) {
     for (const s of this.sprites.values()) s.destroy();
     this.sprites.clear();
     this.items = [];
     this.blockedBy = new Array(this.size * this.size).fill(null);
     for (const it of items) this.add(it);
+    this.restack();
   }
 
   add(item: PlacedFurniture) {
@@ -66,6 +101,7 @@ export class FurnitureLayer {
     this.stampOccupancy(item, null);
     this.sprites.get(uid)?.destroy();
     this.sprites.delete(uid);
+    this.restack();
     return item;
   }
 
@@ -167,7 +203,9 @@ export class FurnitureLayer {
     const cx = f.gx + f.w / 2;
     const cy = f.gy + f.d / 2;
     const p = gridToScreen(cx, cy);
-    return { x: p.x, y: p.y, depth: depthFor(f.gx, f.gy, f.w, f.d) + 10 };
+    // 座ったアバターは、その家具のすぐ手前に描く
+    const own = this.sprites.get(item.uid)?.depth ?? 0;
+    return { x: p.x, y: p.y, depth: own + DEPTH_STEP / 2 };
   }
 
   /** 家具の向きから、座ったアバターの向きを決める */
@@ -191,6 +229,7 @@ export class FurnitureLayer {
    */
   depthAt(box: { gx0: number; gx1: number; gy0: number; gy1: number }): number {
     const EPS = 1e-6;
+    const HALF = DEPTH_STEP / 2;
     let behind = -Infinity; // 奥にある家具の最大 depth
     let front = Infinity; // 手前にある家具の最小 depth
     for (const item of this.items) {
@@ -206,12 +245,13 @@ export class FurnitureLayer {
         front = Math.min(front, sprite.depth);
       }
     }
-    const fallback = (box.gx1 + box.gy1) * 100 + box.gy1 * 0.1;
-    if (behind === -Infinity && front === Infinity) return fallback;
-    if (behind === -Infinity) return Math.min(fallback, front - 1);
-    if (front === Infinity) return Math.max(fallback, behind + 1);
+    // 家具の深さは 0, 10, 20 ... と並んでいるので、そのすき間に入れる
+    if (behind === -Infinity && front === Infinity) return HALF;
+    if (behind === -Infinity) return front - HALF;
+    if (front === Infinity) return behind + HALF;
     if (behind < front) return (behind + front) / 2;
-    return fallback;
+    // 前後が矛盾している配置では、アバターを手前に出す（見えなくなるより良い）
+    return behind + HALF;
   }
 
   /** 画面座標にある家具を、手前のものから探す（透明部分は無視） */
@@ -253,12 +293,9 @@ export class FurnitureLayer {
     const def = getDef(item.defId);
     const tex = getFurnitureTexture(this.scene, def, item.rot, item.recolor);
     const p = gridToScreen(item.gx, item.gy);
-    const [w, d] = rotatedSize(def.size, item.rot);
-    const sprite = this.scene.add
-      .image(p.x, p.y, tex.key)
-      .setOrigin(tex.originX, tex.originY)
-      .setDepth(def.walkable ? -1800 + this.items.length * 0.01 : depthFor(item.gx, item.gy, w, d));
+    const sprite = this.scene.add.image(p.x, p.y, tex.key).setOrigin(tex.originX, tex.originY);
     this.sprites.set(item.uid, sprite);
+    this.restack();
   }
 
   private stampOccupancy(item: PlacedFurniture, uid: string | null) {

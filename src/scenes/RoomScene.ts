@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { TILE_H, TILE_W, WALL_H } from '../config';
-import { depthFor, gridToScreen, rotatedSize, screenToTile } from '../core/iso';
+import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
 import { getDef } from '../data/furniture';
@@ -1147,7 +1147,8 @@ export class RoomScene extends Phaser.Scene {
     const p = gridToScreen(gx, gy);
     this.ghost.setPosition(p.x, p.y);
     this.ghost.setTint(this.ghostOk ? 0xffffff : 0xff8888);
-    this.ghost.setDepth(depthFor(gx, gy, w, d) + 5);
+    // 置いたときと同じ重なり順になるよう、家具の並びのすき間に入れる
+    this.ghost.setDepth(this.furniture.depthAt({ gx0: gx, gx1: gx + w, gy0: gy, gy1: gy + d }));
 
     // 占有範囲の表示
     const g = this.ghostG;
