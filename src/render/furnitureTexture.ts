@@ -323,6 +323,74 @@ function paint(painter: IsoPainter, def: FurnitureDef) {
       painter.box(-0.03, -0.03, W + 0.03, D + 0.03, H - 2, H, tint(ac, 0.35));
       break;
     }
+    case 'rocket': {
+      // 宇宙ロココ。箱しか置けないので、段数を増やして円錐に近づける。
+      // 台輪 → 胴（下ほど太い8段） → ノーズ（4段で先細り） → フィン → 窓。
+      // もけい(H=54) と本物(H=118) を同じ手続きで描ける
+      const cx = W / 2;
+      const cy = D / 2;
+      const r = Math.min(W, D) * 0.27;
+      const padZ = H * 0.06;
+
+      // 発射台
+      painter.box(cx - r * 1.55, cy - r * 1.55, cx + r * 1.55, cy + r * 1.55, 0, padZ * 0.6, GOLD);
+      painter.box(cx - r * 1.3, cy - r * 1.3, cx + r * 1.3, cy + r * 1.3, padZ * 0.6, padZ, tint(GOLD, 0.42));
+
+      // 胴。上へ行くほど細くする
+      const bodyTop = H * 0.8;
+      const steps = 9;
+      for (let i = 0; i < steps; i++) {
+        const t0 = i / steps;
+        const t1 = (i + 1) / steps;
+        const rr = r * (1 - 0.42 * Math.pow(t0, 1.15));
+        const z0 = padZ + (bodyTop - padZ) * t0;
+        const z1 = padZ + (bodyTop - padZ) * t1;
+        painter.box(cx - rr, cy - rr, cx + rr, cy + rr, z0, z1, i % 2 === 0 ? c : shade(c, 0.96));
+      }
+      // 金の帯を2本
+      for (const t of [0.32, 0.66]) {
+        const z = padZ + (bodyTop - padZ) * t;
+        const rr = r * (1 - 0.42 * Math.pow(t, 1.15)) + 0.02;
+        painter.box(cx - rr, cy - rr, cx + rr, cy + rr, z, z + H * 0.026, GOLD);
+      }
+
+      // ノーズ。4段で細らせて、頂点に金の玉
+      const noseSteps = 6;
+      const rTop = r * 0.6;
+      for (let i = 0; i < noseSteps; i++) {
+        const t0 = i / noseSteps;
+        const t1 = (i + 1) / noseSteps;
+        const rr = rTop * (1 - 0.9 * t0);
+        const z0 = bodyTop + (H - bodyTop) * t0;
+        const z1 = bodyTop + (H - bodyTop) * t1;
+        painter.box(cx - rr, cy - rr, cx + rr, cy + rr, z0, z1, shade(ac, 1 + t0 * 0.14));
+      }
+      painter.stud(cx, cy, H, Math.max(1.2, r * 1.6), GOLD_LIGHT);
+
+      // フィン。手前と左右の3枚だけ（奥は見えないので描かない）
+      const finZ0 = padZ;
+      const finZ1 = padZ + (bodyTop - padZ) * 0.42;
+      for (const [du, dv] of [
+        [-1, 0],
+        [1, 0],
+        [0, 1],
+      ] as Array<[number, number]>) {
+        const fu = cx + du * r * 1.22;
+        const fv = cy + dv * r * 1.22;
+        const halfU = du === 0 ? r * 0.36 : r * 0.2;
+        const halfV = dv === 0 ? r * 0.36 : r * 0.2;
+        painter.box(fu - halfU, fv - halfV, fu + halfU, fv + halfV, finZ0, finZ1, ac);
+        // 上へ細く伸ばして、ひれらしい輪郭にする
+        painter.box(fu - halfU * 0.6, fv - halfV * 0.6, fu + halfU * 0.6, fv + halfV * 0.6, finZ1, finZ1 + H * 0.1, shade(ac, 0.92));
+        painter.box(fu - halfU * 0.3, fv - halfV * 0.3, fu + halfU * 0.3, fv + halfV * 0.3, finZ1 + H * 0.1, finZ1 + H * 0.16, shade(ac, 0.86));
+      }
+
+      // 窓（正面 v=D 側。footprint の外へ少し出して、回しても前後が崩れないようにする）
+      const winZ = padZ + (bodyTop - padZ) * 0.56;
+      painter.box(cx - r * 0.4, cy + r * 0.86, cx + r * 0.4, cy + r * 1.02, winZ, winZ + H * 0.12, GOLD);
+      painter.box(cx - r * 0.28, cy + r * 1.02, cx + r * 0.28, cy + r * 1.06, winZ + H * 0.016, winZ + H * 0.104, '#bcdcf0');
+      break;
+    }
     case 'table': {
       const legH = Math.max(6, H - 8);
       cabrioleLegs(painter, W, D, 0.18, legH, c);

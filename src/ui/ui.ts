@@ -65,6 +65,8 @@ export interface UiHandlers {
   /** 床を1マスずつ塗るモードの切り替え */
   onTogglePaint(): void;
   onPaintAction(act: 'clear' | 'done'): void;
+  /** 🌍 でちきゅうへ戻る */
+  onGoHome(): void;
 }
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -132,6 +134,7 @@ export class Ui {
 
     $('btn-expand').addEventListener('click', () => this.handlers.onExpandRoom());
     $('btn-paint').addEventListener('click', () => this.handlers.onTogglePaint());
+    $('btn-earth').addEventListener('click', () => this.handlers.onGoHome());
     $('paintbar').addEventListener('click', (e) => {
       const act = (e.target as HTMLElement).dataset?.act;
       if (act === 'clear' || act === 'done') this.handlers.onPaintAction(act);
@@ -410,6 +413,11 @@ export class Ui {
     this.wallIdx = wallIdx;
     this.themeIdx = ROOM_THEMES.findIndex((t) => t.floor === floorIdx && t.wall === wallIdx);
     this.refreshRoomPanel();
+  }
+
+  /** 地上の部屋にいるか。よその部屋にいるときだけ 🌍 を出す */
+  setAtHome(atHome: boolean) {
+    $('btn-earth').hidden = atHome;
   }
 
   /** 床をぬるモードの表示。バーを出し、パネルを閉じる */

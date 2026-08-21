@@ -5,13 +5,23 @@ import {
   EYE_COLORS,
   FLOOR_STYLES,
   HAIR_COLORS,
+  MOON_FLOOR,
+  MOON_ROOM_SIZE,
+  MOON_WALL,
   ROOM_SIZES,
   SAVE_KEY,
   SAVE_VERSION,
   SKIN_COLORS,
   START_COINS,
 } from '../config';
-import { DEFAULT_LAYOUT, DEFAULT_WALL_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
+import {
+  DEFAULT_LAYOUT,
+  DEFAULT_WALL_LAYOUT,
+  findDef,
+  MOON_LAYOUT,
+  MOON_WALL_LAYOUT,
+  STARTER_INVENTORY,
+} from '../data/furniture';
 import type { DailyCounters, PlacedFurniture, PlacedWall, Recolor, RoomData, SaveData } from '../types';
 import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
 
@@ -19,6 +29,9 @@ import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
 export const DEFAULT_ROOM_NAME = 'わたしのおへや';
 /** 最初からある部屋の id */
 export const HOME_ROOM = 'home';
+/** 月コロニーの部屋 id */
+export const MOON_ROOM = 'moon';
+export const MOON_ROOM_NAME = 'つきのおへや';
 
 let uidSeq = 0;
 export function newUid(): string {
@@ -110,6 +123,28 @@ export function defaultSave(): SaveData {
   };
 }
 
+/**
+ * 月コロニーをつくる。はじめてロケットに乗ったときに呼ばれる。
+ * 「部屋だけ作って置かない」を避けるため、最初から生活の形にしておく。
+ * 置いてあるぶんは持ちものから引かない（着いたごほうび）。
+ */
+export function makeMoonRoom(): RoomData {
+  const room = emptyRoom(MOON_ROOM_NAME, MOON_ROOM_SIZE);
+  room.floor = MOON_FLOOR;
+  room.wall = MOON_WALL;
+  room.note = 'ちきゅうが見えるよ';
+  room.items = MOON_LAYOUT.map((l) => ({ uid: newUid(), defId: l.defId, gx: l.gx, gy: l.gy, rot: l.rot }));
+  room.wallItems = MOON_WALL_LAYOUT.map((l) => ({
+    uid: newUid(),
+    defId: l.defId,
+    side: l.side,
+    col: l.col,
+    level: l.level,
+  }));
+  room.spawn = { gx: 9, gy: 9 };
+  return room;
+}
+
 /** v3 まではセーブの直下に部屋の中身が置かれていた */
 interface LegacyFlatRoom {
   floor?: number;
@@ -194,7 +229,9 @@ function cleanItems(items: unknown, size: number): PlacedFurniture[] {
 
 function cleanRoom(raw: unknown, fallbackName: string): RoomData {
   const r = (raw ?? {}) as Partial<RoomData>;
-  const size = ROOM_SIZES.includes(r.size as never) ? (r.size as number) : DEFAULT_ROOM_SIZE;
+  // 月コロニーは 14 マスなど、コインで解放する段とは別の広さを持つことがある
+  const allowed: readonly number[] = [...ROOM_SIZES, MOON_ROOM_SIZE];
+  const size = allowed.includes(r.size as number) ? (r.size as number) : DEFAULT_ROOM_SIZE;
   return {
     name: (r.name ?? fallbackName).slice(0, ROOM_NAME_MAX) || fallbackName,
     note: (r.note ?? '').slice(0, ROOM_NOTE_MAX),

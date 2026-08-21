@@ -74,6 +74,18 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'rug-big', name: 'おおきいロココラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#cbb392', accent: '#f6eee0', walkable: true, price: 260, rarity: 'uncommon' },
   { id: 'rug-gold', name: 'きんのラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#cfa855', accent: '#f6eee0', walkable: true, price: 460, rarity: 'rare' },
 
+  // ---- 宇宙ロココ（月コロニー） ----
+  // 世界観を割らないよう、形は既存のロココのまま色だけ青銀に振っている。
+  // ロケットだけ専用の形（shape: 'rocket'）。押すと月コロニーへ行ける
+  { id: 'moon-stool', name: 'つきのスツール', category: 'seat', shape: 'chair', size: [1, 1], height: 26, color: '#dfe4f2', accent: '#9fb6d8', seatHeight: 20, price: 140, rarity: 'common' },
+  { id: 'moon-sofa', name: 'つきのカナッペ', category: 'seat', shape: 'sofa', size: [2, 1], height: 48, color: '#dfe4f2', accent: '#8fa8cf', seatHeight: 20, price: 300, rarity: 'uncommon' },
+  { id: 'moon-table', name: 'げっせきのテーブル', category: 'table', shape: 'table', size: [2, 2], height: 30, color: '#e6e9f4', accent: '#b9c6de', price: 280, rarity: 'uncommon' },
+  { id: 'star-lamp', name: 'ほしのランプ', category: 'deco', shape: 'lamp', size: [1, 1], height: 88, color: '#cfa855', accent: '#dff0ff', price: 320, rarity: 'uncommon' },
+  { id: 'dome-plant', name: 'ドームのしょくぶつ', category: 'deco', shape: 'plant', size: [1, 1], height: 70, color: '#dfe4f2', accent: '#7fc7a8', price: 260, rarity: 'uncommon' },
+  { id: 'crater-rug', name: 'クレーターラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#b9bacb', accent: '#e4e6f2', walkable: true, price: 300, rarity: 'uncommon' },
+  { id: 'rocket-model', name: 'ロケットのもけい', category: 'deco', shape: 'rocket', size: [1, 1], height: 54, color: '#eef2fb', accent: '#e06a6a', price: 360, rarity: 'uncommon' },
+  { id: 'rocket', name: 'ロケット', category: 'deco', shape: 'rocket', size: [2, 2], height: 118, color: '#f4f7ff', accent: '#e06a6a', travel: 'moon', price: 1500, rarity: 'rare' },
+
   // ---- かべ ----
   // 壁に掛けるもの。size[0] が壁に沿ったマス数、height は壁の上での高さ(px)。
   // 描画は render/wallTexture.ts。床の家具と同じショップ・持ちものに並ぶ
@@ -87,6 +99,8 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'tapestry', name: 'タペストリー', category: 'wall', shape: 'box', wallShape: 'tapestry', size: [2, 1], height: 38, color: '#cbb0d8', accent: '#cfa855', price: 380, rarity: 'uncommon' },
   { id: 'window-arch', name: 'アーチまど', category: 'wall', shape: 'box', wallShape: 'window', size: [3, 1], height: 38, color: '#f8f2e8', accent: '#bcdcf0', price: 520, rarity: 'rare' },
   { id: 'art-gold', name: 'きんぶちの大きな絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [3, 1], height: 36, color: '#cfa855', accent: '#c3d6ea', price: 600, rarity: 'rare' },
+  { id: 'star-chart', name: 'ほしのちず', category: 'wall', shape: 'box', wallShape: 'painting', size: [2, 1], height: 30, color: '#cfa855', accent: '#2f3a63', price: 320, rarity: 'uncommon' },
+  { id: 'earth-window', name: 'ちきゅうのまど', category: 'wall', shape: 'box', wallShape: 'window', size: [3, 1], height: 38, color: '#e6e9f4', accent: '#3f6ea8', price: 680, rarity: 'rare' },
 ];
 
 /** 壁に掛ける家具か */
@@ -131,6 +145,28 @@ export const STARTER_INVENTORY: Record<string, number> = {
 export const DEFAULT_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number }> = [
   { defId: 'window', side: 'right', col: 6, level: 0 },
   { defId: 'clock', side: 'left', col: 2, level: 0 },
+];
+
+/**
+ * 月コロニーの初期レイアウト。はじめて着いたときに置いてある。
+ * 「部屋だけ作って置かない」を避けるため、最初から生活の形にしておく。
+ * 帰りのロケットも置いてある（しまってしまっても上のボタンで帰れる）。
+ */
+export const MOON_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 0 | 1 | 2 | 3 }> = [
+  { defId: 'rocket', gx: 11, gy: 11, rot: 0 },
+  { defId: 'crater-rug', gx: 4, gy: 5, rot: 0 },
+  { defId: 'moon-sofa', gx: 4, gy: 3, rot: 0 },
+  { defId: 'moon-table', gx: 4, gy: 6, rot: 0 },
+  { defId: 'moon-stool', gx: 7, gy: 6, rot: 0 },
+  { defId: 'star-lamp', gx: 2, gy: 2, rot: 0 },
+  { defId: 'dome-plant', gx: 9, gy: 2, rot: 0 },
+  { defId: 'rocket-model', gx: 1, gy: 8, rot: 0 },
+];
+
+/** 月コロニーの壁の初期レイアウト */
+export const MOON_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number }> = [
+  { defId: 'earth-window', side: 'right', col: 5, level: 0 },
+  { defId: 'star-chart', side: 'left', col: 3, level: 0 },
 ];
 
 /** 部屋の初期レイアウト */

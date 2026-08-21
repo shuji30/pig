@@ -2,11 +2,13 @@ import {
   CLOTH_COLORS,
   DEFAULT_ROOM_SIZE,
   EYE_COLORS,
+  FLOOR_STYLES,
   HAIR_COLORS,
   HAIR_STYLE_NAMES,
   MAX_ROOM_SIZE,
   ROOM_SIZES,
   SKIN_COLORS,
+  WALL_STYLES,
 } from '../config';
 import { findDef } from '../data/furniture';
 import { rotatedSize } from '../core/iso';
@@ -213,14 +215,14 @@ function unpack(raw: unknown): SharedRoom | null {
     const gx = num(t[0], 0, size - 1, -1);
     const gy = num(t[1], 0, size - 1, -1);
     if (gx < 0 || gy < 0) continue;
-    if (typeof t[2] !== 'number' || !Number.isInteger(t[2]) || t[2] < 0 || t[2] > 4) continue;
+    if (typeof t[2] !== 'number' || !Number.isInteger(t[2]) || t[2] < 0 || t[2] >= FLOOR_STYLES.length) continue;
     floorPatch[`${gx},${gy}`] = t[2];
     if (Object.keys(floorPatch).length >= MAX_ROOM_SIZE * MAX_ROOM_SIZE) break;
   }
 
   return {
-    floor: num(raw[1], 0, 4, 0),
-    wall: num(raw[2], 0, 4, 0),
+    floor: num(raw[1], 0, FLOOR_STYLES.length - 1, 0),
+    wall: num(raw[2], 0, WALL_STYLES.length - 1, 0),
     size,
     floorPatch,
     roomName: text(raw[3], ROOM_NAME_MAX, 'だれかのおへや'),

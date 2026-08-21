@@ -38,6 +38,7 @@ export const FLOOR_STYLES = [
   { name: 'カーペット', a: 0xd98aa6, b: 0xcd7c99, line: 0xbf6f8b },
   { name: 'くさ', a: 0x8fc76e, b: 0x81ba61, line: 0x74ab56 },
   { name: 'ダーク', a: 0x6c5f6b, b: 0x60545f, line: 0x544a54 },
+  { name: 'つきのすな', a: 0xc9c6d4, b: 0xbdbaca, line: 0xa8a5b6 },
 ];
 
 /** 壁のバリエーション */
@@ -47,6 +48,7 @@ export const WALL_STYLES = [
   { name: 'ラベンダー', a: 0xe2dcf0, b: 0xd0c8e4 },
   { name: 'そら', a: 0xd6e9f7, b: 0xc2daec },
   { name: 'ピンク', a: 0xfadfe8, b: 0xefccd8 },
+  { name: 'ほしぞら', a: 0x2b2f52, b: 0x232746 },
 ];
 
 /**
@@ -59,7 +61,14 @@ export const ROOM_THEMES = [
   { name: 'ローズ', floor: 2, wall: 4 },
   { name: 'ミント', floor: 3, wall: 1 },
   { name: 'よぞら', floor: 4, wall: 3 },
+  { name: 'つき', floor: 5, wall: 5 },
 ];
+
+/** 月コロニーの部屋。地上とは広さを変えて「別の場所」に見せる */
+export const MOON_ROOM_SIZE = 14;
+/** 月コロニーの床と壁 */
+export const MOON_FLOOR = 5;
+export const MOON_WALL = 5;
 
 /** きせかえ用のカラーパレット */
 export const SKIN_COLORS = ['#ffe0c8', '#f7cba6', '#e0aa7c', '#c08858', '#8d5f3d'];

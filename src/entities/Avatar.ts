@@ -7,6 +7,9 @@ import type { AvatarLook } from '../types';
 
 type Tile = { gx: number; gy: number };
 
+/** 低重力のときの歩幅ごとの浮き上がり(px)。負の値が上 */
+const MOON_HOP = [0, -4, -7, -4];
+
 /** アバター本体。歩行・向き・きせかえ・吹き出しを担当する */
 export class Avatar {
   readonly container: Phaser.GameObjects.Container;
@@ -45,6 +48,9 @@ export class Avatar {
   /** 重ね順の計算を場に委譲する（家具との前後関係を正しく出すため） */
   private depthResolver: ((box: { gx0: number; gx1: number; gy0: number; gy1: number }) => number) | null = null;
 
+  /** 低重力（月コロニー）。歩くとふわっと跳ねる */
+  private floaty = false;
+
   /** 座っている家具の uid（立っているときは null） */
   sittingOn: string | null = null;
   private sitDepth = 0;
@@ -80,6 +86,13 @@ export class Avatar {
 
   get isWalking(): boolean {
     return this.target !== null || this.path.length > 0;
+  }
+
+  /** 低重力の切り替え。歩幅ごとにふわっと浮く */
+  setFloaty(on: boolean) {
+    if (this.floaty === on) return;
+    this.floaty = on;
+    this.dirty = true;
   }
 
   setLook(look: AvatarLook) {
@@ -479,6 +492,9 @@ export class Avatar {
       ty = 0;
       angle = 0;
       sy = 1;
+      // 低重力ではひと足ごとにふわっと浮く。
+      // container ではなく bodyWrap を動かすので、マス座標には影響しない
+      if (this.floaty) ty = MOON_HOP[this.frame];
     }
     this.bodyWrap.setPosition(tx, ty);
     this.bodyWrap.setAngle(angle);

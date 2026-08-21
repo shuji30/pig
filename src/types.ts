@@ -11,7 +11,8 @@ export type FurnitureShape =
   | 'plant'
   | 'lamp'
   | 'tv'
-  | 'table';
+  | 'table'
+  | 'rocket'; // 月へ行けるロケット（と、そのミニチュア）
 
 export type FurnitureCategory = 'seat' | 'table' | 'storage' | 'deco' | 'floor' | 'wall';
 
@@ -50,6 +51,8 @@ export interface FurnitureDef {
    * このとき `size[0]` は壁に沿ったマス数、`height` は壁の上での高さ(px)を表す。
    */
   wallShape?: WallShape;
+  /** 押すと別の部屋へ行ける家具（ロケットなど）。値は行き先の部屋 id */
+  travel?: string;
   /** ショップでの値段（コイン） */
   price: number;
   rarity: Rarity;

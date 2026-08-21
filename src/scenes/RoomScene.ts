@@ -22,6 +22,8 @@ import {
   DEFAULT_ROOM_NAME,
   HOME_ROOM,
   load,
+  makeMoonRoom,
+  MOON_ROOM,
   newUid,
   saveDebounced,
   tileKey,
@@ -244,6 +246,7 @@ export class RoomScene extends Phaser.Scene {
         if (this.mode === 'paint') this.ui.setPainting(true, FLOOR_STYLES[this.brush]?.name ?? 'ゆか');
       },
       onTogglePaint: () => this.togglePaint(),
+      onGoHome: () => this.travelTo(HOME_ROOM),
       onPaintAction: (act) => {
         if (act === 'clear') this.clearFloorPatch();
         else this.togglePaint(false);
@@ -293,6 +296,8 @@ export class RoomScene extends Phaser.Scene {
     }
 
     this.ui.setRoomText(this.cur.name, this.cur.note);
+    this.ui.setAtHome(this.visiting || this.save.currentRoom === HOME_ROOM);
+    this.avatar.setFloaty(!this.visiting && this.save.currentRoom === MOON_ROOM);
     this.refreshMetricsLine();
     if (this.shared) {
       this.ui.setVisiting({
@@ -748,6 +753,12 @@ export class RoomScene extends Phaser.Scene {
     const def = getDef(item.defId);
     this.select(item.uid);
 
+    // ロケットなど、押すと別の部屋へ行けるもの
+    if (def.travel !== undefined && !this.visiting) {
+      this.travelTo(this.travelTargetOf(def.travel));
+      return;
+    }
+
     if (def.seatHeight === undefined) return;
 
     if (this.avatar.sittingOn === item.uid) {
@@ -1069,6 +1080,78 @@ export class RoomScene extends Phaser.Scene {
     this.syncMissions();
     this.ui.toast(`${getDef(removed.defId).name}をしまったよ`);
     this.deselect();
+    this.persist();
+  }
+
+  // ---------------- とびだす（部屋の移動） ----------------
+
+  /**
+   * 行き先を決める。すでにその部屋にいるなら地上へ帰る、という約束にしてある。
+   * ロケットの定義を1つにしたまま行きと帰りの両方を扱える。
+   */
+  private travelTargetOf(target: string): string {
+    return target === this.save.currentRoom ? HOME_ROOM : target;
+  }
+
+  private travelling = false;
+
+  /** 発進 → 画面が白くなる → 別の部屋 → 戻る。移動は即時・無料・何度でも */
+  private travelTo(roomId: string) {
+    if (this.visiting || this.travelling) return;
+    if (roomId === this.save.currentRoom) return;
+    this.travelling = true;
+    this.avatar.stop();
+    this.avatar.playMotion('surprised');
+    this.ui.closePanels();
+    this.deselect();
+    if (this.mode === 'paint') this.togglePaint(false);
+    else if (this.mode !== 'idle') this.cancelPlacing();
+    this.ui.toast(roomId === MOON_ROOM ? 'つきへ しゅっぱつ！ 🚀' : 'ちきゅうへ もどるよ 🌍');
+
+    const cam = this.cameras.main;
+    cam.fadeOut(420, 255, 255, 255);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.enterRoom(roomId);
+      cam.fadeIn(560, 255, 255, 255);
+      this.travelling = false;
+    });
+  }
+
+  /** 部屋を入れ替える。描画・占有マス・カメラ・UI をまとめて作り直す */
+  private enterRoom(roomId: string) {
+    this.persist(); // いまの部屋の内容を先に保存する
+    if (roomId === MOON_ROOM && !this.save.rooms[MOON_ROOM]) {
+      this.save.rooms[MOON_ROOM] = makeMoonRoom();
+    }
+    if (!this.save.rooms[roomId]) return;
+    this.save.currentRoom = roomId;
+    const room = this.cur;
+
+    this.furniture.setSize(room.size);
+    this.furniture.setItems(room.items);
+    this.walls.setSize(room.size);
+    this.walls.setItems(room.wallItems);
+    this.room.redraw(room.floor, room.wall, room.size, room.floorPatch);
+
+    this.avatar.stop();
+    this.avatar.placeAt(room.spawn.gx, room.spawn.gy);
+    this.avatar.setFloaty(roomId === MOON_ROOM);
+    this.ensureAvatarStandable();
+    this.avatar.refreshDepth();
+
+    this.userZoomed = false;
+    this.applyFitZoom();
+    const center = gridToScreen(this.size / 2, this.size / 2);
+    this.cameras.main.centerOn(center.x, center.y - WALL_H / 3);
+
+    this.ui.setStyles(room.floor, room.wall);
+    this.ui.setRoomText(room.name, room.note);
+    this.ui.setAtHome(roomId === HOME_ROOM);
+    this.brush = room.floor === 1 ? 0 : 1;
+    this.ui.setBrush(this.brush);
+    this.syncRoomSize();
+    this.syncMissions();
+    this.setHint();
     this.persist();
   }
 

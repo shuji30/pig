@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ROOM_SIZE } from '../config';
+import { DEFAULT_ROOM_SIZE, FLOOR_STYLES } from '../config';
 import { decodeShared, encodeShared, ROOM_NAME_MAX, type SharedRoom } from './share';
 
 const sample: SharedRoom = {
@@ -182,8 +182,8 @@ describe('他人が作った URL の検証', () => {
   });
 
   it('ゆか・かべの番号も範囲に収める', async () => {
-    const room = await decodePacked([3, 99, -3, 'x', '', [], [], 12, []]);
-    expect(room?.floor).toBe(4);
+    const room = await decodePacked([5, 99, -3, 'x', '', [], [], 12, [], []]);
+    expect(room?.floor).toBe(FLOOR_STYLES.length - 1);
     expect(room?.wall).toBe(0);
   });
 
