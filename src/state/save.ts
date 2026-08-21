@@ -1,4 +1,4 @@
-import { CLOTH_COLORS, HAIR_COLORS, ROOM_H, ROOM_W, SAVE_KEY, SAVE_VERSION, SKIN_COLORS } from '../config';
+import { CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, ROOM_H, ROOM_W, SAVE_KEY, SAVE_VERSION, SKIN_COLORS } from '../config';
 import { DEFAULT_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
 import type { PlacedFurniture, SaveData } from '../types';
 
@@ -27,7 +27,9 @@ export function defaultSave(): SaveData {
         skin: SKIN_COLORS[1],
         hair: HAIR_COLORS[1],
         hairStyle: 0,
+        eyes: EYE_COLORS[1],
         shirt: CLOTH_COLORS[0],
+        outfit: 'dress',
         pants: CLOTH_COLORS[5],
         shoes: CLOTH_COLORS[8],
       },

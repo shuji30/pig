@@ -1,9 +1,11 @@
 import type Phaser from 'phaser';
 import {
   CLOTH_COLORS,
+  EYE_COLORS,
   FLOOR_STYLES,
   HAIR_COLORS,
   HAIR_STYLE_NAMES,
+  OUTFIT_NAMES,
   SKIN_COLORS,
   WALL_STYLES,
 } from '../config';
@@ -143,9 +145,15 @@ export class Ui {
       this.swatchRow('かみのいろ', HAIR_COLORS, () => this.look.hair, (c) => this.patchLook({ hair: c })),
     );
     body.appendChild(this.swatchRow('はだ', SKIN_COLORS, () => this.look.skin, (c) => this.patchLook({ skin: c })));
+    body.appendChild(this.swatchRow('ひとみ', EYE_COLORS, () => this.look.eyes, (c) => this.patchLook({ eyes: c })));
+    body.appendChild(
+      this.chipRow('ふくのかたち', OUTFIT_NAMES, () => (this.look.outfit === 'dress' ? 1 : 0), (i) =>
+        this.patchLook({ outfit: i === 1 ? 'dress' : 'shirt' }),
+      ),
+    );
     body.appendChild(this.swatchRow('ふく', CLOTH_COLORS, () => this.look.shirt, (c) => this.patchLook({ shirt: c })));
     body.appendChild(
-      this.swatchRow('ズボン', CLOTH_COLORS, () => this.look.pants, (c) => this.patchLook({ pants: c })),
+      this.swatchRow('ズボン／くつした', CLOTH_COLORS, () => this.look.pants, (c) => this.patchLook({ pants: c })),
     );
     body.appendChild(this.swatchRow('くつ', CLOTH_COLORS, () => this.look.shoes, (c) => this.patchLook({ shoes: c })));
 

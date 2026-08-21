@@ -373,6 +373,8 @@ export class Avatar {
     const walkBob = sitting || !this.target ? 0 : [0, -1, 0, -1][this.frame];
     // 立ち止まっているときだけ呼吸させる
     const breathe = sitting || this.target ? 0 : [0, -1][this.breathFrame];
+    // 歩くと髪が少し遅れて揺れる
+    const hs = sitting ? 0 : -swing * 0.45;
 
     // 腰の高さ。立ちは足元、座りは座面が原点
     const hipY = sitting ? -1 : walkBob - 14;
@@ -501,16 +503,23 @@ export class Avatar {
     // 後ろに流れる髪（ロング・ふんわりは体より先に描く）
     if (look.hairStyle === 3) {
       g.fillStyle(shade(hair, 0.9), 1);
-      g.fillRoundedRect(-12, headY - 4, 24, 40, 11);
+      g.fillRoundedRect(-12 + hs, headY - 4, 24, 40, 11);
     } else if (look.hairStyle === 5) {
       g.fillStyle(shade(hair, 0.9), 1);
-      g.fillRoundedRect(-13, headY - 2, 26, 30, 12);
+      g.fillRoundedRect(-13 + hs, headY - 2, 26, 30, 12);
     }
 
-    // 脚（短くて丸い）
-    g.fillStyle(pants, 1);
+    // 脚（短くて丸い）。ワンピースのときは素足＋くつした
+    const dress = look.outfit === 'dress';
+    g.fillStyle(dress ? shade(skin, 0.97) : pants, 1);
     g.fillRoundedRect(-8 + swing * 0.55, hipY, 6.6, legLen, 3.3);
     g.fillRoundedRect(1.4 - swing * 0.55, hipY, 6.6, legLen, 3.3);
+    if (dress) {
+      const sockTop = hipY + legLen * 0.42;
+      g.fillStyle(pants, 1);
+      g.fillRoundedRect(-8 + swing * 0.55, sockTop, 6.6, hipY + legLen - sockTop, 3.3);
+      g.fillRoundedRect(1.4 - swing * 0.55, sockTop, 6.6, hipY + legLen - sockTop, 3.3);
+    }
     // 靴
     g.fillStyle(shoes, 1);
     g.fillRoundedRect(-9.4 + swing * 0.75, hipY + legLen - 4, 8.8, 5.6, 2.8);
@@ -519,6 +528,32 @@ export class Avatar {
     // 胴（ころんと丸い）
     g.fillStyle(shirt, 1);
     g.fillRoundedRect(-8.5, upper - 15, 17, 16 - breathe, 7);
+    if (dress) {
+      // スカート（台形）とすそ
+      const waist = upper - 2;
+      const hem = hipY + 1;
+      g.fillStyle(shirt, 1);
+      g.fillPoints(
+        [
+          { x: -8.5, y: waist },
+          { x: 8.5, y: waist },
+          { x: 14.6, y: hem },
+          { x: -14.6, y: hem },
+        ],
+        true,
+      );
+      g.fillStyle(tint(shirt, 0.38), 1);
+      g.fillPoints(
+        [
+          { x: -14.6, y: hem },
+          { x: 14.6, y: hem },
+          { x: 13.4, y: hem + 2.9 },
+          { x: -13.4, y: hem + 2.9 },
+        ],
+        true,
+      );
+    }
+
     // 襟（胴の輪郭を締める）
     g.fillStyle(tint(shirt, 0.4), 1);
     g.fillRoundedRect(-6, upper - 15.5, 12, 3.4, 1.7);
@@ -572,9 +607,11 @@ export class Avatar {
     drawHairCap();
     g.fillStyle(hair, 1);
     switch (look.hairStyle) {
-      case 0: // ショート
+      case 0: // ショート（毛先をとがらせる）
         g.fillRoundedRect(-14.2, headY - 7, 5, 12, 2.5);
         g.fillRoundedRect(9.2, headY - 7, 5, 12, 2.5);
+        g.fillTriangle(-14.2, headY + 3.4, -9.2, headY + 3.4, -12.6, headY + 9.6);
+        g.fillTriangle(9.2, headY + 3.4, 14.2, headY + 3.4, 11.6, headY + 9.6);
         break;
       case 1: // ボブ
         g.fillRoundedRect(-14.6, headY - 8, 5.4, 19, 2.7);
@@ -585,16 +622,16 @@ export class Avatar {
       case 2: // ツインテール
         g.fillRoundedRect(-14.2, headY - 7, 5, 13, 2.5);
         g.fillRoundedRect(9.2, headY - 7, 5, 13, 2.5);
-        g.fillCircle(-16, headY + 4, 6.2);
-        g.fillCircle(16, headY + 4, 6.2);
-        g.fillCircle(-17.2, headY + 12, 4.4);
-        g.fillCircle(17.2, headY + 12, 4.4);
+        g.fillCircle(-16 + hs * 1.4, headY + 4, 6.2);
+        g.fillCircle(16 + hs * 1.4, headY + 4, 6.2);
+        g.fillCircle(-17.2 + hs * 2.4, headY + 12, 4.4);
+        g.fillCircle(17.2 + hs * 2.4, headY + 12, 4.4);
         bow(-14.6, headY - 5.5, 3.4);
         bow(14.6, headY - 5.5, 3.4);
         break;
       case 3: // ロング
-        g.fillRoundedRect(-14.8, headY - 8, 5.6, 26, 2.8);
-        g.fillRoundedRect(9.2, headY - 8, 5.6, 26, 2.8);
+        g.fillRoundedRect(-14.8 + hs, headY - 8, 5.6, 26, 2.8);
+        g.fillRoundedRect(9.2 + hs, headY - 8, 5.6, 26, 2.8);
         bow(0, headY + 14, 3.6);
         break;
       case 4: // おだんご
@@ -607,13 +644,22 @@ export class Avatar {
         break;
       default: // ふんわり
         g.fillCircle(-13.2, headY - 4, 5.4);
-        g.fillCircle(-15, headY + 4, 5);
-        g.fillCircle(-13.6, headY + 12, 4.4);
+        g.fillCircle(-15 + hs * 1.4, headY + 4, 5);
+        g.fillCircle(-13.6 + hs * 2.4, headY + 12, 4.4);
         g.fillCircle(13.2, headY - 4, 5.4);
-        g.fillCircle(15, headY + 4, 5);
-        g.fillCircle(13.6, headY + 12, 4.4);
+        g.fillCircle(15 + hs * 1.4, headY + 4, 5);
+        g.fillCircle(13.6 + hs * 2.4, headY + 12, 4.4);
         break;
     }
+    // アホ毛（ぴょんと1本）
+    g.lineStyle(2, hair, 1);
+    g.beginPath();
+    g.moveTo(1.4 + hs, headY - 12.4);
+    g.lineTo(4.2 + hs * 1.5, headY - 16.2);
+    g.lineTo(7 + hs * 2, headY - 17.2);
+    g.lineTo(8.8 + hs * 2.5, headY - 15);
+    g.strokePath();
+
     // 髪のつやめき
     if (!back) {
       g.fillStyle(shade(hair, 1.28), 0.55);
@@ -629,13 +675,28 @@ export class Avatar {
         else g.arc(cx, eyeY + 0.6, 3.4, Phaser.Math.DegToRad(15), Phaser.Math.DegToRad(165));
         g.strokePath();
       };
+      const iris = toInt(look.eyes);
       const roundEye = (cx: number, w: number, h: number) => {
-        g.fillStyle(0x4a3542, 1);
+        // 外周 → 虹彩 → 下側の照り返し → 瞳孔 → ハイライト2つ
+        g.fillStyle(0x3a2b33, 1);
         g.fillEllipse(cx, eyeY, w, h);
-        g.fillStyle(0xffffff, 0.95);
-        g.fillEllipse(cx - 1.4, eyeY - 1.9, w * 0.44, h * 0.38);
-        g.fillStyle(0xffffff, 0.6);
-        g.fillEllipse(cx + 1.2, eyeY + 2, w * 0.27, h * 0.22);
+        g.fillStyle(iris, 1);
+        g.fillEllipse(cx, eyeY + h * 0.08, w * 0.76, h * 0.76);
+        g.fillStyle(tint(iris, 0.5), 1);
+        g.fillEllipse(cx, eyeY + h * 0.24, w * 0.62, h * 0.32);
+        g.fillStyle(shade(iris, 0.32), 1);
+        g.fillEllipse(cx, eyeY + h * 0.04, w * 0.34, h * 0.42);
+        g.fillStyle(0xffffff, 0.97);
+        g.fillEllipse(cx - w * 0.22, eyeY - h * 0.27, w * 0.36, h * 0.3);
+        g.fillStyle(0xffffff, 0.5);
+        g.fillEllipse(cx + w * 0.2, eyeY + h * 0.3, w * 0.2, h * 0.15);
+      };
+      const lashes = (cx: number, side: -1 | 1) => {
+        g.lineStyle(1.3, 0x3a2b33, 1);
+        g.beginPath();
+        g.moveTo(cx + side * 2.2, eyeY - 2.9);
+        g.lineTo(cx + side * 4.3, eyeY - 4.2);
+        g.strokePath();
       };
       const heartEye = (cx: number) => {
         const r = 7.4;
@@ -662,6 +723,8 @@ export class Avatar {
       } else if (face === 'surprised') {
         roundEye(-5.6, 6.6, 8.6);
         roundEye(5.6, 6.6, 8.6);
+        lashes(-5.6, -1);
+        lashes(5.6, 1);
       } else if (face === 'sad') {
         roundEye(-5.6, 5.6, 6.4);
         roundEye(5.6, 5.6, 6.4);
@@ -670,6 +733,8 @@ export class Avatar {
       } else {
         roundEye(-5.6, 6, 7.4);
         roundEye(5.6, 6, 7.4);
+        lashes(-5.6, -1);
+        lashes(5.6, 1);
       }
 
       // まゆ（しょんぼり・びっくりのときだけ足す）

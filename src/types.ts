@@ -43,12 +43,19 @@ export interface PlacedFurniture {
   rot: Rotation;
 }
 
+/** ふくのかたち */
+export type Outfit = 'shirt' | 'dress';
+
 export interface AvatarLook {
   name: string;
   skin: string;
   hair: string;
   hairStyle: number;
+  /** ひとみの色 */
+  eyes: string;
   shirt: string;
+  /** シャツかワンピースか */
+  outfit: Outfit;
   pants: string;
   shoes: string;
 }

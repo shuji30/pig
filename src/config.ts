@@ -47,6 +47,8 @@ export const CLOTH_COLORS = [
   '#f5f2ee',
   '#5b5560',
 ];
+export const EYE_COLORS = ['#5b4630', '#7a4a2a', '#3f6ea8', '#3f8f7a', '#6b4f9e', '#a84a5f', '#4a4a58'];
+export const OUTFIT_NAMES = ['シャツ', 'ワンピース'];
 export const HAIR_STYLE_NAMES = ['ショート', 'ボブ', 'ツインテール', 'ロング', 'おだんご', 'ふんわり'];
 
 /** ロココ調の金彩に使う色 */
