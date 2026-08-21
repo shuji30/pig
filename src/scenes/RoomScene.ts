@@ -9,8 +9,20 @@ import { Avatar } from '../entities/Avatar';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { getFurnitureTexture } from '../render/furnitureTexture';
 import { RoomView } from '../render/room';
+import { saveRoomPng } from '../render/snapshot';
 import { buy, claimDailyBonus, claimMissions, missionViews, sell } from '../state/economy';
+import { metricsSummary, track } from '../state/metrics';
 import { clearSave, load, newUid, saveDebounced } from '../state/save';
+import {
+  encodeShared,
+  leaveShare,
+  placedFromShared,
+  ROOM_NAME_MAX,
+  ROOM_NOTE_MAX,
+  sharedFromSave,
+  shareUrlFor,
+  type SharedRoom,
+} from '../state/share';
 import type { AvatarLook, PlacedFurniture, Rotation, SaveData } from '../types';
 import { Ui } from '../ui/ui';
 
@@ -48,12 +60,38 @@ export class RoomScene extends Phaser.Scene {
   private dragging = false;
   private lastPointer = { x: 0, y: 0 };
 
-  constructor() {
+  /** 訪問モード（共有 URL で開かれた）かどうか */
+  private visiting = false;
+  /** 訪問中に押された ❤️ の数。端末のなかだけの記録 */
+  private likes = 0;
+
+  /**
+   * @param shared 共有 URL から読めた部屋。null なら自分の部屋を開く
+   * @param shareBroken 共有 URL は付いていたが読めなかった
+   */
+  constructor(
+    private readonly shared: SharedRoom | null = null,
+    private readonly shareBroken = false,
+  ) {
     super('room');
   }
 
   create() {
-    this.save = load();
+    const own = load();
+    this.visiting = this.shared !== null;
+    // 訪問中は「見た目だけ」差し替える。自分のセーブはこのあと一切書かない
+    this.save = this.shared
+      ? {
+          ...own,
+          floor: this.shared.floor,
+          wall: this.shared.wall,
+          roomName: this.shared.roomName,
+          roomNote: this.shared.roomNote,
+          items: placedFromShared(this.shared, newUid),
+          avatar: { ...own.avatar, look: { ...own.avatar.look } },
+        }
+      : own;
+    track(this.visiting ? 'shareOpen' : 'session');
 
     this.cameras.main.setBackgroundColor('#2b2430');
     this.room = new RoomView(this);
@@ -75,6 +113,7 @@ export class RoomScene extends Phaser.Scene {
         this.save.floor = i;
         this.room.redraw(this.save.floor, this.save.wall);
         this.save.daily.restyled += 1;
+        this.noteEdit();
         this.syncMissions();
         this.persist();
       },
@@ -82,6 +121,7 @@ export class RoomScene extends Phaser.Scene {
         this.save.wall = i;
         this.room.redraw(this.save.floor, this.save.wall);
         this.save.daily.restyled += 1;
+        this.noteEdit();
         this.syncMissions();
         this.persist();
       },
@@ -103,12 +143,14 @@ export class RoomScene extends Phaser.Scene {
         this.persist();
       },
       onBuy: (defId) => {
+        if (this.visiting) return;
         const def = getDef(defId);
         if (!buy(this.save, def)) {
           this.ui.toast('コインが足りないよ');
           return;
         }
         this.ui.toast(`${def.name}を かいました`);
+        track('buy');
         this.afterEconomyChange();
       },
       onSell: (defId) => {
@@ -132,6 +174,21 @@ export class RoomScene extends Phaser.Scene {
       },
       onZoom: (factor) => this.zoomBy(factor),
       onCenter: () => this.centerOnAvatar(),
+      onRoomTextChange: (name, note) => {
+        if (this.visiting) return;
+        this.save.roomName = name.slice(0, ROOM_NAME_MAX).trim() || 'わたしのおへや';
+        this.save.roomNote = note.slice(0, ROOM_NOTE_MAX);
+        this.persist();
+      },
+      requestShareUrl: async () => shareUrlFor(await encodeShared(sharedFromSave(this.save))),
+      onShareCopied: () => {
+        track('share');
+        this.refreshMetricsLine();
+      },
+      onSaveShot: () => void this.saveShot(),
+      onLike: () => this.like(),
+      onImportRoom: () => this.importVisitedRoom(),
+      onLeaveVisit: () => leaveShare(),
       onPanelOpen: (name) => {
         this.deselect();
         if (this.mode !== 'idle') this.cancelPlacing();
@@ -160,8 +217,8 @@ export class RoomScene extends Phaser.Scene {
     this.syncMissions();
     this.setHint();
 
-    // その日はじめての訪問ならログインボーナス
-    const bonus = claimDailyBonus(this.save);
+    // その日はじめての訪問ならログインボーナス（人の部屋では配らない）
+    const bonus = this.visiting ? { amount: 0, streak: 0 } : claimDailyBonus(this.save);
     if (bonus.amount > 0) {
       this.ui.setCoins(this.save.coins);
       this.time.delayedCall(700, () =>
@@ -170,9 +227,115 @@ export class RoomScene extends Phaser.Scene {
       this.persist();
     }
 
+    this.ui.setRoomText(this.save.roomName, this.save.roomNote);
+    this.refreshMetricsLine();
+    if (this.shared) {
+      this.ui.setVisiting({
+        roomName: this.shared.roomName,
+        roomNote: this.shared.roomNote,
+        ownerName: this.shared.look.name,
+      });
+      this.time.delayedCall(500, () => this.ui.toast(`${this.shared?.roomName} にきました`));
+    } else {
+      this.ui.setVisiting(null);
+      if (this.shareBroken) {
+        this.time.delayedCall(500, () => this.ui.toast('この URL の部屋は読めませんでした'));
+      }
+    }
+
     this.ensureAvatarStandable();
     this.setupCamera();
     this.setupInput();
+  }
+
+  // ---------------- みせる（共有・画像・いいね） ----------------
+
+  /** 端末のなかで数えている記録を「あそびかた」に出す */
+  private refreshMetricsLine() {
+    const m = metricsSummary();
+    this.ui.setMetricsLine(
+      `記録（この端末だけ）：あそんだ日 ${m.playDays}日 / 部屋をいじった日 ${m.editDays}日 / ` +
+        `みせた ${m.totals.share}回 / ひとの部屋にいった ${m.totals.shareOpen}回`,
+    );
+  }
+
+  /** 部屋を編集した、と数える。北極星指標のもと */
+  private noteEdit() {
+    if (this.visiting) return;
+    track('edit');
+  }
+
+  private async saveShot() {
+    this.ui.closePanels();
+    this.ui.toast('しゃしんを とっています…');
+    // パネルを閉じた直後のフレームを撮りたいので1回待つ
+    await new Promise<void>((r) => this.time.delayedCall(120, r));
+    const ok = await saveRoomPng(this.game, {
+      roomName: this.save.roomName,
+      ownerName: this.visiting ? (this.shared?.look.name ?? 'だれか') : this.save.avatar.look.name,
+      likes: this.likes,
+    });
+    if (ok) {
+      track('png');
+      this.refreshMetricsLine();
+      this.ui.toast('画像をほぞんしました');
+    } else {
+      this.ui.toast('画像をつくれませんでした');
+    }
+  }
+
+  /**
+   * 訪問中の ❤️。サーバーが無いのでオーナーには届かないが、
+   * ハートが飛んでスクリーンショットに数が残る。
+   */
+  private like() {
+    this.likes += 1;
+    this.ui.setLikes(this.likes);
+    track('like');
+    this.popHearts(3);
+    this.avatar.playMotion('love');
+  }
+
+  /** アバターのまわりからハートを飛ばす */
+  private popHearts(n: number) {
+    for (let i = 0; i < n; i++) {
+      const t = this.add
+        .text(
+          this.avatar.container.x + Phaser.Math.Between(-18, 18),
+          this.avatar.container.y - Phaser.Math.Between(10, 30),
+          '❤️',
+          { fontSize: `${Phaser.Math.Between(16, 24)}px` },
+        )
+        .setOrigin(0.5)
+        .setDepth(9_500_000);
+      this.tweens.add({
+        targets: t,
+        y: t.y - Phaser.Math.Between(60, 100),
+        x: t.x + Phaser.Math.Between(-24, 24),
+        alpha: 0,
+        duration: Phaser.Math.Between(900, 1400),
+        delay: i * 120,
+        ease: 'Sine.easeOut',
+        onComplete: () => t.destroy(),
+      });
+    }
+  }
+
+  /** 見ている部屋を自分の部屋として保存する（共有 URL のバックアップ復元も同じ道） */
+  private importVisitedRoom() {
+    if (!this.shared) return;
+    const own = load();
+    own.floor = this.shared.floor;
+    own.wall = this.shared.wall;
+    own.roomName = this.shared.roomName;
+    own.roomNote = this.shared.roomNote;
+    own.items = placedFromShared(this.shared, newUid);
+    // 置いてあるぶんは持ちものから引かない。取りこみでコインを稼げてしまうため、
+    // しまったときに増える方向だけを許す
+    saveDebounced(own);
+    track('import');
+    this.ui.toast('とりこみました。じぶんの部屋にいきます');
+    window.setTimeout(() => leaveShare(), 900);
   }
 
   private lastLoopEmote: MotionKind | null = null;
@@ -506,6 +669,7 @@ export class RoomScene extends Phaser.Scene {
   // ---------------- 選択 ----------------
 
   private select(uid: string) {
+    if (this.visiting) return; // 訪問中は人の部屋をいじれない
     this.selectedUid = uid;
     this.furniture.setHighlight(uid);
     const item = this.furniture.get(uid);
@@ -570,6 +734,7 @@ export class RoomScene extends Phaser.Scene {
     }
     if (this.avatar.sittingOn === uid) this.avatar.standUp();
     this.furniture.update(uid, item.gx, item.gy, next);
+    this.noteEdit();
     this.select(uid);
     this.avatar.refreshDepth();
     this.persist();
@@ -582,6 +747,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.refreshDepth();
     this.save.inventory[removed.defId] = (this.save.inventory[removed.defId] ?? 0) + 1;
     this.save.daily.stored += 1;
+    this.noteEdit();
     this.ui.setInventory(this.save.inventory);
     this.syncMissions();
     this.ui.toast(`${getDef(removed.defId).name}をしまったよ`);
@@ -696,6 +862,7 @@ export class RoomScene extends Phaser.Scene {
     if (this.mode === 'move' && this.moveUid) {
       const uid = this.moveUid;
       this.furniture.update(uid, gx, gy, this.placeRot);
+      this.noteEdit();
       this.furniture.setVisible(uid, true);
       this.avatar.refreshDepth();
       this.cancelPlacing();
@@ -709,6 +876,7 @@ export class RoomScene extends Phaser.Scene {
     this.furniture.add(item);
     this.save.inventory[defId] = Math.max(0, (this.save.inventory[defId] ?? 0) - 1);
     this.save.daily.placed += 1;
+    this.noteEdit();
     this.ui.setInventory(this.save.inventory);
     this.syncMissions();
     this.persist();
@@ -790,10 +958,12 @@ export class RoomScene extends Phaser.Scene {
   private setHint() {
     if (this.mode === 'place') this.ui.setHint('置きたい場所をクリック（Rで回転 / Escでやめる）');
     else if (this.mode === 'move') this.ui.setHint('移動先をクリック（Rで回転 / Escでやめる）');
+    else if (this.visiting) this.ui.setHint('ここは ひとの おへや。歩いたり すわったりできるよ');
     else this.ui.setHint('床をクリックして歩こう。家具をクリックすると操作できるよ');
   }
 
   private persist() {
+    if (this.visiting) return; // 人の部屋を自分のセーブに書き込まない
     this.save.items = this.furniture.all.map((i) => ({ ...i }));
     this.save.avatar.gx = this.avatar.tile.gx;
     this.save.avatar.gy = this.avatar.tile.gy;

@@ -82,6 +82,10 @@ export interface SaveData {
   version: number;
   floor: number;
   wall: number;
+  /** 共有したときに出る部屋の名前 */
+  roomName: string;
+  /** 共有したときに出るひとこと */
+  roomNote: string;
   /** 放置中にアバターが自分で動くか */
   autoPlay: boolean;
   /** 所持コイン */

@@ -31,7 +31,7 @@ jobs:
 
       - run: npm ci
 
-      # tsc --noEmit + vite build（出力は dist/）
+      # tsc --noEmit + vitest run + vite build（出力は dist/）。テストが落ちたら公開しない
       - run: npm run build
 
       # 先に成果物を上げてしまうことで、Pages 側の設定に失敗してもビルドの結果は残る

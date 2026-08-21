@@ -17,7 +17,14 @@ import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { makeIconCanvas } from '../render/furnitureTexture';
 import type { AvatarLook, FurnitureCategory } from '../types';
 
-export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'missions' | 'help';
+export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'share' | 'missions' | 'help';
+
+/** 訪問中に上部へ出す、その部屋の情報 */
+export interface VisitInfo {
+  roomName: string;
+  roomNote: string;
+  ownerName: string;
+}
 
 export interface UiHandlers {
   onPickFurniture(defId: string): void;
@@ -36,6 +43,14 @@ export interface UiHandlers {
   onClaimMissions(): void;
   onZoom(factor: number): void;
   onCenter(): void;
+  onRoomTextChange(name: string, note: string): void;
+  /** いまの部屋の共有 URL をつくる */
+  requestShareUrl(): Promise<string>;
+  onShareCopied(): void;
+  onSaveShot(): void;
+  onLike(): void;
+  onImportRoom(): void;
+  onLeaveVisit(): void;
 }
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -54,6 +69,7 @@ export class Ui {
   private pickedDefId: string | null = null;
   private coins = 0;
   private toastTimer?: number;
+  private visiting = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -97,6 +113,28 @@ export class Ui {
       if (window.confirm('部屋とアバターを最初の状態に戻します。よろしいですか？')) {
         this.closePanels();
         this.handlers.onReset();
+      }
+    });
+
+    // ---- みせる ----
+    const nameInput = $<HTMLInputElement>('room-name');
+    const noteInput = $<HTMLInputElement>('room-note');
+    const pushRoomText = () => {
+      this.handlers.onRoomTextChange(nameInput.value, noteInput.value);
+      void this.refreshShareUrl();
+    };
+    nameInput.addEventListener('input', pushRoomText);
+    noteInput.addEventListener('input', pushRoomText);
+    $('btn-copy').addEventListener('click', () => void this.copyShareUrl());
+    $('btn-shot').addEventListener('click', () => this.handlers.onSaveShot());
+
+    // ---- 訪問中 ----
+    $('btn-visit-shot').addEventListener('click', () => this.handlers.onSaveShot());
+    $('btn-like').addEventListener('click', () => this.handlers.onLike());
+    $('btn-home').addEventListener('click', () => this.handlers.onLeaveVisit());
+    $('btn-import').addEventListener('click', () => {
+      if (window.confirm('いまの自分の部屋をこの部屋に置きかえます。よろしいですか？')) {
+        this.handlers.onImportRoom();
       }
     });
 
@@ -397,6 +435,72 @@ export class Ui {
     return item;
   }
 
+  /** 共有 URL を作り直して入力欄に入れる */
+  private async refreshShareUrl() {
+    const input = $<HTMLInputElement>('share-url');
+    input.value = 'つくっています…';
+    try {
+      input.value = await this.handlers.requestShareUrl();
+    } catch {
+      input.value = 'URL をつくれませんでした';
+    }
+  }
+
+  private async copyShareUrl() {
+    const input = $<HTMLInputElement>('share-url');
+    const url = input.value;
+    if (!/^https?:/.test(url)) return;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(url);
+      ok = true;
+    } catch {
+      // クリップボードが使えない環境（http や古いブラウザ）では選択状態にして手でコピーしてもらう
+      input.focus();
+      input.select();
+      try {
+        ok = document.execCommand('copy');
+      } catch {
+        ok = false;
+      }
+    }
+    this.toast(ok ? 'URL をコピーしました' : 'えらんだので、長おしでコピーしてね');
+    if (ok) this.handlers.onShareCopied();
+  }
+
+  setRoomText(name: string, note: string) {
+    const nameInput = $<HTMLInputElement>('room-name');
+    const noteInput = $<HTMLInputElement>('room-note');
+    if (document.activeElement !== nameInput) nameInput.value = name;
+    if (document.activeElement !== noteInput) noteInput.value = note;
+  }
+
+  /** 訪問モードに入る／出る。編集の入口をまとめて隠す */
+  setVisiting(info: VisitInfo | null) {
+    this.visiting = info !== null;
+    for (const panel of ['furniture', 'wardrobe', 'room', 'share'] as const) {
+      const btn = document.querySelector<HTMLElement>(`#toolbar .tool[data-panel="${panel}"]`);
+      if (btn) btn.hidden = this.visiting;
+    }
+    $('coins').hidden = this.visiting;
+    $('btn-missions').hidden = this.visiting;
+    $('visitbar').hidden = !this.visiting;
+    if (!info) return;
+    $('visit-name').textContent = info.roomName;
+    $('visit-note').textContent = info.roomNote || `${info.ownerName} のおへや`;
+    this.setLikes(0);
+  }
+
+  setLikes(n: number) {
+    const el = $('like-count');
+    el.textContent = String(n);
+  }
+
+  /** あそびかたパネルの下に、端末内で数えている記録を出す */
+  setMetricsLine(text: string) {
+    $('metrics-line').textContent = text;
+  }
+
   setCoins(n: number) {
     this.coins = n;
     const el = $('coins').querySelector('b');
@@ -437,12 +541,17 @@ export class Ui {
   // ---------- 表示制御 ----------
 
   togglePanel(name: PanelName) {
+    // 訪問中は編集系のパネルを開かせない（ボタンは隠しているが、念のため）
+    if (this.visiting && (name === 'furniture' || name === 'wardrobe' || name === 'room' || name === 'share')) {
+      return;
+    }
     const panel = $(`panel-${name}`);
     const wasOpen = !panel.hidden;
     this.closePanels();
     if (!wasOpen) {
       panel.hidden = false;
       document.querySelector<HTMLElement>(`#toolbar .tool[data-panel="${name}"]`)?.classList.add('active');
+      if (name === 'share') void this.refreshShareUrl();
       this.handlers.onPanelOpen(name);
     }
   }

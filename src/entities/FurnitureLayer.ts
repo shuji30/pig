@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ROOM_H, ROOM_W } from '../config';
 import { depthFor, gridToScreen, rotatedSize } from '../core/iso';
+import { boxOf, canPlaceBox, type PlacementQuery } from '../core/placement';
 import { findDef, getDef } from '../data/furniture';
 import { getFurnitureTexture } from '../render/furnitureTexture';
 import type { FurnitureDef, PlacedFurniture, Rotation } from '../types';
@@ -99,27 +100,21 @@ export class FurnitureLayer {
     return best;
   }
 
+  /** 置けるかの判定に渡す、部屋のいまの状態 */
+  private query(): PlacementQuery {
+    return {
+      roomW: ROOM_W,
+      roomH: ROOM_H,
+      ownerAt: (gx, gy) => this.blockedBy[gy * ROOM_W + gx] ?? null,
+      walkables: this.items
+        .filter((i) => getDef(i.defId).walkable)
+        .map((i) => ({ uid: i.uid, box: this.footprint(i) })),
+    };
+  }
+
   /** 指定位置に置けるか。ignoreUid は移動中の自分自身 */
   canPlace(def: FurnitureDef, rot: Rotation, gx: number, gy: number, ignoreUid?: string): boolean {
-    const [w, d] = rotatedSize(def.size, rot);
-    if (gx < 0 || gy < 0 || gx + w > ROOM_W || gy + d > ROOM_H) return false;
-    if (def.walkable) {
-      // ラグは他のラグとだけ重ねられない
-      for (const item of this.items) {
-        if (item.uid === ignoreUid) continue;
-        if (!getDef(item.defId).walkable) continue;
-        const f = this.footprint(item);
-        if (gx < f.gx + f.w && gx + w > f.gx && gy < f.gy + f.d && gy + d > f.gy) return false;
-      }
-      return true;
-    }
-    for (let y = gy; y < gy + d; y++) {
-      for (let x = gx; x < gx + w; x++) {
-        const owner = this.blockedBy[y * ROOM_W + x];
-        if (owner !== null && owner !== ignoreUid) return false;
-      }
-    }
-    return true;
+    return canPlaceBox(boxOf(def.size, rot, gx, gy), def.walkable === true, this.query(), ignoreUid);
   }
 
   /** 家具の周囲の歩けるマス（座る・移動の目標地点候補） */

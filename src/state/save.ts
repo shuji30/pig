@@ -10,7 +10,11 @@ import {
   START_COINS,
 } from '../config';
 import { DEFAULT_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
+import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
 import type { DailyCounters, PlacedFurniture, SaveData } from '../types';
+
+/** はじめての部屋の名前 */
+export const DEFAULT_ROOM_NAME = 'わたしのおへや';
 
 let uidSeq = 0;
 export function newUid(): string {
@@ -50,6 +54,8 @@ export function defaultSave(): SaveData {
     version: SAVE_VERSION,
     floor: 0,
     wall: 0,
+    roomName: DEFAULT_ROOM_NAME,
+    roomNote: '',
     autoPlay: true,
     coins: START_COINS,
     daily: emptyDaily(today()),
@@ -100,6 +106,9 @@ function migrate(raw: unknown): SaveData | null {
     version: SAVE_VERSION,
     floor: old.floor ?? base.floor,
     wall: old.wall ?? base.wall,
+    // v3 で足した項目。長さは共有 URL と同じ上限に揃える
+    roomName: (old.roomName ?? base.roomName).slice(0, ROOM_NAME_MAX) || base.roomName,
+    roomNote: (old.roomNote ?? '').slice(0, ROOM_NOTE_MAX),
     autoPlay: old.autoPlay ?? base.autoPlay,
     // v1 にはコインの概念がなかったので、初回ぶんを配る
     coins: old.coins ?? base.coins,

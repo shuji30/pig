@@ -40,7 +40,22 @@
         <button class="tool" data-panel="emote"><span>😊</span>きもち</button>
         <button class="tool" data-panel="wardrobe"><span>👕</span>きせかえ</button>
         <button class="tool" data-panel="room"><span>🎨</span>もようがえ</button>
+        <button class="tool" data-panel="share"><span>🔗</span>みせる</button>
       </nav>
+
+      <!-- 訪問中のバー -->
+      <div id="visitbar" hidden>
+        <div class="vinfo">
+          <b id="visit-name">おへや</b>
+          <span id="visit-note"></span>
+        </div>
+        <div class="vacts">
+          <button id="btn-like" class="like">❤️ いいね <b id="like-count">0</b></button>
+          <button id="btn-visit-shot">📷 画像</button>
+          <button id="btn-import">この部屋をとりこむ</button>
+          <button id="btn-home" class="primary">じぶんの部屋へ</button>
+        </div>
+      </div>
 
       <!-- チャット -->
       <form id="chatbar" autocomplete="off">
@@ -109,6 +124,29 @@
         <button id="btn-reset" class="danger">部屋をリセットする</button>
       </section>
 
+      <!-- みせるパネル -->
+      <section class="panel" id="panel-share" hidden>
+        <div class="panel-head">
+          <h2>みせる</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <label class="namefield">おへやの名前
+          <input id="room-name" type="text" maxlength="16" />
+        </label>
+        <label class="namefield">ひとこと
+          <input id="room-note" type="text" maxlength="40" placeholder="あそびにきてね" />
+        </label>
+        <div class="sharerow">
+          <input id="share-url" type="text" readonly value="つくっています…" />
+          <button id="btn-copy" class="primary">コピー</button>
+        </div>
+        <button id="btn-shot">📷 画像でほぞん</button>
+        <p class="note">
+          この URL を開くと、だれでもこの部屋を歩けます（サーバーは使っていません）。
+          <b>URL はバックアップにもなります。</b>ブラウザの記録が消えても、この URL から部屋をとりこめます。
+        </p>
+      </section>
+
       <!-- あそびかた -->
       <section class="panel" id="panel-help" hidden>
         <div class="panel-head">
@@ -126,8 +164,12 @@
           <li>「きもち」の<b>おまかせ</b>を ON にしておくと、放置中にアバターが自分で動きます。</li>
           <li>「かぐ」の<b>ショップ</b>タブでコインを使って家具を買えます。いらない家具は売れます。</li>
           <li>右上の<b>📋</b>から「きょうの やること」。達成するとコインがもらえます。</li>
+          <li>「みせる」から<b>URL をコピー</b>すると、部屋をそのまま人に見せられます。</li>
+          <li>もらった URL を開くと<b>その部屋を歩けます</b>。「とりこむ」で自分の部屋にもできます。</li>
+          <li>「みせる」の<b>📷 画像でほぞん</b>で、部屋の名前入りの PNG が保存できます。</li>
           <li>変更は自動的にブラウザへ保存されます。</li>
         </ul>
+        <p class="note" id="metrics-line"></p>
       </section>
 
       <!-- 配置モードのバー -->
