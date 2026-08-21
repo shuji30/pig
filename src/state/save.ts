@@ -1,20 +1,22 @@
 import {
   CLOTH_COLORS,
+  DEFAULT_ROOM_SIZE,
   EYE_COLORS,
   HAIR_COLORS,
-  ROOM_H,
-  ROOM_W,
+  ROOM_SIZES,
   SAVE_KEY,
   SAVE_VERSION,
   SKIN_COLORS,
   START_COINS,
 } from '../config';
 import { DEFAULT_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
+import type { DailyCounters, PlacedFurniture, RoomData, SaveData } from '../types';
 import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
-import type { DailyCounters, PlacedFurniture, SaveData } from '../types';
 
 /** はじめての部屋の名前 */
 export const DEFAULT_ROOM_NAME = 'わたしのおへや';
+/** 最初からある部屋の id */
+export const HOME_ROOM = 'home';
 
 let uidSeq = 0;
 export function newUid(): string {
@@ -43,6 +45,15 @@ export function emptyDaily(day: string): DailyCounters {
   return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0 };
 }
 
+/** その広さの部屋の、まんなか少し手前 */
+export function centerSpawn(size: number): { gx: number; gy: number } {
+  return { gx: Math.floor(size / 2), gy: Math.min(size - 1, Math.floor(size / 2) + 2) };
+}
+
+export function emptyRoom(name: string, size = DEFAULT_ROOM_SIZE): RoomData {
+  return { name, note: '', floor: 0, wall: 0, size, items: [], spawn: centerSpawn(size) };
+}
+
 export function defaultSave(): SaveData {
   const inventory: Record<string, number> = { ...STARTER_INVENTORY };
   const items: PlacedFurniture[] = [];
@@ -52,17 +63,14 @@ export function defaultSave(): SaveData {
   }
   return {
     version: SAVE_VERSION,
-    floor: 0,
-    wall: 0,
-    roomName: DEFAULT_ROOM_NAME,
-    roomNote: '',
     autoPlay: true,
     coins: START_COINS,
     daily: emptyDaily(today()),
     streak: 0,
     lastBonusDay: '',
     doneMissions: [],
-    items,
+    rooms: { [HOME_ROOM]: { ...emptyRoom(DEFAULT_ROOM_NAME), items } },
+    currentRoom: HOME_ROOM,
     inventory,
     avatar: {
       look: {
@@ -76,8 +84,53 @@ export function defaultSave(): SaveData {
         pants: CLOTH_COLORS[5],
         shoes: CLOTH_COLORS[8],
       },
-      gx: Math.floor(ROOM_W / 2),
-      gy: Math.floor(ROOM_H / 2) + 2,
+    },
+  };
+}
+
+/** v3 まではセーブの直下に部屋の中身が置かれていた */
+interface LegacyFlatRoom {
+  floor?: number;
+  wall?: number;
+  roomName?: string;
+  roomNote?: string;
+  items?: PlacedFurniture[];
+  avatar?: { look?: Record<string, unknown>; gx?: number; gy?: number };
+}
+
+/** 知らない家具を捨て、部屋の外へ出ている家具を中へ収める */
+function cleanItems(items: unknown, size: number): PlacedFurniture[] {
+  if (!Array.isArray(items)) return [];
+  const out: PlacedFurniture[] = [];
+  for (const i of items) {
+    const def = findDef(i?.defId);
+    if (!def) continue;
+    const rot = ((typeof i.rot === 'number' ? i.rot : 0) % 4) as PlacedFurniture['rot'];
+    const [w, d] = rot % 2 === 0 ? def.size : [def.size[1], def.size[0]];
+    out.push({
+      uid: typeof i.uid === 'string' ? i.uid : newUid(),
+      defId: def.id,
+      gx: Math.min(Math.max(0, i.gx ?? 0), Math.max(0, size - w)),
+      gy: Math.min(Math.max(0, i.gy ?? 0), Math.max(0, size - d)),
+      rot,
+    });
+  }
+  return out;
+}
+
+function cleanRoom(raw: unknown, fallbackName: string): RoomData {
+  const r = (raw ?? {}) as Partial<RoomData>;
+  const size = ROOM_SIZES.includes(r.size as never) ? (r.size as number) : DEFAULT_ROOM_SIZE;
+  return {
+    name: (r.name ?? fallbackName).slice(0, ROOM_NAME_MAX) || fallbackName,
+    note: (r.note ?? '').slice(0, ROOM_NOTE_MAX),
+    floor: r.floor ?? 0,
+    wall: r.wall ?? 0,
+    size,
+    items: cleanItems(r.items, size),
+    spawn: {
+      gx: Math.min(Math.max(0, r.spawn?.gx ?? centerSpawn(size).gx), size - 1),
+      gy: Math.min(Math.max(0, r.spawn?.gy ?? centerSpawn(size).gy), size - 1),
     },
   };
 }
@@ -86,29 +139,52 @@ export function defaultSave(): SaveData {
  * 保存された内容を今のバージョンへ持ち上げる。
  * 部屋・持ちもの・アバターは残し、増えた項目には既定値を入れる。
  * 版を上げるたびにここへ1段足すこと。**既存プレイヤーの部屋を消してはいけない。**
+ *
+ * v1 → v2: コイン・ミッション・日ごとのカウンタが増えた
+ * v2 → v3: 部屋の名前とひとことが増えた
+ * v3 → v4: 部屋がひとつだけの前提をやめ、`rooms` / `currentRoom` に分けた
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;
-  const old = raw as Partial<SaveData> & { version?: number };
-  if (!Array.isArray(old.items)) return null;
+  const old = raw as Partial<SaveData> & LegacyFlatRoom & { version?: number };
   // 知らない版（未来のセーブ）は触らずに諦める
   if (typeof old.version !== 'number' || old.version < 1 || old.version > SAVE_VERSION) return null;
 
   const base = defaultSave();
-  // カタログから消えた家具が残っていても壊れないよう、知らない id は捨てる
-  const items = old.items.filter((i) => findDef(i?.defId) !== undefined);
   const inventory: Record<string, number> = {};
   for (const [id, n] of Object.entries(old.inventory ?? {})) {
     if (findDef(id) !== undefined && typeof n === 'number' && n > 0) inventory[id] = n;
   }
 
+  let rooms: Record<string, RoomData>;
+  let currentRoom: string;
+  if (old.rooms && typeof old.rooms === 'object' && Object.keys(old.rooms).length > 0) {
+    rooms = {};
+    for (const [id, r] of Object.entries(old.rooms)) rooms[id] = cleanRoom(r, DEFAULT_ROOM_NAME);
+    currentRoom = typeof old.currentRoom === 'string' && rooms[old.currentRoom] ? old.currentRoom : HOME_ROOM;
+    if (!rooms[currentRoom]) currentRoom = Object.keys(rooms)[0];
+  } else {
+    // v3 までの「部屋ひとつ」を home へ移す。**ここで家具を落とさないこと**
+    if (!Array.isArray(old.items)) return null;
+    rooms = {
+      [HOME_ROOM]: cleanRoom(
+        {
+          name: old.roomName ?? DEFAULT_ROOM_NAME,
+          note: old.roomNote ?? '',
+          floor: old.floor,
+          wall: old.wall,
+          size: DEFAULT_ROOM_SIZE,
+          items: old.items,
+          spawn: { gx: old.avatar?.gx, gy: old.avatar?.gy },
+        },
+        DEFAULT_ROOM_NAME,
+      ),
+    };
+    currentRoom = HOME_ROOM;
+  }
+
   return {
     version: SAVE_VERSION,
-    floor: old.floor ?? base.floor,
-    wall: old.wall ?? base.wall,
-    // v3 で足した項目。長さは共有 URL と同じ上限に揃える
-    roomName: (old.roomName ?? base.roomName).slice(0, ROOM_NAME_MAX) || base.roomName,
-    roomNote: (old.roomNote ?? '').slice(0, ROOM_NOTE_MAX),
     autoPlay: old.autoPlay ?? base.autoPlay,
     // v1 にはコインの概念がなかったので、初回ぶんを配る
     coins: old.coins ?? base.coins,
@@ -116,13 +192,10 @@ function migrate(raw: unknown): SaveData | null {
     streak: old.streak ?? base.streak,
     lastBonusDay: old.lastBonusDay ?? base.lastBonusDay,
     doneMissions: Array.isArray(old.doneMissions) ? old.doneMissions : [],
-    items,
+    rooms,
+    currentRoom,
     inventory,
-    avatar: {
-      ...base.avatar,
-      ...old.avatar,
-      look: { ...base.avatar.look, ...old.avatar?.look },
-    },
+    avatar: { look: { ...base.avatar.look, ...old.avatar?.look } },
   };
 }
 
@@ -145,6 +218,20 @@ export function load(): SaveData {
   } catch {
     return defaultSave();
   }
+}
+
+/** いま居る部屋。壊れたセーブでも必ず何か返す */
+export function currentRoom(save: SaveData): RoomData {
+  const room = save.rooms[save.currentRoom];
+  if (room) return room;
+  const first = Object.keys(save.rooms)[0];
+  if (first) {
+    save.currentRoom = first;
+    return save.rooms[first];
+  }
+  save.rooms[HOME_ROOM] = emptyRoom(DEFAULT_ROOM_NAME);
+  save.currentRoom = HOME_ROOM;
+  return save.rooms[HOME_ROOM];
 }
 
 let pending: number | undefined;

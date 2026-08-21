@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { ROOM_H, ROOM_W } from '../config';
 import { depthFor, gridToScreen, rotatedSize } from '../core/iso';
 import { boxOf, canPlaceBox, type PlacementQuery } from '../core/placement';
 import { findDef, getDef } from '../data/furniture';
@@ -20,8 +19,25 @@ export class FurnitureLayer {
   /** 歩けないマスの占有者 uid */
   private blockedBy: Array<string | null> = [];
 
-  constructor(private readonly scene: Phaser.Scene) {
-    this.blockedBy = new Array(ROOM_W * ROOM_H).fill(null);
+  /** 部屋の一辺のマス数。部屋を移ったり広げたりすると変わる */
+  private size: number;
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    size: number,
+  ) {
+    this.size = size;
+    this.blockedBy = new Array(size * size).fill(null);
+  }
+
+  get roomSize(): number {
+    return this.size;
+  }
+
+  /** 部屋の広さを変える。中身は setItems で入れ直す前提 */
+  setSize(size: number) {
+    this.size = size;
+    this.blockedBy = new Array(size * size).fill(null);
   }
 
   get all(): readonly PlacedFurniture[] {
@@ -32,7 +48,7 @@ export class FurnitureLayer {
     for (const s of this.sprites.values()) s.destroy();
     this.sprites.clear();
     this.items = [];
-    this.blockedBy.fill(null);
+    this.blockedBy = new Array(this.size * this.size).fill(null);
     for (const it of items) this.add(it);
   }
 
@@ -79,8 +95,8 @@ export class FurnitureLayer {
 
   /** 家具が歩行の障害になるか */
   isBlocked(gx: number, gy: number): boolean {
-    if (gx < 0 || gy < 0 || gx >= ROOM_W || gy >= ROOM_H) return true;
-    return this.blockedBy[gy * ROOM_W + gx] !== null;
+    if (gx < 0 || gy < 0 || gx >= this.size || gy >= this.size) return true;
+    return this.blockedBy[gy * this.size + gx] !== null;
   }
 
   /** そのマスを占有している家具（ラグなどの walkable も含む。手前・上のものを優先） */
@@ -103,9 +119,9 @@ export class FurnitureLayer {
   /** 置けるかの判定に渡す、部屋のいまの状態 */
   private query(): PlacementQuery {
     return {
-      roomW: ROOM_W,
-      roomH: ROOM_H,
-      ownerAt: (gx, gy) => this.blockedBy[gy * ROOM_W + gx] ?? null,
+      roomW: this.size,
+      roomH: this.size,
+      ownerAt: (gx, gy) => this.blockedBy[gy * this.size + gx] ?? null,
       walkables: this.items
         .filter((i) => getDef(i.defId).walkable)
         .map((i) => ({ uid: i.uid, box: this.footprint(i) })),
@@ -123,12 +139,12 @@ export class FurnitureLayer {
     const out: Array<{ gx: number; gy: number }> = [];
     for (let x = f.gx - 1; x <= f.gx + f.w; x++) {
       for (const y of [f.gy - 1, f.gy + f.d]) {
-        if (x >= 0 && y >= 0 && x < ROOM_W && y < ROOM_H && !this.isBlocked(x, y)) out.push({ gx: x, gy: y });
+        if (x >= 0 && y >= 0 && x < this.size && y < this.size && !this.isBlocked(x, y)) out.push({ gx: x, gy: y });
       }
     }
     for (let y = f.gy; y < f.gy + f.d; y++) {
       for (const x of [f.gx - 1, f.gx + f.w]) {
-        if (x >= 0 && y >= 0 && x < ROOM_W && y < ROOM_H && !this.isBlocked(x, y)) out.push({ gx: x, gy: y });
+        if (x >= 0 && y >= 0 && x < this.size && y < this.size && !this.isBlocked(x, y)) out.push({ gx: x, gy: y });
       }
     }
     return out;
@@ -240,8 +256,8 @@ export class FurnitureLayer {
     const f = this.footprint(item);
     for (let y = f.gy; y < f.gy + f.d; y++) {
       for (let x = f.gx; x < f.gx + f.w; x++) {
-        if (x < 0 || y < 0 || x >= ROOM_W || y >= ROOM_H) continue;
-        this.blockedBy[y * ROOM_W + x] = uid;
+        if (x < 0 || y < 0 || x >= this.size || y >= this.size) continue;
+        this.blockedBy[y * this.size + x] = uid;
       }
     }
   }

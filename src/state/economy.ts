@@ -1,7 +1,27 @@
-import { DAILY_BONUS, SELL_RATE, STREAK_BONUS, STREAK_MAX } from '../config';
+import { DAILY_BONUS, ROOM_SIZES, ROOM_UNLOCK_PRICE, SELL_RATE, STREAK_BONUS, STREAK_MAX } from '../config';
 import { findMission, todaysMissions, type MissionCtx, type MissionDef } from '../data/missions';
-import type { FurnitureDef, SaveData } from '../types';
+import type { FurnitureDef, RoomData, SaveData } from '../types';
 import { dayBefore, today } from './save';
+
+/** いまの広さから次に広げられる広さと、その値段。もう最大なら null */
+export function nextRoomStep(size: number): { size: number; price: number } | null {
+  const idx = ROOM_SIZES.indexOf(size as never);
+  const next = idx < 0 ? 1 : idx + 1;
+  if (next >= ROOM_SIZES.length) return null;
+  return { size: ROOM_SIZES[next], price: ROOM_UNLOCK_PRICE[next] };
+}
+
+/**
+ * 部屋を1段ひろげる。払えたら true。
+ * 狭くする道は用意しない（置いてある家具が外に出てしまうため）。
+ */
+export function expandRoom(save: SaveData, room: RoomData): boolean {
+  const step = nextRoomStep(room.size);
+  if (!step || save.coins < step.price) return false;
+  save.coins -= step.price;
+  room.size = step.size;
+  return true;
+}
 
 export function sellPrice(def: FurnitureDef): number {
   return Math.max(1, Math.round(def.price * SELL_RATE));

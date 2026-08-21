@@ -2,9 +2,15 @@
 export const TILE_W = 64;
 export const TILE_H = 32;
 
-/** 部屋の広さ（マス） */
-export const ROOM_W = 12;
-export const ROOM_H = 12;
+/**
+ * 部屋の広さ（マス）。正方形で、コインを払って1段ずつ広げていく。
+ * 広さは部屋ごとに持つので、部屋が増えても同じしくみで扱える。
+ */
+export const ROOM_SIZES = [12, 14, 16, 20] as const;
+/** その広さに広げるための値段（累積ではなく、その1段ぶん） */
+export const ROOM_UNLOCK_PRICE = [0, 900, 1900, 3400] as const;
+export const DEFAULT_ROOM_SIZE: number = ROOM_SIZES[0];
+export const MAX_ROOM_SIZE: number = ROOM_SIZES[ROOM_SIZES.length - 1];
 
 /** 壁の高さ(px) */
 export const WALL_H = 96;
@@ -13,7 +19,7 @@ export const WALL_H = 96;
 export const WALK_SPEED = 110;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** はじめて遊ぶときの所持コイン */
 export const START_COINS = 420;

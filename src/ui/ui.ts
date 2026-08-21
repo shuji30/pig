@@ -51,6 +51,7 @@ export interface UiHandlers {
   onLike(): void;
   onImportRoom(): void;
   onLeaveVisit(): void;
+  onExpandRoom(): void;
 }
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -108,6 +109,8 @@ export class Ui {
       input.blur();
       this.handlers.onChat(text);
     });
+
+    $('btn-expand').addEventListener('click', () => this.handlers.onExpandRoom());
 
     $('btn-reset').addEventListener('click', () => {
       if (window.confirm('部屋とアバターを最初の状態に戻します。よろしいですか？')) {
@@ -466,6 +469,28 @@ export class Ui {
     }
     this.toast(ok ? 'URL をコピーしました' : 'えらんだので、長おしでコピーしてね');
     if (ok) this.handlers.onShareCopied();
+  }
+
+  /**
+   * 「ひろさ」の行を更新する。
+   * @param next 次に広げられる広さと値段。もう最大なら null
+   */
+  setRoomSize(size: number, next: { size: number; price: number } | null, coins: number) {
+    $('room-size').textContent = `${size}×${size}`;
+    const btn = $<HTMLButtonElement>('btn-expand');
+    const note = $('room-size-note');
+    if (!next) {
+      btn.hidden = true;
+      note.textContent = 'これがいちばん広いおへやです。';
+      return;
+    }
+    btn.hidden = false;
+    btn.disabled = coins < next.price;
+    btn.textContent = `${next.size}×${next.size} に ひろげる 🪙${next.price}`;
+    note.textContent =
+      coins < next.price
+        ? `あと 🪙${next.price - coins} でひろげられます。置いてある家具はそのまま残ります。`
+        : '置いてある家具はそのまま残ります。せまくは戻せません。';
   }
 
   setRoomText(name: string, note: string) {

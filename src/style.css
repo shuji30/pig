@@ -778,3 +778,49 @@ button.danger {
   font-size: 10.5px;
   color: #a3939c;
 }
+
+/* ---------- おへやのひろさ ---------- */
+.sizerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sizerow .label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8a7780;
+  white-space: nowrap;
+}
+
+.sizerow .label b {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+#btn-expand {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 1;
+  padding: 9px 12px;
+  border: 2px solid var(--pink-dark);
+  border-radius: 999px;
+  background: var(--pink);
+  color: #fff;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+#btn-expand:disabled {
+  background: #efe6ea;
+  border-color: #e2d6dc;
+  color: #b3a3ab;
+  box-shadow: none;
+  cursor: default;
+}
+
+#room-size-note {
+  margin-top: 6px;
+}

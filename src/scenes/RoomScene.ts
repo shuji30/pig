@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROOM_H, ROOM_W, TILE_H, TILE_W, WALL_H } from '../config';
+import { TILE_H, TILE_W, WALL_H } from '../config';
 import { depthFor, gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { getDef } from '../data/furniture';
@@ -10,23 +10,35 @@ import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { getFurnitureTexture } from '../render/furnitureTexture';
 import { RoomView } from '../render/room';
 import { saveRoomPng } from '../render/snapshot';
-import { buy, claimDailyBonus, claimMissions, missionViews, sell } from '../state/economy';
+import { buy, claimDailyBonus, claimMissions, expandRoom, missionViews, nextRoomStep, sell } from '../state/economy';
 import { metricsSummary, track } from '../state/metrics';
-import { clearSave, load, newUid, saveDebounced } from '../state/save';
+import {
+  centerSpawn,
+  clearSave,
+  currentRoom,
+  DEFAULT_ROOM_NAME,
+  HOME_ROOM,
+  load,
+  newUid,
+  saveDebounced,
+} from '../state/save';
 import {
   encodeShared,
   leaveShare,
   placedFromShared,
   ROOM_NAME_MAX,
   ROOM_NOTE_MAX,
-  sharedFromSave,
+  sharedFromRoom,
   shareUrlFor,
   type SharedRoom,
 } from '../state/share';
-import type { AvatarLook, PlacedFurniture, Rotation, SaveData } from '../types';
+import type { AvatarLook, PlacedFurniture, RoomData, Rotation, SaveData } from '../types';
 import { Ui } from '../ui/ui';
 
 type Mode = 'idle' | 'place' | 'move';
+
+/** 訪問中だけ使う、その場かぎりの部屋 id */
+const VISIT_ROOM = 'visit';
 type Tile = { gx: number; gy: number };
 
 const HW = TILE_W / 2;
@@ -79,47 +91,54 @@ export class RoomScene extends Phaser.Scene {
   create() {
     const own = load();
     this.visiting = this.shared !== null;
-    // 訪問中は「見た目だけ」差し替える。自分のセーブはこのあと一切書かない
+    // 訪問中は見ている部屋だけを持つ別のセーブを組み立てる。自分のセーブは一切書かない
     this.save = this.shared
       ? {
           ...own,
-          floor: this.shared.floor,
-          wall: this.shared.wall,
-          roomName: this.shared.roomName,
-          roomNote: this.shared.roomNote,
-          items: placedFromShared(this.shared, newUid),
-          avatar: { ...own.avatar, look: { ...own.avatar.look } },
+          rooms: {
+            [VISIT_ROOM]: {
+              name: this.shared.roomName,
+              note: this.shared.roomNote,
+              floor: this.shared.floor,
+              wall: this.shared.wall,
+              size: this.shared.size,
+              items: placedFromShared(this.shared, newUid),
+              spawn: centerSpawn(this.shared.size),
+            },
+          },
+          currentRoom: VISIT_ROOM,
+          avatar: { look: { ...own.avatar.look } },
         }
       : own;
     track(this.visiting ? 'shareOpen' : 'session');
 
     this.cameras.main.setBackgroundColor('#2b2430');
     this.room = new RoomView(this);
-    this.room.redraw(this.save.floor, this.save.wall);
+    this.room.redraw(this.cur.floor, this.cur.wall, this.size);
 
-    this.furniture = new FurnitureLayer(this);
-    this.furniture.setItems(this.save.items);
+    this.furniture = new FurnitureLayer(this, this.size);
+    this.furniture.setItems(this.cur.items);
 
     this.hoverG = this.add.graphics().setDepth(-1700);
     this.selG = this.add.graphics().setDepth(-1690);
     this.ghostG = this.add.graphics().setDepth(9_000_000);
 
-    this.avatar = new Avatar(this, this.save.avatar.look, this.save.avatar.gx, this.save.avatar.gy);
+    this.avatar = new Avatar(this, this.save.avatar.look, this.cur.spawn.gx, this.cur.spawn.gy);
     this.avatar.setDepthResolver((box) => this.furniture.depthAt(box));
 
     this.ui = new Ui(this, {
       onPickFurniture: (defId) => this.enterPlaceMode(defId),
       onFloorChange: (i) => {
-        this.save.floor = i;
-        this.room.redraw(this.save.floor, this.save.wall);
+        this.cur.floor = i;
+        this.room.redraw(this.cur.floor, this.cur.wall, this.size);
         this.save.daily.restyled += 1;
         this.noteEdit();
         this.syncMissions();
         this.persist();
       },
       onWallChange: (i) => {
-        this.save.wall = i;
-        this.room.redraw(this.save.floor, this.save.wall);
+        this.cur.wall = i;
+        this.room.redraw(this.cur.floor, this.cur.wall, this.size);
         this.save.daily.restyled += 1;
         this.noteEdit();
         this.syncMissions();
@@ -176,11 +195,11 @@ export class RoomScene extends Phaser.Scene {
       onCenter: () => this.centerOnAvatar(),
       onRoomTextChange: (name, note) => {
         if (this.visiting) return;
-        this.save.roomName = name.slice(0, ROOM_NAME_MAX).trim() || 'わたしのおへや';
-        this.save.roomNote = note.slice(0, ROOM_NOTE_MAX);
+        this.cur.name = name.slice(0, ROOM_NAME_MAX).trim() || DEFAULT_ROOM_NAME;
+        this.cur.note = note.slice(0, ROOM_NOTE_MAX);
         this.persist();
       },
-      requestShareUrl: async () => shareUrlFor(await encodeShared(sharedFromSave(this.save))),
+      requestShareUrl: async () => shareUrlFor(await encodeShared(sharedFromRoom(this.cur, this.save.avatar.look))),
       onShareCopied: () => {
         track('share');
         this.refreshMetricsLine();
@@ -188,6 +207,7 @@ export class RoomScene extends Phaser.Scene {
       onSaveShot: () => void this.saveShot(),
       onLike: () => this.like(),
       onImportRoom: () => this.importVisitedRoom(),
+      onExpandRoom: () => this.expand(),
       onLeaveVisit: () => leaveShare(),
       onPanelOpen: (name) => {
         this.deselect();
@@ -211,7 +231,8 @@ export class RoomScene extends Phaser.Scene {
     this.auto.enabled = this.save.autoPlay;
     this.ui.setAutoPlay(this.save.autoPlay);
     this.ui.setLook(this.save.avatar.look);
-    this.ui.setStyles(this.save.floor, this.save.wall);
+    this.ui.setStyles(this.cur.floor, this.cur.wall);
+    this.syncRoomSize();
     this.ui.setInventory(this.save.inventory);
     this.ui.setCoins(this.save.coins);
     this.syncMissions();
@@ -227,7 +248,7 @@ export class RoomScene extends Phaser.Scene {
       this.persist();
     }
 
-    this.ui.setRoomText(this.save.roomName, this.save.roomNote);
+    this.ui.setRoomText(this.cur.name, this.cur.note);
     this.refreshMetricsLine();
     if (this.shared) {
       this.ui.setVisiting({
@@ -246,6 +267,51 @@ export class RoomScene extends Phaser.Scene {
     this.ensureAvatarStandable();
     this.setupCamera();
     this.setupInput();
+  }
+
+  /** いま映している部屋 */
+  private get cur(): RoomData {
+    return currentRoom(this.save);
+  }
+
+  /** いまの部屋の一辺のマス数 */
+  private get size(): number {
+    return this.cur.size;
+  }
+
+  // ---------------- 部屋をひろげる ----------------
+
+  /** 「ひろさ」の表示をいまの状態に合わせる */
+  private syncRoomSize() {
+    this.ui.setRoomSize(this.size, nextRoomStep(this.size), this.save.coins);
+  }
+
+  private expand() {
+    if (this.visiting) return;
+    const step = nextRoomStep(this.size);
+    if (!step) return;
+    if (!expandRoom(this.save, this.cur)) {
+      this.ui.toast('コインが足りないよ');
+      return;
+    }
+    // 広さが変わったので、床・占有マス・カメラを作り直す
+    this.furniture.setSize(this.size);
+    this.furniture.setItems(this.cur.items);
+    this.room.redraw(this.cur.floor, this.cur.wall, this.size);
+    this.avatar.refreshDepth();
+    this.userZoomed = false;
+    this.applyFitZoom();
+    this.centerOnRoom();
+    this.noteEdit();
+    this.ui.toast(`おへやが ${step.size}×${step.size} になったよ！`);
+    this.syncRoomSize();
+    this.afterEconomyChange();
+  }
+
+  /** 部屋のまんなかを映す */
+  private centerOnRoom() {
+    const center = gridToScreen(this.size / 2, this.size / 2);
+    this.cameras.main.pan(center.x, center.y - WALL_H / 3, 400, 'Sine.easeInOut');
   }
 
   // ---------------- みせる（共有・画像・いいね） ----------------
@@ -271,7 +337,7 @@ export class RoomScene extends Phaser.Scene {
     // パネルを閉じた直後のフレームを撮りたいので1回待つ
     await new Promise<void>((r) => this.time.delayedCall(120, r));
     const ok = await saveRoomPng(this.game, {
-      roomName: this.save.roomName,
+      roomName: this.cur.name,
       ownerName: this.visiting ? (this.shared?.look.name ?? 'だれか') : this.save.avatar.look.name,
       likes: this.likes,
     });
@@ -325,11 +391,16 @@ export class RoomScene extends Phaser.Scene {
   private importVisitedRoom() {
     if (!this.shared) return;
     const own = load();
-    own.floor = this.shared.floor;
-    own.wall = this.shared.wall;
-    own.roomName = this.shared.roomName;
-    own.roomNote = this.shared.roomNote;
-    own.items = placedFromShared(this.shared, newUid);
+    own.rooms[HOME_ROOM] = {
+      name: this.shared.roomName,
+      note: this.shared.roomNote,
+      floor: this.shared.floor,
+      wall: this.shared.wall,
+      size: this.shared.size,
+      items: placedFromShared(this.shared, newUid),
+      spawn: centerSpawn(this.shared.size),
+    };
+    own.currentRoom = HOME_ROOM;
     // 置いてあるぶんは持ちものから引かない。取りこみでコインを稼げてしまうため、
     // しまったときに増える方向だけを許す
     saveDebounced(own);
@@ -361,7 +432,7 @@ export class RoomScene extends Phaser.Scene {
 
     // 部屋が画面に収まらない（スマホなど）ときはアバターを中心にする
     if (this.roomFitsWidth()) {
-      const center = gridToScreen(ROOM_W / 2, ROOM_H / 2);
+      const center = gridToScreen(this.size / 2, this.size / 2);
       cam.centerOn(center.x, center.y - WALL_H / 3);
     } else {
       cam.centerOn(this.avatar.container.x, this.avatar.container.y - 40);
@@ -377,7 +448,7 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private roomWidthPx(): number {
-    return (ROOM_W + ROOM_H) * HW;
+    return this.size * 2 * HW;
   }
 
   private roomFitsWidth(): boolean {
@@ -385,7 +456,7 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private applyFitZoom() {
-    const roomH = (ROOM_W + ROOM_H) * HH + WALL_H;
+    const roomH = this.size * 2 * HH + WALL_H;
     const fit = Math.min(this.scale.width / (this.roomWidthPx() + 80), this.scale.height / (roomH + 140));
     this.cameras.main.setZoom(Phaser.Math.Clamp(fit, 0.8, 1.5));
   }
@@ -563,7 +634,7 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
 
-    const inRoom = tile.gx >= 0 && tile.gy >= 0 && tile.gx < ROOM_W && tile.gy < ROOM_H;
+    const inRoom = tile.gx >= 0 && tile.gy >= 0 && tile.gx < this.size && tile.gy < this.size;
     const hit = this.furniture.pickAt(worldX, worldY);
     if (hit) {
       // ラグの上は歩ける。選択もしておくと、そのまま移動やしまうができる
@@ -586,7 +657,7 @@ export class RoomScene extends Phaser.Scene {
 
   private walkTo(tile: Tile, onArrive?: () => void) {
     if (this.avatar.sittingOn) this.avatar.standUp();
-    const path = findPath(this.avatar.tile, tile, ROOM_W, ROOM_H, this.blockedFn);
+    const path = findPath(this.avatar.tile, tile, this.size, this.size, this.blockedFn);
     if (!path) {
       this.ui.toast('そこには行けないみたい…');
       return;
@@ -617,8 +688,8 @@ export class RoomScene extends Phaser.Scene {
     const found = findPathAdjacent(
       this.avatar.tile,
       this.furniture.neighborTiles(item),
-      ROOM_W,
-      ROOM_H,
+      this.size,
+      this.size,
       this.blockedFn,
     );
     if (!found) return false;
@@ -642,11 +713,11 @@ export class RoomScene extends Phaser.Scene {
   private wanderOnce(): boolean {
     const from = this.avatar.tile;
     for (let i = 0; i < 14; i++) {
-      const gx = Phaser.Math.Clamp(from.gx + Phaser.Math.Between(-4, 4), 0, ROOM_W - 1);
-      const gy = Phaser.Math.Clamp(from.gy + Phaser.Math.Between(-4, 4), 0, ROOM_H - 1);
+      const gx = Phaser.Math.Clamp(from.gx + Phaser.Math.Between(-4, 4), 0, this.size - 1);
+      const gy = Phaser.Math.Clamp(from.gy + Phaser.Math.Between(-4, 4), 0, this.size - 1);
       if (gx === from.gx && gy === from.gy) continue;
       if (this.furniture.isBlocked(gx, gy)) continue;
-      const path = findPath(from, { gx, gy }, ROOM_W, ROOM_H, this.blockedFn);
+      const path = findPath(from, { gx, gy }, this.size, this.size, this.blockedFn);
       if (path && path.length > 0) {
         if (this.avatar.sittingOn) this.avatar.standUp();
         this.avatar.walk(path);
@@ -827,8 +898,8 @@ export class RoomScene extends Phaser.Scene {
     const def = getDef(this.placeDefId);
     const [w, d] = rotatedSize(def.size, this.placeRot);
     // ポインタの位置を占有範囲の中央にする
-    const gx = Phaser.Math.Clamp(tile.gx - Math.floor((w - 1) / 2), 0, ROOM_W - w);
-    const gy = Phaser.Math.Clamp(tile.gy - Math.floor((d - 1) / 2), 0, ROOM_H - d);
+    const gx = Phaser.Math.Clamp(tile.gx - Math.floor((w - 1) / 2), 0, this.size - w);
+    const gy = Phaser.Math.Clamp(tile.gy - Math.floor((d - 1) / 2), 0, this.size - d);
     this.ghostTile = { gx, gy };
     this.ghostOk = this.furniture.canPlace(def, this.placeRot, gx, gy, this.moveUid ?? undefined);
 
@@ -897,12 +968,12 @@ export class RoomScene extends Phaser.Scene {
     if (this.avatar.sittingOn) return;
     const { gx, gy } = this.avatar.tile;
     if (!this.furniture.isBlocked(gx, gy)) return;
-    for (let r = 1; r < Math.max(ROOM_W, ROOM_H); r++) {
+    for (let r = 1; r < this.size; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           const nx = gx + dx;
           const ny = gy + dy;
-          if (nx < 0 || ny < 0 || nx >= ROOM_W || ny >= ROOM_H) continue;
+          if (nx < 0 || ny < 0 || nx >= this.size || ny >= this.size) continue;
           if (this.furniture.isBlocked(nx, ny)) continue;
           this.avatar.stop();
           this.avatar.placeAt(nx, ny);
@@ -925,6 +996,7 @@ export class RoomScene extends Phaser.Scene {
   /** 買った・売った・受け取った あとの表示更新 */
   private afterEconomyChange() {
     this.ui.setCoins(this.save.coins);
+    this.ui.setRoomSize(this.size, nextRoomStep(this.size), this.save.coins);
     this.ui.setInventory(this.save.inventory);
     this.syncMissions();
     this.persist();
@@ -935,7 +1007,7 @@ export class RoomScene extends Phaser.Scene {
   private drawHover(tile: Tile) {
     const g = this.hoverG;
     g.clear();
-    if (tile.gx < 0 || tile.gy < 0 || tile.gx >= ROOM_W || tile.gy >= ROOM_H) return;
+    if (tile.gx < 0 || tile.gy < 0 || tile.gx >= this.size || tile.gy >= this.size) return;
     const p = gridToScreen(tile.gx, tile.gy);
     const pts = [
       { x: p.x, y: p.y },
@@ -964,9 +1036,8 @@ export class RoomScene extends Phaser.Scene {
 
   private persist() {
     if (this.visiting) return; // 人の部屋を自分のセーブに書き込まない
-    this.save.items = this.furniture.all.map((i) => ({ ...i }));
-    this.save.avatar.gx = this.avatar.tile.gx;
-    this.save.avatar.gy = this.avatar.tile.gy;
+    this.cur.items = this.furniture.all.map((i) => ({ ...i }));
+    this.cur.spawn = { gx: this.avatar.tile.gx, gy: this.avatar.tile.gy };
     saveDebounced(this.save);
   }
 }

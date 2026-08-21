@@ -78,14 +78,26 @@ export interface DailyCounters {
   bought: number;
 }
 
-export interface SaveData {
-  version: number;
+/**
+ * ひとつの部屋。広さ・床・壁・置いてある家具・アバターの立ち位置を持つ。
+ * 部屋が増えても（月コロニーなど）この形をそのまま使う。
+ */
+export interface RoomData {
+  /** 共有したときに出る部屋の名前 */
+  name: string;
+  /** 共有したときに出るひとこと */
+  note: string;
   floor: number;
   wall: number;
-  /** 共有したときに出る部屋の名前 */
-  roomName: string;
-  /** 共有したときに出るひとこと */
-  roomNote: string;
+  /** 一辺のマス数（正方形） */
+  size: number;
+  items: PlacedFurniture[];
+  /** この部屋に入ったときのアバターの立ち位置 */
+  spawn: { gx: number; gy: number };
+}
+
+export interface SaveData {
+  version: number;
   /** 放置中にアバターが自分で動くか */
   autoPlay: boolean;
   /** 所持コイン */
@@ -97,12 +109,11 @@ export interface SaveData {
   lastBonusDay: string;
   /** 今日うけとったミッションの id */
   doneMissions: string[];
-  items: PlacedFurniture[];
-  /** しまってある家具（defId -> 個数） */
+  /** 部屋（id -> 中身）。いまは 'home' だけ */
+  rooms: Record<string, RoomData>;
+  /** いま居る部屋の id */
+  currentRoom: string;
+  /** しまってある家具（defId -> 個数）。部屋をまたいで共有する */
   inventory: Record<string, number>;
-  avatar: {
-    look: AvatarLook;
-    gx: number;
-    gy: number;
-  };
+  avatar: { look: AvatarLook };
 }

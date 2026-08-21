@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ROOM_H, ROOM_W } from '../config';
+import { DEFAULT_ROOM_SIZE } from '../config';
 import { decodeShared, encodeShared, ROOM_NAME_MAX, type SharedRoom } from './share';
 
 const sample: SharedRoom = {
   floor: 2,
   wall: 3,
+  size: 14,
   roomName: 'ロココのへや',
   roomNote: 'あそびにきてね',
   look: {
@@ -44,7 +45,7 @@ describe('encodeShared / decodeShared', () => {
 
   it('圧縮が効いていて URL に載る長さになる', async () => {
     const many: SharedRoom = { ...sample, items: [] };
-    for (let i = 0; i < 20; i++) many.items.push({ defId: 'chair', gx: i % ROOM_W, gy: 0, rot: 0 });
+    for (let i = 0; i < 20; i++) many.items.push({ defId: 'chair', gx: i % 12, gy: 0, rot: 0 });
     const token = await encodeShared(many);
     expect(token[0]).toBe('z'); // deflate が使えている
     expect(token.length).toBeLessThan(600);
@@ -52,17 +53,26 @@ describe('encodeShared / decodeShared', () => {
 
   it('圧縮なしの形式も読める', async () => {
     const token = packedToken([
-      1,
+      2,
       1,
       1,
       'すあし',
       '',
       ['ぴぐ', '#ffe0c8', '#3b2b28', 0, '#5b4630', '#ff9ec4', 0, '#7d9ff0', '#f5f2ee'],
       [['stool', 1, 1, 0]],
+      12,
     ]);
     const room = await decodeShared(token);
     expect(room?.roomName).toBe('すあし');
     expect(room?.items).toEqual([{ defId: 'stool', gx: 1, gy: 1, rot: 0 }]);
+  });
+
+  it('広さを持たない形式1の URL も読める（既定の広さになる）', async () => {
+    const token = packedToken([1, 0, 0, 'ふるいURL', '', [], [['stool', 3, 3, 0]]]);
+    const room = await decodeShared(token);
+    expect(room?.size).toBe(DEFAULT_ROOM_SIZE);
+    expect(room?.roomName).toBe('ふるいURL');
+    expect(room?.items).toEqual([{ defId: 'stool', gx: 3, gy: 3, rot: 0 }]);
   });
 
   it('壊れたトークンでは null を返す', async () => {
@@ -77,46 +87,60 @@ describe('他人が作った URL の検証', () => {
   const decodePacked = (packed: unknown) => decodeShared(packedToken(packed));
 
   it('カタログに無い家具は捨てる', async () => {
-    const room = await decodePacked([1, 0, 0, 'x', '', [], [['no-such-item', 0, 0, 0], ['stool', 1, 1, 0]]]);
+    const room = await decodePacked([2, 0, 0, 'x', '', [], [['no-such-item', 0, 0, 0], ['stool', 1, 1, 0]], 12]);
     expect(room?.items).toEqual([{ defId: 'stool', gx: 1, gy: 1, rot: 0 }]);
   });
 
   it('部屋の外を指す座標は中に収める', async () => {
-    const room = await decodePacked([1, 0, 0, 'x', '', [], [['stool', 999, -5, 0]]]);
-    expect(room?.items[0].gx).toBe(ROOM_W - 1);
+    const room = await decodePacked([2, 0, 0, 'x', '', [], [['stool', 999, -5, 0]], 16]);
+    expect(room?.items[0].gx).toBe(15);
     expect(room?.items[0].gy).toBe(0);
   });
 
   it('大きい家具は はみ出さない位置へ寄せる', async () => {
     // ロココベッドは 2x3 マス
-    const room = await decodePacked([1, 0, 0, 'x', '', [], [['bed', 99, 99, 0]]]);
-    expect(room?.items[0].gx).toBe(ROOM_W - 2);
-    expect(room?.items[0].gy).toBe(ROOM_H - 3);
+    const room = await decodePacked([2, 0, 0, 'x', '', [], [['bed', 99, 99, 0]], 12]);
+    expect(room?.items[0].gx).toBe(10);
+    expect(room?.items[0].gy).toBe(9);
   });
 
   it('回転を反映した大きさで収める', async () => {
     // 90度まわすと 3x2 マスになる
-    const room = await decodePacked([1, 0, 0, 'x', '', [], [['bed', 99, 99, 1]]]);
-    expect(room?.items[0].gx).toBe(ROOM_W - 3);
-    expect(room?.items[0].gy).toBe(ROOM_H - 2);
+    const room = await decodePacked([2, 0, 0, 'x', '', [], [['bed', 99, 99, 1]], 12]);
+    expect(room?.items[0].gx).toBe(9);
+    expect(room?.items[0].gy).toBe(10);
+  });
+
+  it('広い部屋ではその広さで収める', async () => {
+    const room = await decodePacked([2, 0, 0, 'x', '', [], [['bed', 99, 99, 0]], 20]);
+    expect(room?.items[0].gx).toBe(18);
+    expect(room?.items[0].gy).toBe(17);
   });
 
   it('回転は 0〜3 に収める', async () => {
-    const room = await decodePacked([1, 0, 0, 'x', '', [], [['stool', 0, 0, 47]]]);
+    const room = await decodePacked([2, 0, 0, 'x', '', [], [['stool', 0, 0, 47]], 12]);
     expect(room?.items[0].rot).toBe(3);
   });
 
   it('ゆか・かべの番号も範囲に収める', async () => {
-    const room = await decodePacked([1, 99, -3, 'x', '', [], []]);
+    const room = await decodePacked([2, 99, -3, 'x', '', [], [], 12]);
     expect(room?.floor).toBe(4);
     expect(room?.wall).toBe(0);
   });
 
+  it('知らない広さは既定の広さに落とす', async () => {
+    for (const bad of [999, 13, -4, 'おおきい', null]) {
+      const room = await decodePacked([2, 0, 0, 'x', '', [], [], bad]);
+      expect(room?.size).toBe(DEFAULT_ROOM_SIZE);
+    }
+  });
+
   it('色でないものは既定色に落とす', async () => {
     const room = await decodePacked([
-      1, 0, 0, 'x', '',
+      2, 0, 0, 'x', '',
       ['な', 'javascript:alert(1)', 'red', 0, '#GGGGGG', '#ff9ec4', 0, '', null],
       [],
+      12,
     ]);
     expect(room?.look.skin).toMatch(/^#[0-9a-f]{6}$/i);
     expect(room?.look.hair).toMatch(/^#[0-9a-f]{6}$/i);
@@ -128,36 +152,36 @@ describe('他人が作った URL の検証', () => {
   it('改行や制御文字を名前に入れられない', async () => {
     const NL = String.fromCharCode(10);
     const TAB = String.fromCharCode(9);
-    const room = await decodePacked([1, 0, 0, 'あ' + NL + 'い' + TAB + 'う ', 'ひと' + NL + 'こと', [], []]);
+    const room = await decodePacked([2, 0, 0, 'あ' + NL + 'い' + TAB + 'う ', 'ひと' + NL + 'こと', [], [], 12]);
     expect(room?.roomName).toBe('あいう');
     expect(room?.roomNote).toBe('ひとこと');
   });
 
   it('長すぎる名前は切る', async () => {
-    const room = await decodePacked([1, 0, 0, 'あ'.repeat(200), '', [], []]);
+    const room = await decodePacked([2, 0, 0, 'あ'.repeat(200), '', [], [], 12]);
     expect(room?.roomName).toHaveLength(ROOM_NAME_MAX);
   });
 
   it('名前が空なら既定の名前になる', async () => {
-    const room = await decodePacked([1, 0, 0, '   ', '', [], []]);
+    const room = await decodePacked([2, 0, 0, '   ', '', [], [], 12]);
     expect(room?.roomName).toBe('だれかのおへや');
   });
 
   it('かみがたの番号も範囲に収める', async () => {
-    const room = await decodePacked([1, 0, 0, 'x', '', ['な', '', '', 999, '', '', 0, '', ''], []]);
+    const room = await decodePacked([2, 0, 0, 'x', '', ['な', '', '', 999, '', '', 0, '', ''], [], 12]);
     expect(room?.look.hairStyle).toBeLessThanOrEqual(5);
     expect(room?.look.hairStyle).toBeGreaterThanOrEqual(0);
   });
 
   it('形式が違えば読まない', async () => {
-    expect(await decodePacked([2, 0, 0, 'x', '', [], []])).toBeNull();
+    expect(await decodePacked([3, 0, 0, 'x', '', [], [], 12])).toBeNull();
     expect(await decodePacked({ floor: 1 })).toBeNull();
-    expect(await decodePacked([1, 0, 0])).toBeNull();
+    expect(await decodePacked([2, 0, 0])).toBeNull();
   });
 
   it('家具が多すぎる URL は打ち切る', async () => {
-    const items = Array.from({ length: 500 }, () => ['stool', 0, 0, 0]);
-    const room = await decodePacked([1, 0, 0, 'x', '', [], items]);
-    expect(room?.items).toHaveLength(200);
+    const items = Array.from({ length: 900 }, () => ['stool', 0, 0, 0]);
+    const room = await decodePacked([2, 0, 0, 'x', '', [], items, 12]);
+    expect(room?.items).toHaveLength(400); // 20×20 マスぶんで打ち切る
   });
 });

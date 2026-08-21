@@ -1,11 +1,21 @@
-import { CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, HAIR_STYLE_NAMES, ROOM_H, ROOM_W, SKIN_COLORS } from '../config';
+import {
+  CLOTH_COLORS,
+  DEFAULT_ROOM_SIZE,
+  EYE_COLORS,
+  HAIR_COLORS,
+  HAIR_STYLE_NAMES,
+  MAX_ROOM_SIZE,
+  ROOM_SIZES,
+  SKIN_COLORS,
+} from '../config';
 import { findDef } from '../data/furniture';
 import { rotatedSize } from '../core/iso';
-import type { AvatarLook, PlacedFurniture, Rotation, SaveData } from '../types';
+import type { AvatarLook, PlacedFurniture, RoomData, Rotation } from '../types';
 
 /** URL のハッシュに使う名前。`#r=...` の形で載る */
 const HASH_KEY = 'r';
-const FORMAT = 1;
+/** いまの形式。1 は部屋の広さを持たない（12×12 固定）ので、読むときだけ面倒を見る */
+const FORMAT = 2;
 /** 名前とひとことの上限。URL の長さと表示崩れを抑える */
 export const ROOM_NAME_MAX = 16;
 export const ROOM_NOTE_MAX = 40;
@@ -14,20 +24,23 @@ export const ROOM_NOTE_MAX = 40;
 export interface SharedRoom {
   floor: number;
   wall: number;
+  /** 一辺のマス数 */
+  size: number;
   roomName: string;
   roomNote: string;
   look: AvatarLook;
   items: Array<{ defId: string; gx: number; gy: number; rot: Rotation }>;
 }
 
-export function sharedFromSave(save: SaveData): SharedRoom {
+export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
   return {
-    floor: save.floor,
-    wall: save.wall,
-    roomName: save.roomName,
-    roomNote: save.roomNote,
-    look: save.avatar.look,
-    items: save.items.map((i) => ({ defId: i.defId, gx: i.gx, gy: i.gy, rot: i.rot })),
+    floor: room.floor,
+    wall: room.wall,
+    size: room.size,
+    roomName: room.name,
+    roomNote: room.note,
+    look,
+    items: room.items.map((i) => ({ defId: i.defId, gx: i.gx, gy: i.gy, rot: i.rot })),
   };
 }
 
@@ -42,6 +55,7 @@ type Packed = [
   string, // ひとこと
   [string, string, string, number, string, string, number, string, string], // アバター
   Array<[string, number, number, number]>, // 家具
+  number, // 一辺のマス数（形式2で追加。末尾に足しているので形式1も読める）
 ];
 
 function pack(r: SharedRoom): Packed {
@@ -54,6 +68,7 @@ function pack(r: SharedRoom): Packed {
     r.roomNote,
     [l.name, l.skin, l.hair, l.hairStyle, l.eyes, l.shirt, l.outfit === 'dress' ? 1 : 0, l.pants, l.shoes],
     r.items.map((i) => [i.defId, i.gx, i.gy, i.rot]),
+    r.size,
   ];
 }
 
@@ -87,9 +102,12 @@ function color(v: unknown, palette: readonly string[]): string {
 
 function unpack(raw: unknown): SharedRoom | null {
   if (!Array.isArray(raw) || raw.length < 7) return null;
-  if (raw[0] !== FORMAT) return null;
+  // 形式1（部屋の広さを持たない）も読めるようにしておく
+  if (raw[0] !== FORMAT && raw[0] !== 1) return null;
   const lookRaw = Array.isArray(raw[5]) ? raw[5] : [];
   const itemsRaw = Array.isArray(raw[6]) ? raw[6] : [];
+  // 知らない広さが来たら既定の広さに落とす（勝手に大きな部屋を作らせない）
+  const size = ROOM_SIZES.includes(raw[7] as never) ? (raw[7] as number) : DEFAULT_ROOM_SIZE;
 
   const items: SharedRoom['items'] = [];
   for (const it of itemsRaw) {
@@ -98,15 +116,16 @@ function unpack(raw: unknown): SharedRoom | null {
     if (!def) continue; // カタログに無い家具は捨てる
     const rot = num(it[3], 0, 3, 0) as Rotation;
     const [w, d] = rotatedSize(def.size, rot);
-    const gx = num(it[1], 0, Math.max(0, ROOM_W - w), 0);
-    const gy = num(it[2], 0, Math.max(0, ROOM_H - d), 0);
+    const gx = num(it[1], 0, Math.max(0, size - w), 0);
+    const gy = num(it[2], 0, Math.max(0, size - d), 0);
     items.push({ defId: def.id, gx, gy, rot });
-    if (items.length >= 200) break; // 異常に長い URL への保険
+    if (items.length >= MAX_ROOM_SIZE * MAX_ROOM_SIZE) break; // 異常に長い URL への保険
   }
 
   return {
     floor: num(raw[1], 0, 4, 0),
     wall: num(raw[2], 0, 4, 0),
+    size,
     roomName: text(raw[3], ROOM_NAME_MAX, 'だれかのおへや'),
     roomNote: text(raw[4], ROOM_NOTE_MAX),
     look: {

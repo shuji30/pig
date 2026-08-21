@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FLOOR_STYLES, ROOM_H, ROOM_W, TILE_H, TILE_W, WALL_H, WALL_STYLES } from '../config';
+import { FLOOR_STYLES, TILE_H, TILE_W, WALL_H, WALL_STYLES } from '../config';
 import { gridToScreen } from '../core/iso';
 import { shade } from './color';
 
@@ -10,13 +10,16 @@ const HH = TILE_H / 2;
 export class RoomView {
   private readonly floorG: Phaser.GameObjects.Graphics;
   private readonly wallG: Phaser.GameObjects.Graphics;
+  private size = 12;
 
   constructor(scene: Phaser.Scene) {
     this.wallG = scene.add.graphics().setDepth(-2000);
     this.floorG = scene.add.graphics().setDepth(-1900);
   }
 
-  redraw(floorIdx: number, wallIdx: number) {
+  /** @param size 一辺のマス数（部屋ごとに変わる） */
+  redraw(floorIdx: number, wallIdx: number, size: number) {
+    this.size = size;
     this.drawWalls(WALL_STYLES[wallIdx % WALL_STYLES.length]);
     this.drawFloor(FLOOR_STYLES[floorIdx % FLOOR_STYLES.length]);
   }
@@ -24,8 +27,8 @@ export class RoomView {
   private drawFloor(style: (typeof FLOOR_STYLES)[number]) {
     const g = this.floorG;
     g.clear();
-    for (let gy = 0; gy < ROOM_H; gy++) {
-      for (let gx = 0; gx < ROOM_W; gx++) {
+    for (let gy = 0; gy < this.size; gy++) {
+      for (let gx = 0; gx < this.size; gx++) {
         const p = gridToScreen(gx, gy);
         const pts = [
           { x: p.x, y: p.y },
@@ -41,9 +44,9 @@ export class RoomView {
     }
     // 床の外周
     const n = gridToScreen(0, 0);
-    const e = gridToScreen(ROOM_W, 0);
-    const s = gridToScreen(ROOM_W, ROOM_H);
-    const w = gridToScreen(0, ROOM_H);
+    const e = gridToScreen(this.size, 0);
+    const s = gridToScreen(this.size, this.size);
+    const w = gridToScreen(0, this.size);
     g.lineStyle(2, shade(style.line, 0.8), 0.9);
     g.strokePoints([n, e, s, w], true);
   }
@@ -52,8 +55,8 @@ export class RoomView {
     const g = this.wallG;
     g.clear();
     const n = gridToScreen(0, 0);
-    const e = gridToScreen(ROOM_W, 0);
-    const w = gridToScreen(0, ROOM_H);
+    const e = gridToScreen(this.size, 0);
+    const w = gridToScreen(0, this.size);
 
     // 右側の壁（gy = 0 の縁）
     this.wallQuad(g, n, e, style.a);
