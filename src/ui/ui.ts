@@ -11,6 +11,7 @@ import {
 } from '../config';
 import { CATEGORY_LABEL, CATEGORY_ORDER, FURNITURE } from '../data/furniture';
 import { MOTIONS, type MotionKind } from '../data/motions';
+import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { makeIconCanvas } from '../render/furnitureTexture';
 import type { AvatarLook, FurnitureCategory } from '../types';
 
@@ -255,6 +256,9 @@ export class Ui {
 
   private refreshWardrobe() {
     this.refreshRows($('wardrobe-body'));
+    const box = $('avatar-preview');
+    box.innerHTML = '';
+    box.appendChild(makeAvatarPreviewCanvas(this.scene, this.look));
     const nameInput = $<HTMLInputElement>('avatar-name');
     if (document.activeElement !== nameInput) nameInput.value = this.look.name;
   }
