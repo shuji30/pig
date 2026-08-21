@@ -84,6 +84,35 @@ body {
   flex: 1;
 }
 
+.coins {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #fffdf3;
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+}
+
+.coins b {
+  color: #b8860b;
+}
+
+.badge-host {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff5a7a;
+  border: 2px solid #ffe6ef;
+}
+
 /* ---------- ボタン ---------- */
 button {
   font: inherit;
@@ -111,6 +140,104 @@ button:active {
   height: 34px;
   padding: 0;
   font-size: 16px;
+}
+
+button.primary {
+  width: 100%;
+  margin-top: 12px;
+  background: var(--pink);
+  color: #fff;
+  font-weight: 700;
+}
+
+button.primary:disabled {
+  background: #eee3e8;
+  color: #b3a3ab;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ショップの1行 */
+.item .price {
+  font-size: 10px;
+  font-weight: 700;
+  color: #b8860b;
+}
+
+.item.locked {
+  opacity: 0.5;
+}
+
+.item .sell {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #f0e6ea;
+  box-shadow: none;
+}
+
+.rarity {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.rarity.uncommon {
+  background: #6fb0e0;
+}
+
+.rarity.rare {
+  background: #e0a020;
+}
+
+/* ミッション */
+.mission {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #f2e9ed;
+  font-size: 12.5px;
+}
+
+.mission:last-child {
+  border-bottom: none;
+}
+
+.mission .bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #f0e6ea;
+  overflow: hidden;
+}
+
+.mission .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--pink);
+}
+
+.mission .rw {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b8860b;
+  white-space: nowrap;
+}
+
+.mission.done {
+  color: #9c8e95;
+}
+
+.mission.done .bar i {
+  background: #9fd3a2;
 }
 
 button.danger {

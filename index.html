@@ -21,6 +21,10 @@
         <div class="brand">🏠 My Little Room</div>
         <div id="hint" class="hint">床をクリックして歩こう</div>
         <div class="spacer"></div>
+        <div id="coins" class="coins">🪙 <b>0</b></div>
+        <button id="btn-missions" class="icon-btn badge-host" title="やること">
+          📋<span id="mission-badge" class="badge" hidden></span>
+        </button>
         <button id="btn-help" class="icon-btn" title="あそびかた">❓</button>
       </header>
 
@@ -52,7 +56,18 @@
         </div>
         <div class="tabs" id="furniture-tabs"></div>
         <div class="grid" id="furniture-grid"></div>
-        <p class="note">アイテムを選んで部屋をクリックで設置。<b>R</b>で回転、<b>Esc</b>でやめる。</p>
+        <p class="note" id="furniture-note">アイテムを選んで部屋をクリックで設置。R で回転、Esc でやめる。</p>
+      </section>
+
+      <!-- やること（ミッション）パネル -->
+      <section class="panel" id="panel-missions" hidden>
+        <div class="panel-head">
+          <h2>きょうの やること</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <div id="mission-list"></div>
+        <button id="btn-claim" class="primary">できたぶんを うけとる</button>
+        <p class="note">やることは毎日かわります。ログインボーナスは1日1回もらえます。</p>
       </section>
 
       <!-- きもち（エモート）パネル -->
@@ -109,6 +124,8 @@
           <li>下の入力欄でしゃべると<b>吹き出し</b>が出ます。</li>
           <li>「きもち」から<b>てをふる・おじぎ・よろこぶ</b>などのモーションが出せます。</li>
           <li>「きもち」の<b>おまかせ</b>を ON にしておくと、放置中にアバターが自分で動きます。</li>
+          <li>「かぐ」の<b>ショップ</b>タブでコインを使って家具を買えます。いらない家具は売れます。</li>
+          <li>右上の<b>📋</b>から「きょうの やること」。達成するとコインがもらえます。</li>
           <li>変更は自動的にブラウザへ保存されます。</li>
         </ul>
       </section>

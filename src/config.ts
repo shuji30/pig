@@ -13,7 +13,17 @@ export const WALL_H = 96;
 export const WALK_SPEED = 110;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+/** はじめて遊ぶときの所持コイン */
+export const START_COINS = 420;
+/** 1日1回のログインボーナス */
+export const DAILY_BONUS = 45;
+/** 連続日数1日ごとの上乗せ（6日で打ち止め） */
+export const STREAK_BONUS = 10;
+export const STREAK_MAX = 6;
+/** 売るときの戻り率 */
+export const SELL_RATE = 0.5;
 
 /** 床のバリエーション（薄い色/濃い色の市松模様） */
 export const FLOOR_STYLES = [

@@ -15,6 +15,9 @@ export type FurnitureShape =
 
 export type FurnitureCategory = 'seat' | 'table' | 'storage' | 'deco' | 'floor';
 
+/** 家具のめずらしさ。価格帯とショップの並び順に使う */
+export type Rarity = 'common' | 'uncommon' | 'rare';
+
 export interface FurnitureDef {
   id: string;
   name: string;
@@ -32,6 +35,9 @@ export interface FurnitureDef {
   walkable?: boolean;
   /** 座れる家具なら、座ったときのアバターの持ち上げ量(px) */
   seatHeight?: number;
+  /** ショップでの値段（コイン） */
+  price: number;
+  rarity: Rarity;
 }
 
 export interface PlacedFurniture {
@@ -60,12 +66,33 @@ export interface AvatarLook {
   shoes: string;
 }
 
+/** その日の行動回数。日付が変わったらリセットする */
+export interface DailyCounters {
+  /** YYYY-MM-DD */
+  day: string;
+  placed: number;
+  stored: number;
+  sat: number;
+  emoted: number;
+  restyled: number;
+  bought: number;
+}
+
 export interface SaveData {
   version: number;
   floor: number;
   wall: number;
   /** 放置中にアバターが自分で動くか */
   autoPlay: boolean;
+  /** 所持コイン */
+  coins: number;
+  daily: DailyCounters;
+  /** 連続で訪れた日数 */
+  streak: number;
+  /** 最後にデイリーボーナスを受け取った日 */
+  lastBonusDay: string;
+  /** 今日うけとったミッションの id */
+  doneMissions: string[];
   items: PlacedFurniture[];
   /** しまってある家具（defId -> 個数） */
   inventory: Record<string, number>;

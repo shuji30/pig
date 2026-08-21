@@ -9,6 +9,7 @@ import { Avatar } from '../entities/Avatar';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { getFurnitureTexture } from '../render/furnitureTexture';
 import { RoomView } from '../render/room';
+import { buy, claimDailyBonus, claimMissions, missionViews, sell } from '../state/economy';
 import { clearSave, load, newUid, saveDebounced } from '../state/save';
 import type { AvatarLook, PlacedFurniture, Rotation, SaveData } from '../types';
 import { Ui } from '../ui/ui';
@@ -73,11 +74,15 @@ export class RoomScene extends Phaser.Scene {
       onFloorChange: (i) => {
         this.save.floor = i;
         this.room.redraw(this.save.floor, this.save.wall);
+        this.save.daily.restyled += 1;
+        this.syncMissions();
         this.persist();
       },
       onWallChange: (i) => {
         this.save.wall = i;
         this.room.redraw(this.save.floor, this.save.wall);
+        this.save.daily.restyled += 1;
+        this.syncMissions();
         this.persist();
       },
       onLookChange: (look) => this.applyLook(look),
@@ -91,7 +96,34 @@ export class RoomScene extends Phaser.Scene {
         else this.cancelPlacing();
       },
       onSelAction: (act) => this.selAction(act),
-      onEmote: (kind) => this.avatar.playMotion(kind),
+      onEmote: (kind) => {
+        this.avatar.playMotion(kind);
+        this.save.daily.emoted += 1;
+        this.syncMissions();
+        this.persist();
+      },
+      onBuy: (defId) => {
+        const def = getDef(defId);
+        if (!buy(this.save, def)) {
+          this.ui.toast('コインが足りないよ');
+          return;
+        }
+        this.ui.toast(`${def.name}を かいました`);
+        this.afterEconomyChange();
+      },
+      onSell: (defId) => {
+        const def = getDef(defId);
+        const got = sell(this.save, def);
+        if (got === 0) return;
+        this.ui.toast(`${def.name}を うりました（🪙+${got}）`);
+        this.afterEconomyChange();
+      },
+      onClaimMissions: () => {
+        const { amount, count } = claimMissions(this.save, this.missionCtx());
+        if (count === 0) return;
+        this.ui.toast(`やること ${count}こ たっせい！ 🪙+${amount}`);
+        this.afterEconomyChange();
+      },
       onToggleAuto: () => {
         this.save.autoPlay = !this.save.autoPlay;
         this.auto.enabled = this.save.autoPlay;
@@ -105,6 +137,7 @@ export class RoomScene extends Phaser.Scene {
         if (this.mode !== 'idle') this.cancelPlacing();
         // きせかえ・きもち はアバターが見えないと選べないので、上のほうへ寄せる
         if (name === 'wardrobe' || name === 'emote') this.focusAvatar();
+        if (name === 'missions') this.syncMissions();
       },
     });
     this.auto = new AutoPlay({
@@ -123,7 +156,19 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setLook(this.save.avatar.look);
     this.ui.setStyles(this.save.floor, this.save.wall);
     this.ui.setInventory(this.save.inventory);
+    this.ui.setCoins(this.save.coins);
+    this.syncMissions();
     this.setHint();
+
+    // その日はじめての訪問ならログインボーナス
+    const bonus = claimDailyBonus(this.save);
+    if (bonus.amount > 0) {
+      this.ui.setCoins(this.save.coins);
+      this.time.delayedCall(700, () =>
+        this.ui.toast(`ログインボーナス 🪙+${bonus.amount}（${bonus.streak}日れんぞく）`),
+      );
+      this.persist();
+    }
 
     this.ensureAvatarStandable();
     this.setupCamera();
@@ -421,6 +466,8 @@ export class RoomScene extends Phaser.Scene {
       const spot = this.furniture.seatSpot(still);
       const facing = this.furniture.seatFacing(still);
       this.avatar.sit(still.uid, spot, (def.seatHeight ?? 16) + 6, facing.back, facing.flip, spot.depth);
+      this.save.daily.sat += 1;
+      this.syncMissions();
       this.persist();
     });
     return true;
@@ -534,7 +581,9 @@ export class RoomScene extends Phaser.Scene {
     if (!removed) return;
     this.avatar.refreshDepth();
     this.save.inventory[removed.defId] = (this.save.inventory[removed.defId] ?? 0) + 1;
+    this.save.daily.stored += 1;
     this.ui.setInventory(this.save.inventory);
+    this.syncMissions();
     this.ui.toast(`${getDef(removed.defId).name}をしまったよ`);
     this.deselect();
     this.persist();
@@ -659,7 +708,9 @@ export class RoomScene extends Phaser.Scene {
     const item: PlacedFurniture = { uid: newUid(), defId, gx, gy, rot: this.placeRot };
     this.furniture.add(item);
     this.save.inventory[defId] = Math.max(0, (this.save.inventory[defId] ?? 0) - 1);
+    this.save.daily.placed += 1;
     this.ui.setInventory(this.save.inventory);
+    this.syncMissions();
     this.persist();
 
     // アバターが家具の中に閉じ込められないよう、押し出す
@@ -691,6 +742,24 @@ export class RoomScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  // ---------------- コインとミッション ----------------
+
+  private missionCtx() {
+    return { daily: this.save.daily, items: this.furniture.all };
+  }
+
+  private syncMissions() {
+    this.ui.setMissions(missionViews(this.save, this.missionCtx()));
+  }
+
+  /** 買った・売った・受け取った あとの表示更新 */
+  private afterEconomyChange() {
+    this.ui.setCoins(this.save.coins);
+    this.ui.setInventory(this.save.inventory);
+    this.syncMissions();
+    this.persist();
   }
 
   // ---------------- 表示・保存 ----------------

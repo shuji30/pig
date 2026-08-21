@@ -9,13 +9,15 @@ import {
   SKIN_COLORS,
   WALL_STYLES,
 } from '../config';
-import { CATEGORY_LABEL, CATEGORY_ORDER, FURNITURE } from '../data/furniture';
+import { CATEGORY_LABEL, CATEGORY_ORDER, FURNITURE, getDef } from '../data/furniture';
 import { MOTIONS, type MotionKind } from '../data/motions';
+import type { MissionView } from '../state/economy';
+import { sellPrice } from '../state/economy';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { makeIconCanvas } from '../render/furnitureTexture';
 import type { AvatarLook, FurnitureCategory } from '../types';
 
-export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'help';
+export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'missions' | 'help';
 
 export interface UiHandlers {
   onPickFurniture(defId: string): void;
@@ -29,6 +31,9 @@ export interface UiHandlers {
   onPanelOpen(name: PanelName): void;
   onEmote(kind: MotionKind): void;
   onToggleAuto(): void;
+  onBuy(defId: string): void;
+  onSell(defId: string): void;
+  onClaimMissions(): void;
   onZoom(factor: number): void;
   onCenter(): void;
 }
@@ -41,12 +46,13 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 /** DOM 側の UI 全般 */
 export class Ui {
-  private tab: FurnitureCategory = 'seat';
+  private tab: FurnitureCategory | 'shop' = 'seat';
   private inventory: Record<string, number> = {};
   private look!: AvatarLook;
   private floorIdx = 0;
   private wallIdx = 0;
   private pickedDefId: string | null = null;
+  private coins = 0;
   private toastTimer?: number;
 
   constructor(
@@ -68,6 +74,8 @@ export class Ui {
     });
     $('btn-help').addEventListener('click', () => this.togglePanel('help'));
     $('btn-auto').addEventListener('click', () => this.handlers.onToggleAuto());
+    $('btn-missions').addEventListener('click', () => this.togglePanel('missions'));
+    $('btn-claim').addEventListener('click', () => this.handlers.onClaimMissions());
     $('btn-zoom-in').addEventListener('click', () => this.handlers.onZoom(1.15));
     $('btn-zoom-out').addEventListener('click', () => this.handlers.onZoom(1 / 1.15));
     $('btn-center').addEventListener('click', () => this.handlers.onCenter());
@@ -107,17 +115,19 @@ export class Ui {
   private buildTabs() {
     const tabs = $('furniture-tabs');
     tabs.innerHTML = '';
-    for (const cat of CATEGORY_ORDER) {
+    const add = (key: FurnitureCategory | 'shop', label: string) => {
       const b = document.createElement('button');
       b.className = 'tab';
-      b.textContent = CATEGORY_LABEL[cat];
-      b.dataset.cat = cat;
+      b.textContent = label;
+      b.dataset.cat = key;
       b.addEventListener('click', () => {
-        this.tab = cat;
+        this.tab = key;
         this.renderCatalog();
       });
       tabs.appendChild(b);
-    }
+    };
+    for (const cat of CATEGORY_ORDER) add(cat, CATEGORY_LABEL[cat]);
+    add('shop', '🛍 ショップ');
   }
 
   private buildEmotes() {
@@ -310,32 +320,120 @@ export class Ui {
     });
     const grid = $('furniture-grid');
     grid.innerHTML = '';
+    $('furniture-note').textContent =
+      this.tab === 'shop'
+        ? 'コインで家具を買えます。もっているものは「うる」で半額になります。'
+        : 'アイテムを選んで部屋をクリックで設置。R で回転、Esc でやめる。';
+
+    if (this.tab === 'shop') {
+      this.renderShop(grid);
+      return;
+    }
     const list = FURNITURE.filter((f) => f.category === this.tab && (this.inventory[f.id] ?? 0) > 0);
     if (list.length === 0) {
       const p = document.createElement('p');
       p.className = 'note';
-      p.textContent = 'このカテゴリの家具はぜんぶ部屋に置いてあります。';
+      p.textContent = 'このカテゴリの持ちものは空です。ショップで買えます。';
       grid.appendChild(p);
       return;
     }
     for (const def of list) {
-      const item = document.createElement('button');
-      item.className = 'item';
-      item.dataset.id = def.id;
-      item.appendChild(makeIconCanvas(this.scene, def));
-      const name = document.createElement('span');
-      name.textContent = def.name;
-      item.appendChild(name);
-      const count = document.createElement('span');
-      count.className = 'count';
-      count.textContent = `×${this.inventory[def.id]}`;
-      item.appendChild(count);
+      const item = this.itemButton(def.id, `×${this.inventory[def.id]}`);
       item.classList.toggle('selected', def.id === this.pickedDefId);
       item.addEventListener('click', () => this.handlers.onPickFurniture(def.id));
       grid.appendChild(item);
     }
   }
 
+  /** ショップ。安い順に全部ならべ、買えないものは薄く出す */
+  private renderShop(grid: HTMLElement) {
+    const order = { common: 0, uncommon: 1, rare: 2 };
+    const list = [...FURNITURE].sort((a, b) => order[a.rarity] - order[b.rarity] || a.price - b.price);
+    for (const def of list) {
+      const owned = this.inventory[def.id] ?? 0;
+      const item = this.itemButton(def.id, owned > 0 ? `×${owned}` : '');
+      const price = document.createElement('span');
+      price.className = 'price';
+      price.textContent = `🪙${def.price}`;
+      item.appendChild(price);
+      if (def.rarity !== 'common') {
+        const dot = document.createElement('span');
+        dot.className = `rarity ${def.rarity}`;
+        item.appendChild(dot);
+      }
+      const poor = this.coins < def.price;
+      item.classList.toggle('locked', poor);
+      item.addEventListener('click', () => this.handlers.onBuy(def.id));
+      if (owned > 0) {
+        const sellBtn = document.createElement('button');
+        sellBtn.className = 'sell';
+        sellBtn.textContent = `うる 🪙${sellPrice(def)}`;
+        sellBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.handlers.onSell(def.id);
+        });
+        item.appendChild(sellBtn);
+      }
+      grid.appendChild(item);
+    }
+  }
+
+  /** アイコンと名前を並べた四角いボタン */
+  private itemButton(defId: string, countLabel: string): HTMLButtonElement {
+    const def = getDef(defId);
+    const item = document.createElement('button');
+    item.className = 'item';
+    item.dataset.id = def.id;
+    item.appendChild(makeIconCanvas(this.scene, def));
+    const name = document.createElement('span');
+    name.textContent = def.name;
+    item.appendChild(name);
+    if (countLabel) {
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = countLabel;
+      item.appendChild(count);
+    }
+    return item;
+  }
+
+  setCoins(n: number) {
+    this.coins = n;
+    const el = $('coins').querySelector('b');
+    if (el) el.textContent = String(n);
+    if (this.tab === 'shop' && !$('panel-furniture').hidden) this.renderCatalog();
+  }
+
+  /** きょうのミッションを描く */
+  setMissions(views: MissionView[]) {
+    const list = $('mission-list');
+    list.innerHTML = '';
+    let claimable = 0;
+    for (const v of views) {
+      const row = document.createElement('div');
+      row.className = 'mission' + (v.done ? ' done' : '');
+      const label = document.createElement('span');
+      label.textContent = (v.done ? '✅ ' : '') + v.def.label;
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const fill = document.createElement('i');
+      fill.style.width = `${Math.round((v.progress / v.def.goal) * 100)}%`;
+      bar.appendChild(fill);
+      const rw = document.createElement('span');
+      rw.className = 'rw';
+      rw.textContent = `${v.progress}/${v.def.goal} 🪙${v.def.reward}`;
+      row.append(label, bar, rw);
+      list.appendChild(row);
+      if (!v.done && v.progress >= v.def.goal) claimable += 1;
+    }
+    const claim = $<HTMLButtonElement>('btn-claim');
+    claim.disabled = claimable === 0;
+    claim.textContent = claimable > 0 ? `できたぶんを うけとる（${claimable}）` : 'できたものはまだありません';
+    const badge = $('mission-badge');
+    badge.hidden = claimable === 0;
+  }
+
+  // ---------- 表示制御 ----------
   // ---------- 表示制御 ----------
 
   togglePanel(name: PanelName) {
