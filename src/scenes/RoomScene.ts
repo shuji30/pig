@@ -4,6 +4,7 @@ import { depthFor, gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { getDef } from '../data/furniture';
 import type { MotionKind } from '../data/motions';
+import { AutoPlay } from '../entities/AutoPlay';
 import { Avatar } from '../entities/Avatar';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { getFurnitureTexture } from '../render/furnitureTexture';
@@ -25,6 +26,7 @@ export class RoomScene extends Phaser.Scene {
   private furniture!: FurnitureLayer;
   private avatar!: Avatar;
   private ui!: Ui;
+  private auto!: AutoPlay;
 
   private hoverG!: Phaser.GameObjects.Graphics;
   private selG!: Phaser.GameObjects.Graphics;
@@ -90,6 +92,12 @@ export class RoomScene extends Phaser.Scene {
       },
       onSelAction: (act) => this.selAction(act),
       onEmote: (kind) => this.avatar.playMotion(kind),
+      onToggleAuto: () => {
+        this.save.autoPlay = !this.save.autoPlay;
+        this.auto.enabled = this.save.autoPlay;
+        this.ui.setAutoPlay(this.save.autoPlay);
+        this.persist();
+      },
       onZoom: (factor) => this.zoomBy(factor),
       onCenter: () => this.centerOnAvatar(),
       onPanelOpen: (name) => {
@@ -99,6 +107,19 @@ export class RoomScene extends Phaser.Scene {
         if (name === 'wardrobe' || name === 'emote') this.focusAvatar();
       },
     });
+    this.auto = new AutoPlay({
+      wanderOnce: () => this.wanderOnce(),
+      sitSomewhere: () => this.sitSomewhere(),
+      standUp: () => this.avatar.standUp(),
+      playEmote: (kind) => this.avatar.playMotion(kind),
+      stopLoopMotion: () => {
+        if (this.avatar.loopingMotion) this.avatar.stopMotion();
+      },
+      isBusy: () => this.avatar.isWalking || this.mode !== 'idle',
+      isSitting: () => this.avatar.sittingOn !== null,
+    });
+    this.auto.enabled = this.save.autoPlay;
+    this.ui.setAutoPlay(this.save.autoPlay);
     this.ui.setLook(this.save.avatar.look);
     this.ui.setStyles(this.save.floor, this.save.wall);
     this.ui.setInventory(this.save.inventory);
@@ -113,6 +134,7 @@ export class RoomScene extends Phaser.Scene {
 
   override update(_time: number, delta: number) {
     this.avatar.update(delta);
+    this.auto.update(delta);
     // 繰り返し再生の開始・終了に合わせてボタンとヒントを切り替える
     const loop = this.avatar.loopingMotion;
     if (loop !== this.lastLoopEmote) {
@@ -205,6 +227,17 @@ export class RoomScene extends Phaser.Scene {
   // ---------------- 入力 ----------------
 
   private setupInput() {
+    // アバターの自動行動を止めるため、画面のどこを触っても「操作あり」と数える
+    const wake = () => this.auto.notifyInput();
+    window.addEventListener('pointerdown', wake, { capture: true });
+    window.addEventListener('keydown', wake, { capture: true });
+    window.addEventListener('wheel', wake, { capture: true, passive: true });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('pointerdown', wake, { capture: true });
+      window.removeEventListener('keydown', wake, { capture: true });
+      window.removeEventListener('wheel', wake, { capture: true });
+    });
+
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.pointerDownAt = { x: p.x, y: p.y };
       this.lastPointer = { x: p.x, y: p.y };
@@ -366,6 +399,13 @@ export class RoomScene extends Phaser.Scene {
       this.avatar.standUp();
       return;
     }
+    if (!this.goSit(item)) this.ui.toast('近づけないみたい…');
+  }
+
+  /** 家具のそばまで歩いて座る。向かえたら true */
+  private goSit(item: PlacedFurniture): boolean {
+    const def = getDef(item.defId);
+    if (def.seatHeight === undefined) return false;
     const found = findPathAdjacent(
       this.avatar.tile,
       this.furniture.neighborTiles(item),
@@ -373,10 +413,7 @@ export class RoomScene extends Phaser.Scene {
       ROOM_H,
       this.blockedFn,
     );
-    if (!found) {
-      this.ui.toast('近づけないみたい…');
-      return;
-    }
+    if (!found) return false;
     if (this.avatar.sittingOn) this.avatar.standUp();
     this.avatar.walk(found.path, () => {
       const still = this.furniture.get(item.uid);
@@ -386,6 +423,37 @@ export class RoomScene extends Phaser.Scene {
       this.avatar.sit(still.uid, spot, (def.seatHeight ?? 16) + 6, facing.back, facing.flip, spot.depth);
       this.persist();
     });
+    return true;
+  }
+
+  // ---------------- 放置中の自動行動 ----------------
+
+  /** 近くの自由なマスへ歩き出す */
+  private wanderOnce(): boolean {
+    const from = this.avatar.tile;
+    for (let i = 0; i < 14; i++) {
+      const gx = Phaser.Math.Clamp(from.gx + Phaser.Math.Between(-4, 4), 0, ROOM_W - 1);
+      const gy = Phaser.Math.Clamp(from.gy + Phaser.Math.Between(-4, 4), 0, ROOM_H - 1);
+      if (gx === from.gx && gy === from.gy) continue;
+      if (this.furniture.isBlocked(gx, gy)) continue;
+      const path = findPath(from, { gx, gy }, ROOM_W, ROOM_H, this.blockedFn);
+      if (path && path.length > 0) {
+        if (this.avatar.sittingOn) this.avatar.standUp();
+        this.avatar.walk(path);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 座れる家具をひとつ選んで向かう */
+  private sitSomewhere(): boolean {
+    const seats = this.furniture.all.filter(
+      (i) => getDef(i.defId).seatHeight !== undefined && i.uid !== this.avatar.sittingOn,
+    );
+    if (seats.length === 0) return false;
+    const pick = seats[Phaser.Math.Between(0, seats.length - 1)];
+    return this.goSit(pick);
   }
 
   // ---------------- 選択 ----------------

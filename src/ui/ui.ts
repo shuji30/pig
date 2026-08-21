@@ -27,6 +27,7 @@ export interface UiHandlers {
   onSelAction(act: 'rotate' | 'move' | 'store' | 'deselect'): void;
   onPanelOpen(name: PanelName): void;
   onEmote(kind: MotionKind): void;
+  onToggleAuto(): void;
   onZoom(factor: number): void;
   onCenter(): void;
 }
@@ -65,6 +66,7 @@ export class Ui {
       btn.addEventListener('click', () => this.togglePanel(btn.dataset.panel as PanelName));
     });
     $('btn-help').addEventListener('click', () => this.togglePanel('help'));
+    $('btn-auto').addEventListener('click', () => this.handlers.onToggleAuto());
     $('btn-zoom-in').addEventListener('click', () => this.handlers.onZoom(1.15));
     $('btn-zoom-out').addEventListener('click', () => this.handlers.onZoom(1 / 1.15));
     $('btn-center').addEventListener('click', () => this.handlers.onCenter());
@@ -275,6 +277,13 @@ export class Ui {
   setInventory(inv: Record<string, number>) {
     this.inventory = inv;
     this.renderCatalog();
+  }
+
+  /** 「おまかせ」の状態を表示に反映する */
+  setAutoPlay(on: boolean) {
+    const btn = $('btn-auto');
+    btn.textContent = on ? 'おまかせ ON' : 'おまかせ OFF';
+    btn.classList.toggle('active', on);
   }
 
   /** 繰り返し再生中のモーションのボタンを光らせる */

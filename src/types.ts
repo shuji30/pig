@@ -64,6 +64,8 @@ export interface SaveData {
   version: number;
   floor: number;
   wall: number;
+  /** 放置中にアバターが自分で動くか */
+  autoPlay: boolean;
   items: PlacedFurniture[];
   /** しまってある家具（defId -> 個数） */
   inventory: Record<string, number>;

@@ -19,6 +19,7 @@ export function defaultSave(): SaveData {
     version: SAVE_VERSION,
     floor: 0,
     wall: 0,
+    autoPlay: true,
     items,
     inventory,
     avatar: {
