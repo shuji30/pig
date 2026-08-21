@@ -11,24 +11,33 @@ export class RoomView {
   private readonly floorG: Phaser.GameObjects.Graphics;
   private readonly wallG: Phaser.GameObjects.Graphics;
   private size = 12;
+  /** 部分的に張り替えた床。キーは "gx,gy" */
+  private patch: Record<string, number> = {};
 
   constructor(scene: Phaser.Scene) {
     this.wallG = scene.add.graphics().setDepth(-2000);
     this.floorG = scene.add.graphics().setDepth(-1900);
   }
 
-  /** @param size 一辺のマス数（部屋ごとに変わる） */
-  redraw(floorIdx: number, wallIdx: number, size: number) {
+  /**
+   * @param size 一辺のマス数（部屋ごとに変わる）
+   * @param patch 部分的に張り替えた床（"gx,gy" -> ゆかの番号）
+   */
+  redraw(floorIdx: number, wallIdx: number, size: number, patch: Record<string, number> = {}) {
     this.size = size;
+    this.patch = patch;
     this.drawWalls(WALL_STYLES[wallIdx % WALL_STYLES.length]);
     this.drawFloor(FLOOR_STYLES[floorIdx % FLOOR_STYLES.length]);
   }
 
-  private drawFloor(style: (typeof FLOOR_STYLES)[number]) {
+  private drawFloor(base: (typeof FLOOR_STYLES)[number]) {
     const g = this.floorG;
     g.clear();
     for (let gy = 0; gy < this.size; gy++) {
       for (let gx = 0; gx < this.size; gx++) {
+        // そのマスだけ張り替えてあれば、その柄で塗る
+        const patched = this.patch[`${gx},${gy}`];
+        const style = patched === undefined ? base : (FLOOR_STYLES[patched] ?? base);
         const p = gridToScreen(gx, gy);
         const pts = [
           { x: p.x, y: p.y },
@@ -42,6 +51,7 @@ export class RoomView {
         g.strokePoints(pts, true);
       }
     }
+    const style = base;
     // 床の外周
     const n = gridToScreen(0, 0);
     const e = gridToScreen(this.size, 0);

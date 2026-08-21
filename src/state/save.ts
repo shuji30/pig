@@ -3,6 +3,7 @@ import {
   CLOTH_COLORS,
   DEFAULT_ROOM_SIZE,
   EYE_COLORS,
+  FLOOR_STYLES,
   HAIR_COLORS,
   ROOM_SIZES,
   SAVE_KEY,
@@ -52,7 +53,22 @@ export function centerSpawn(size: number): { gx: number; gy: number } {
 }
 
 export function emptyRoom(name: string, size = DEFAULT_ROOM_SIZE): RoomData {
-  return { name, note: '', floor: 0, wall: 0, size, items: [], wallItems: [], spawn: centerSpawn(size) };
+  return {
+    name,
+    note: '',
+    floor: 0,
+    wall: 0,
+    size,
+    floorPatch: {},
+    items: [],
+    wallItems: [],
+    spawn: centerSpawn(size),
+  };
+}
+
+/** 床の張り替えのキー */
+export function tileKey(gx: number, gy: number): string {
+  return `${gx},${gy}`;
 }
 
 export function defaultSave(): SaveData {
@@ -105,6 +121,22 @@ interface LegacyFlatRoom {
 }
 
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** 部分的に張り替えた床を検証する。部屋の外や知らない番号は捨てる */
+function cleanFloorPatch(raw: unknown, size: number): Record<string, number> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, number> = {};
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    const m = /^(\d{1,2}),(\d{1,2})$/.exec(key);
+    if (!m) continue;
+    const gx = Number(m[1]);
+    const gy = Number(m[2]);
+    if (gx >= size || gy >= size) continue;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v >= FLOOR_STYLES.length) continue;
+    out[tileKey(gx, gy)] = v;
+  }
+  return out;
+}
 
 /** リカラーの指定を検証する。色でないものは無かったことにする */
 function cleanRecolor(raw: unknown): Recolor | undefined {
@@ -169,6 +201,7 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
     floor: r.floor ?? 0,
     wall: r.wall ?? 0,
     size,
+    floorPatch: cleanFloorPatch(r.floorPatch, size),
     items: cleanItems(r.items, size),
     wallItems: cleanWallItems(r.wallItems, size),
     spawn: {
@@ -187,6 +220,7 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
  * v2 → v3: 部屋の名前とひとことが増えた
  * v3 → v4: 部屋がひとつだけの前提をやめ、`rooms` / `currentRoom` に分けた
  * v4 → v5: 壁に掛ける家具（`RoomData.wallItems`）が増えた。既存の部屋は空で始まる
+ * v5 → v6: 床の部分張り替え（`RoomData.floorPatch`）が増えた。既存の部屋は空で始まる
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;

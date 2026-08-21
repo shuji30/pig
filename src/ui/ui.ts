@@ -3,6 +3,7 @@ import {
   CLOTH_COLORS,
   EYE_COLORS,
   FLOOR_STYLES,
+  ROOM_THEMES,
   HAIR_COLORS,
   HAIR_STYLE_NAMES,
   OUTFIT_NAMES,
@@ -57,6 +58,13 @@ export interface UiHandlers {
   onImportRoom(): void;
   onLeaveVisit(): void;
   onExpandRoom(): void;
+  /** テーマ（床と壁の組み合わせ）を選んだ */
+  onThemeChange(idx: number): void;
+  /** 塗るときの柄を選んだ */
+  onBrushChange(idx: number): void;
+  /** 床を1マスずつ塗るモードの切り替え */
+  onTogglePaint(): void;
+  onPaintAction(act: 'clear' | 'done'): void;
 }
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -72,6 +80,10 @@ export class Ui {
   private look!: AvatarLook;
   private floorIdx = 0;
   private wallIdx = 0;
+  /** いまの床と壁に一致するテーマ。無ければ -1 */
+  private themeIdx = -1;
+  /** 床を塗るときの柄 */
+  private brushIdx = 1;
   private pickedDefId: string | null = null;
   private coins = 0;
   private toastTimer?: number;
@@ -119,6 +131,11 @@ export class Ui {
     });
 
     $('btn-expand').addEventListener('click', () => this.handlers.onExpandRoom());
+    $('btn-paint').addEventListener('click', () => this.handlers.onTogglePaint());
+    $('paintbar').addEventListener('click', (e) => {
+      const act = (e.target as HTMLElement).dataset?.act;
+      if (act === 'clear' || act === 'done') this.handlers.onPaintAction(act);
+    });
 
     $('btn-reset').addEventListener('click', () => {
       if (window.confirm('部屋とアバターを最初の状態に戻します。よろしいですか？')) {
@@ -235,6 +252,11 @@ export class Ui {
     const body = $('room-body');
     body.innerHTML = '';
     body.appendChild(
+      this.chipRow('テーマ', ROOM_THEMES.map((t) => t.name), () => this.themeIdx, (i) =>
+        this.handlers.onThemeChange(i),
+      ),
+    );
+    body.appendChild(
       this.chipRow('ゆか', FLOOR_STYLES.map((s) => s.name), () => this.floorIdx, (i) => {
         this.floorIdx = i;
         this.refreshRoomPanel();
@@ -246,6 +268,13 @@ export class Ui {
         this.wallIdx = i;
         this.refreshRoomPanel();
         this.handlers.onWallChange(i);
+      }),
+    );
+    body.appendChild(
+      this.chipRow('ぬる柄', FLOOR_STYLES.map((s) => s.name), () => this.brushIdx, (i) => {
+        this.brushIdx = i;
+        this.refreshRoomPanel();
+        this.handlers.onBrushChange(i);
       }),
     );
   }
@@ -379,7 +408,21 @@ export class Ui {
   setStyles(floorIdx: number, wallIdx: number) {
     this.floorIdx = floorIdx;
     this.wallIdx = wallIdx;
+    this.themeIdx = ROOM_THEMES.findIndex((t) => t.floor === floorIdx && t.wall === wallIdx);
     this.refreshRoomPanel();
+  }
+
+  /** 床をぬるモードの表示。バーを出し、パネルを閉じる */
+  setBrush(idx: number) {
+    this.brushIdx = idx;
+    this.refreshRoomPanel();
+  }
+
+  setPainting(on: boolean, styleName: string) {
+    $('paintbar').hidden = !on;
+    $('paintbar-name').textContent = on ? `${styleName}でぬる` : 'ゆかをぬる';
+    $('btn-paint').classList.toggle('active', on);
+    if (on) this.closePanels();
   }
 
   setInventory(inv: Record<string, number>) {

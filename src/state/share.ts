@@ -20,9 +20,10 @@ const HASH_KEY = 'r';
  *   1: 部屋の広さを持たない（12×12 固定）
  *   2: 広さを持つが、壁に掛けるものを持たない
  *   3: 壁に掛けるものを持つが、リカラーを持たない
+ *   4: リカラーを持つが、床の部分張り替えを持たない
  */
-const FORMAT = 4;
-const READABLE_FORMATS = [1, 2, 3, 4];
+const FORMAT = 5;
+const READABLE_FORMATS = [1, 2, 3, 4, 5];
 /** 名前とひとことの上限。URL の長さと表示崩れを抑える */
 export const ROOM_NAME_MAX = 16;
 export const ROOM_NOTE_MAX = 40;
@@ -39,6 +40,8 @@ export interface SharedRoom {
   items: Array<{ defId: string; gx: number; gy: number; rot: Rotation; recolor?: Recolor }>;
   /** 壁に掛けてあるもの */
   wallItems: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number; recolor?: Recolor }>;
+  /** 部分的に張り替えた床（"gx,gy" -> ゆかの番号） */
+  floorPatch: Record<string, number>;
 }
 
 export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
@@ -56,6 +59,7 @@ export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
       rot: i.rot,
       ...(i.recolor ? { recolor: i.recolor } : {}),
     })),
+    floorPatch: { ...room.floorPatch },
     wallItems: room.wallItems.map((i) => ({
       defId: i.defId,
       side: i.side,
@@ -79,6 +83,7 @@ type Packed = [
   Array<PackedItem>, // 家具
   number, // 一辺のマス数（形式2で追加。末尾に足しているので形式1も読める）
   Array<PackedWall>, // 壁の家具（形式3で追加）[id, side(0=right/1=left), col, level]
+  Array<[number, number, number]>, // 床の張り替え（形式5で追加）[gx, gy, ゆかの番号]
 ];
 
 /**
@@ -100,7 +105,19 @@ function pack(r: SharedRoom): Packed {
     r.items.map((i) => packTail([i.defId, i.gx, i.gy, i.rot], i.recolor)),
     r.size,
     r.wallItems.map((i) => packTail([i.defId, i.side === 'left' ? 1 : 0, i.col, i.level], i.recolor)),
+    packPatch(r.floorPatch),
   ];
+}
+
+/** 床の張り替えを [gx, gy, 番号] の並びにする */
+function packPatch(patch: Record<string, number>): Array<[number, number, number]> {
+  const out: Array<[number, number, number]> = [];
+  for (const [key, v] of Object.entries(patch)) {
+    const m = /^(\d{1,2}),(\d{1,2})$/.exec(key);
+    if (!m) continue;
+    out.push([Number(m[1]), Number(m[2]), v]);
+  }
+  return out;
 }
 
 /** リカラーがあるときだけ色を足す（URL を無駄に伸ばさない） */
@@ -153,6 +170,7 @@ function unpack(raw: unknown): SharedRoom | null {
   const lookRaw = Array.isArray(raw[5]) ? raw[5] : [];
   const itemsRaw = Array.isArray(raw[6]) ? raw[6] : [];
   const wallRaw = Array.isArray(raw[8]) ? raw[8] : [];
+  const patchRaw = Array.isArray(raw[9]) ? raw[9] : [];
   // 知らない広さが来たら既定の広さに落とす（勝手に大きな部屋を作らせない）
   const size = ROOM_SIZES.includes(raw[7] as never) ? (raw[7] as number) : DEFAULT_ROOM_SIZE;
 
@@ -188,10 +206,23 @@ function unpack(raw: unknown): SharedRoom | null {
     if (wallItems.length >= MAX_ROOM_SIZE * WALL_LEVELS * 2) break;
   }
 
+  // 床の張り替え。部屋の外を指す座標は中へ収め、知らない番号は捨てる
+  const floorPatch: Record<string, number> = {};
+  for (const t of patchRaw) {
+    if (!Array.isArray(t)) continue;
+    const gx = num(t[0], 0, size - 1, -1);
+    const gy = num(t[1], 0, size - 1, -1);
+    if (gx < 0 || gy < 0) continue;
+    if (typeof t[2] !== 'number' || !Number.isInteger(t[2]) || t[2] < 0 || t[2] > 4) continue;
+    floorPatch[`${gx},${gy}`] = t[2];
+    if (Object.keys(floorPatch).length >= MAX_ROOM_SIZE * MAX_ROOM_SIZE) break;
+  }
+
   return {
     floor: num(raw[1], 0, 4, 0),
     wall: num(raw[2], 0, 4, 0),
     size,
+    floorPatch,
     roomName: text(raw[3], ROOM_NAME_MAX, 'だれかのおへや'),
     roomNote: text(raw[4], ROOM_NOTE_MAX),
     look: {

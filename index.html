@@ -122,6 +122,11 @@
         </div>
         <div id="room-body"></div>
         <div class="sizerow">
+          <div class="label">ゆかを1マスずつ</div>
+          <button id="btn-paint">えらんだ ゆかで ぬる</button>
+        </div>
+        <p class="note" id="paint-note">「ゆか」でえらんだ柄で、床を1マスずつ塗れます。</p>
+        <div class="sizerow">
           <div class="label">ひろさ <b id="room-size">12×12</b></div>
           <button id="btn-expand" class="primary">ひろげる</button>
         </div>
@@ -165,6 +170,8 @@
           <li>置いてある家具をクリックすると<b>移動・回転・しまう</b>ができます。</li>
           <li>「かぐ」の<b>かべ</b>タブから、窓・絵・時計などを<b>壁に掛けられます</b>（上下2段）。</li>
           <li>家具をクリックして<b>🎨 いろ</b>で、木地と張地の色を変えられます。</li>
+          <li>「もようがえ」の<b>テーマ</b>で床と壁をひとおしで替えられます。</li>
+          <li>「もようがえ」の<b>ぬる</b>で、床を1マスずつ張り替えられます。</li>
           <li>背景を<b>ドラッグ</b>でカメラ移動。<b>ホイール</b>か<b>2本指のピンチ</b>でズーム。</li>
           <li>下の入力欄でしゃべると<b>吹き出し</b>が出ます。</li>
           <li>「きもち」から<b>てをふる・おじぎ・よろこぶ</b>などのモーションが出せます。</li>
@@ -184,6 +191,13 @@
         <span id="placebar-name">家具</span>
         <button data-act="rotate">↻ 回転</button>
         <button data-act="cancel">やめる</button>
+      </div>
+
+      <!-- 床をぬるモードのバー -->
+      <div id="paintbar" class="ctxbar" hidden>
+        <span id="paintbar-name">ゆかをぬる</span>
+        <button data-act="clear">ぜんぶ もどす</button>
+        <button data-act="done">おわり</button>
       </div>
 
       <!-- 家具選択中のバー -->

@@ -9,6 +9,7 @@ const room = (size: number = DEFAULT_ROOM_SIZE): RoomData => ({
   floor: 0,
   wall: 0,
   size,
+  floorPatch: {},
   items: [],
   wallItems: [],
   spawn: { gx: 0, gy: 0 },

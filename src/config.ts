@@ -19,7 +19,7 @@ export const WALL_H = 96;
 export const WALK_SPEED = 110;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** はじめて遊ぶときの所持コイン */
 export const START_COINS = 420;
@@ -47,6 +47,18 @@ export const WALL_STYLES = [
   { name: 'ラベンダー', a: 0xe2dcf0, b: 0xd0c8e4 },
   { name: 'そら', a: 0xd6e9f7, b: 0xc2daec },
   { name: 'ピンク', a: 0xfadfe8, b: 0xefccd8 },
+];
+
+/**
+ * 部屋テーマ。床と壁の組み合わせをひとおしで替えられるようにしたもの。
+ * 「何を選べばいいか分からない」を解く入口で、そこから個別に触ってもらう。
+ */
+export const ROOM_THEMES = [
+  { name: 'ロココ', floor: 0, wall: 0 },
+  { name: 'サロン', floor: 1, wall: 2 },
+  { name: 'ローズ', floor: 2, wall: 4 },
+  { name: 'ミント', floor: 3, wall: 1 },
+  { name: 'よぞら', floor: 4, wall: 3 },
 ];
 
 /** きせかえ用のカラーパレット */

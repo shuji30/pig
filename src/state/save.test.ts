@@ -242,6 +242,44 @@ describe('版の移行', () => {
     expect(room.wallItems[0].recolor).toEqual({ color: '#cfa855' });
   });
 
+  it('床の張り替えは範囲と柄を検証して残す', () => {
+    put({
+      version: 6,
+      rooms: {
+        home: {
+          name: 'いえ', note: '', floor: 0, wall: 0, size: 12,
+          floorPatch: {
+            '3,4': 2,
+            '11,11': 1,
+            '12,0': 3, // 部屋の外 → 捨てる
+            '1,1': 99, // 知らない柄 → 捨てる
+            'x,y': 1, // 形が違う → 捨てる
+            '2,2': 1.5, // 整数でない → 捨てる
+          },
+          items: [], wallItems: [], spawn: { gx: 0, gy: 0 },
+        },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+    });
+    const patch = currentRoom(load()).floorPatch;
+    expect(patch).toEqual({ '3,4': 2, '11,11': 1 });
+  });
+
+  it('v5 の部屋には床の張り替えが無いので空で始まる', () => {
+    put({
+      version: 5,
+      rooms: {
+        home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [], wallItems: [], spawn: { gx: 0, gy: 0 } },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+    });
+    expect(currentRoom(load()).floorPatch).toEqual({});
+  });
+
   it('知らない未来の版は読まずに初期状態へ落とす', () => {
     put({ version: 99, rooms: {}, items: [], inventory: {}, avatar: {} });
     const s = load();

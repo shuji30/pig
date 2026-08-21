@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TILE_H, TILE_W, WALL_H } from '../config';
+import { FLOOR_STYLES, ROOM_THEMES, TILE_H, TILE_W, WALL_H } from '../config';
 import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
@@ -24,6 +24,7 @@ import {
   load,
   newUid,
   saveDebounced,
+  tileKey,
 } from '../state/save';
 import {
   encodeShared,
@@ -39,7 +40,7 @@ import {
 import type { AvatarLook, PlacedFurniture, PlacedWall, Recolor, RoomData, Rotation, SaveData } from '../types';
 import { Ui } from '../ui/ui';
 
-type Mode = 'idle' | 'place' | 'move' | 'wall-place' | 'wall-move';
+type Mode = 'idle' | 'place' | 'move' | 'wall-place' | 'wall-move' | 'paint';
 
 /** 訪問中だけ使う、その場かぎりの部屋 id */
 const VISIT_ROOM = 'visit';
@@ -83,6 +84,8 @@ export class RoomScene extends Phaser.Scene {
   private visiting = false;
   /** 訪問中に押された ❤️ の数。端末のなかだけの記録 */
   private likes = 0;
+  /** 床を塗るときの柄。部屋の基本の柄を選ぶと「もとに戻す」になる */
+  private brush = 1;
 
   /**
    * @param shared 共有 URL から読めた部屋。null なら自分の部屋を開く
@@ -109,6 +112,7 @@ export class RoomScene extends Phaser.Scene {
               floor: this.shared.floor,
               wall: this.shared.wall,
               size: this.shared.size,
+              floorPatch: { ...this.shared.floorPatch },
               items: placedFromShared(this.shared, newUid),
               wallItems: wallFromShared(this.shared, newUid),
               spawn: centerSpawn(this.shared.size),
@@ -122,7 +126,7 @@ export class RoomScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor('#2b2430');
     this.room = new RoomView(this);
-    this.room.redraw(this.cur.floor, this.cur.wall, this.size);
+    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
 
     this.furniture = new FurnitureLayer(this, this.size);
     this.furniture.setItems(this.cur.items);
@@ -143,7 +147,7 @@ export class RoomScene extends Phaser.Scene {
       },
       onFloorChange: (i) => {
         this.cur.floor = i;
-        this.room.redraw(this.cur.floor, this.cur.wall, this.size);
+        this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
         this.save.daily.restyled += 1;
         this.noteEdit();
         this.syncMissions();
@@ -151,7 +155,7 @@ export class RoomScene extends Phaser.Scene {
       },
       onWallChange: (i) => {
         this.cur.wall = i;
-        this.room.redraw(this.cur.floor, this.cur.wall, this.size);
+        this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
         this.save.daily.restyled += 1;
         this.noteEdit();
         this.syncMissions();
@@ -222,10 +226,33 @@ export class RoomScene extends Phaser.Scene {
       onLike: () => this.like(),
       onImportRoom: () => this.importVisitedRoom(),
       onExpandRoom: () => this.expand(),
+      onThemeChange: (i) => {
+        const theme = ROOM_THEMES[i];
+        if (!theme || this.visiting) return;
+        this.cur.floor = theme.floor;
+        this.cur.wall = theme.wall;
+        this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+        this.ui.setStyles(this.cur.floor, this.cur.wall);
+        this.save.daily.restyled += 1;
+        this.noteEdit();
+        this.syncMissions();
+        this.persist();
+        this.ui.toast(`テーマを ${theme.name} にしたよ`);
+      },
+      onBrushChange: (i) => {
+        this.brush = i;
+        if (this.mode === 'paint') this.ui.setPainting(true, FLOOR_STYLES[this.brush]?.name ?? 'ゆか');
+      },
+      onTogglePaint: () => this.togglePaint(),
+      onPaintAction: (act) => {
+        if (act === 'clear') this.clearFloorPatch();
+        else this.togglePaint(false);
+      },
       onLeaveVisit: () => leaveShare(),
       onPanelOpen: (name) => {
         this.deselect();
-        if (this.mode !== 'idle') this.cancelPlacing();
+        if (this.mode === 'paint') this.togglePaint(false);
+        else if (this.mode !== 'idle') this.cancelPlacing();
         // きせかえ・きもち はアバターが見えないと選べないので、上のほうへ寄せる
         if (name === 'wardrobe' || name === 'emote') this.focusAvatar();
         if (name === 'missions') this.syncMissions();
@@ -246,6 +273,9 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setAutoPlay(this.save.autoPlay);
     this.ui.setLook(this.save.avatar.look);
     this.ui.setStyles(this.cur.floor, this.cur.wall);
+    // 基本の柄と違う柄を初期のブラシにしておく（塗ってすぐ見て分かるように）
+    this.brush = this.cur.floor === 1 ? 0 : 1;
+    this.ui.setBrush(this.brush);
     this.syncRoomSize();
     this.ui.setInventory(this.save.inventory);
     this.ui.setCoins(this.save.coins);
@@ -313,7 +343,7 @@ export class RoomScene extends Phaser.Scene {
     this.furniture.setItems(this.cur.items);
     this.walls.setSize(this.size);
     this.walls.setItems(this.cur.wallItems);
-    this.room.redraw(this.cur.floor, this.cur.wall, this.size);
+    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
     this.avatar.refreshDepth();
     this.userZoomed = false;
     this.applyFitZoom();
@@ -413,6 +443,7 @@ export class RoomScene extends Phaser.Scene {
       floor: this.shared.floor,
       wall: this.shared.wall,
       size: this.shared.size,
+      floorPatch: { ...this.shared.floorPatch },
       items: placedFromShared(this.shared, newUid),
       wallItems: wallFromShared(this.shared, newUid),
       spawn: centerSpawn(this.shared.size),
@@ -548,7 +579,8 @@ export class RoomScene extends Phaser.Scene {
       this.pinching = false;
       this.pinch = null;
       // タッチでは pointermove が来ないことがあるので、押した位置でゴーストを更新する
-      if (this.mode === 'wall-place' || this.mode === 'wall-move') this.updateWallGhost(p.worldX, p.worldY);
+      if (this.mode === 'paint') this.paintTile(screenToTile(p.worldX, p.worldY));
+      else if (this.mode === 'wall-place' || this.mode === 'wall-move') this.updateWallGhost(p.worldX, p.worldY);
       else if (this.mode !== 'idle') this.updateGhost(screenToTile(p.worldX, p.worldY));
     });
 
@@ -556,6 +588,13 @@ export class RoomScene extends Phaser.Scene {
       const downs = this.downPointers();
       if (downs.length >= 2) {
         this.updatePinch(downs);
+        return;
+      }
+      // 塗るモードでは、指を動かしている間ずっと塗る（カメラは動かさない）
+      if (this.mode === 'paint') {
+        if (p.isDown) this.paintTile(screenToTile(p.worldX, p.worldY));
+        this.drawHover(screenToTile(p.worldX, p.worldY));
+        this.lastPointer = { x: p.x, y: p.y };
         return;
       }
       if (p.isDown && this.pointerDownAt) {
@@ -614,7 +653,8 @@ export class RoomScene extends Phaser.Scene {
     });
     kb?.on('keydown-ESC', () => {
       if (this.ui.isTyping) return;
-      if (this.mode !== 'idle') this.cancelPlacing();
+      if (this.mode === 'paint') this.togglePaint(false);
+      else if (this.mode !== 'idle') this.cancelPlacing();
       else this.deselect();
     });
   }
@@ -653,6 +693,7 @@ export class RoomScene extends Phaser.Scene {
   private handleClick(worldX: number, worldY: number) {
     const tile = screenToTile(worldX, worldY);
 
+    if (this.mode === 'paint') return; // pointerdown/move で塗っているので何もしない
     if (this.mode === 'wall-place' || this.mode === 'wall-move') {
       this.commitWallPlacement(worldX, worldY);
       return;
@@ -1031,6 +1072,54 @@ export class RoomScene extends Phaser.Scene {
     this.persist();
   }
 
+  // ---------------- 床をぬる ----------------
+
+  /** 床を1マスずつ塗るモードの出入り */
+  private togglePaint(next?: boolean) {
+    if (this.visiting) return;
+    const on = next ?? this.mode !== 'paint';
+    if (on) {
+      this.deselect();
+      if (this.mode !== 'idle' && this.mode !== 'paint') this.cancelPlacing();
+      this.mode = 'paint';
+    } else if (this.mode === 'paint') {
+      this.mode = 'idle';
+    }
+    this.hoverG.clear();
+    this.ui.setPainting(this.mode === 'paint', FLOOR_STYLES[this.brush]?.name ?? 'ゆか');
+    this.setHint();
+  }
+
+  /** そのマスを「ぬる柄」にする。部屋の基本の柄を選んでいれば、もとに戻す */
+  private paintTile(tile: Tile) {
+    if (tile.gx < 0 || tile.gy < 0 || tile.gx >= this.size || tile.gy >= this.size) return;
+    const key = tileKey(tile.gx, tile.gy);
+    const before = this.cur.floorPatch[key];
+    if (this.brush === this.cur.floor) {
+      if (before === undefined) return; // すでに基本の柄
+      delete this.cur.floorPatch[key];
+    } else {
+      if (before === this.brush) return; // もう同じ柄
+      this.cur.floorPatch[key] = this.brush;
+    }
+    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+    this.save.daily.restyled += 1;
+    this.noteEdit();
+    this.persist();
+  }
+
+  private clearFloorPatch() {
+    if (Object.keys(this.cur.floorPatch).length === 0) {
+      this.ui.toast('張り替えているマスはないよ');
+      return;
+    }
+    this.cur.floorPatch = {};
+    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+    this.noteEdit();
+    this.persist();
+    this.ui.toast('ゆかをぜんぶ もどしたよ');
+  }
+
   // ---------------- リカラー ----------------
 
   /** 選んでいる家具（床でも壁でも）の色を変えるパネルを開く */
@@ -1274,6 +1363,7 @@ export class RoomScene extends Phaser.Scene {
     else if (this.mode === 'move') this.ui.setHint('移動先をクリック（Rで回転 / Escでやめる）');
     else if (this.mode === 'wall-place' || this.mode === 'wall-move')
       this.ui.setHint('かべをクリックで かける（Escでやめる）');
+    else if (this.mode === 'paint') this.ui.setHint('床をなぞると1マスずつ張り替わるよ（Escでやめる）');
     else if (this.visiting) this.ui.setHint('ここは ひとの おへや。歩いたり すわったりできるよ');
     else this.ui.setHint('床をクリックして歩こう。家具をクリックすると操作できるよ');
   }

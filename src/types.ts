@@ -130,6 +130,11 @@ export interface RoomData {
   wall: number;
   /** 一辺のマス数（正方形） */
   size: number;
+  /**
+   * 部分的に張り替えた床。キーは "gx,gy"、値は `FLOOR_STYLES` の番号。
+   * 部屋の広さを変えてもキーがずれないよう、番号ではなく座標で持つ。
+   */
+  floorPatch: Record<string, number>;
   items: PlacedFurniture[];
   /** 壁に掛けてあるもの */
   wallItems: PlacedWall[];

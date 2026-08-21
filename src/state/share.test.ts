@@ -28,6 +28,7 @@ const sample: SharedRoom = {
     { defId: 'window', side: 'right', col: 5, level: 0 },
     { defId: 'clock', side: 'left', col: 2, level: 1 },
   ],
+  floorPatch: { '3,3': 2, '4,3': 2, '3,4': 4 },
 };
 
 /** 色を変えたものを混ぜた部屋 */
@@ -97,6 +98,19 @@ describe('encodeShared / decodeShared', () => {
     const room = await decodeShared(token);
     expect(room?.size).toBe(16);
     expect(room?.wallItems).toEqual([]);
+    expect(room?.floorPatch).toEqual({});
+  });
+
+  it('床の張り替えを持たない形式4の URL も読める', async () => {
+    const token = packedToken([4, 0, 0, 'ゆかなし', '', [], [], 12, [['clock', 0, 1, 0]]]);
+    const room = await decodeShared(token);
+    expect(room?.wallItems).toHaveLength(1);
+    expect(room?.floorPatch).toEqual({});
+  });
+
+  it('床の張り替えも往復する', async () => {
+    const token = await encodeShared(sample);
+    expect((await decodeShared(token))?.floorPatch).toEqual(sample.floorPatch);
   });
 
   it('リカラーも往復する', async () => {
@@ -220,7 +234,7 @@ describe('他人が作った URL の検証', () => {
   });
 
   it('形式が違えば読まない', async () => {
-    expect(await decodePacked([9, 0, 0, 'x', '', [], [], 12, []])).toBeNull();
+    expect(await decodePacked([9, 0, 0, 'x', '', [], [], 12, [], []])).toBeNull();
     expect(await decodePacked({ floor: 1 })).toBeNull();
     expect(await decodePacked([3, 0, 0])).toBeNull();
   });
@@ -246,6 +260,22 @@ describe('他人が作った URL の検証', () => {
     expect(room?.items[0].recolor).toBeUndefined();
     expect(room?.items[1].recolor).toEqual({ color: '#8f7a68' });
     expect(room?.items[2].recolor).toEqual({ accent: '#ffc75f' });
+  });
+
+  it('床の張り替えは部屋の中へ収め、知らない柄は捨てる', async () => {
+    const room = await decodePacked([
+      5, 0, 0, 'x', '', [], [], 12, [],
+      [
+        [3, 4, 2],
+        [99, 99, 1], // 部屋の外 → 隅へ寄る
+        [1, 1, 99], // 知らない柄 → 捨てる
+        [2, 2, -1], // 同上
+      ],
+    ]);
+    expect(room?.floorPatch['3,4']).toBe(2);
+    expect(room?.floorPatch['11,11']).toBe(1);
+    expect(room?.floorPatch['1,1']).toBeUndefined();
+    expect(room?.floorPatch['2,2']).toBeUndefined();
   });
 
   it('壁の列と段も範囲に収める', async () => {

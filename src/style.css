@@ -844,3 +844,29 @@ button.danger {
   box-shadow: var(--shadow);
   cursor: pointer;
 }
+
+/* ---------- ゆかをぬる ---------- */
+#btn-paint {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 1;
+  padding: 9px 12px;
+  border: 2px solid #eadfe4;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#btn-paint.active {
+  background: var(--pink);
+  border-color: var(--pink-dark);
+  color: #fff;
+}
+
+#paint-note {
+  margin-top: 6px;
+}
