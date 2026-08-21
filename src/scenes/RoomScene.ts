@@ -372,7 +372,8 @@ export class RoomScene extends Phaser.Scene {
     const m = metricsSummary();
     this.ui.setMetricsLine(
       `記録（この端末だけ）：あそんだ日 ${m.playDays}日 / 部屋をいじった日 ${m.editDays}日 / ` +
-        `みせた ${m.totals.share}回 / ひとの部屋にいった ${m.totals.shareOpen}回`,
+        `みせた ${m.totals.share}回 / ひとの部屋にいった ${m.totals.shareOpen}回` +
+        `　｜　build ${__BUILD_STAMP__}`,
     );
   }
 
