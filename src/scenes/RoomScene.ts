@@ -2,12 +2,15 @@ import Phaser from 'phaser';
 import { TILE_H, TILE_W, WALL_H } from '../config';
 import { depthFor, gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
+import { screenToWallSlot, type WallSlot } from '../core/wall';
 import { getDef } from '../data/furniture';
 import type { MotionKind } from '../data/motions';
 import { AutoPlay } from '../entities/AutoPlay';
 import { Avatar } from '../entities/Avatar';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
+import { WallLayer } from '../entities/WallLayer';
 import { getFurnitureTexture } from '../render/furnitureTexture';
+import { getWallTexture } from '../render/wallTexture';
 import { RoomView } from '../render/room';
 import { saveRoomPng } from '../render/snapshot';
 import { buy, claimDailyBonus, claimMissions, expandRoom, missionViews, nextRoomStep, sell } from '../state/economy';
@@ -30,12 +33,13 @@ import {
   ROOM_NOTE_MAX,
   sharedFromRoom,
   shareUrlFor,
+  wallFromShared,
   type SharedRoom,
 } from '../state/share';
-import type { AvatarLook, PlacedFurniture, RoomData, Rotation, SaveData } from '../types';
+import type { AvatarLook, PlacedFurniture, PlacedWall, RoomData, Rotation, SaveData } from '../types';
 import { Ui } from '../ui/ui';
 
-type Mode = 'idle' | 'place' | 'move';
+type Mode = 'idle' | 'place' | 'move' | 'wall-place' | 'wall-move';
 
 /** 訪問中だけ使う、その場かぎりの部屋 id */
 const VISIT_ROOM = 'visit';
@@ -49,6 +53,7 @@ export class RoomScene extends Phaser.Scene {
   private save!: SaveData;
   private room!: RoomView;
   private furniture!: FurnitureLayer;
+  private walls!: WallLayer;
   private avatar!: Avatar;
   private ui!: Ui;
   private auto!: AutoPlay;
@@ -63,6 +68,8 @@ export class RoomScene extends Phaser.Scene {
   private placeRot: Rotation = 0;
   private moveUid: string | null = null;
   private selectedUid: string | null = null;
+  /** 壁のほうで選ばれているもの。床の選択とは排他 */
+  private selectedWallUid: string | null = null;
 
   private userZoomed = false;
   /** 2本指の間隔と中点。ピンチ中だけ値が入る */
@@ -103,6 +110,7 @@ export class RoomScene extends Phaser.Scene {
               wall: this.shared.wall,
               size: this.shared.size,
               items: placedFromShared(this.shared, newUid),
+              wallItems: wallFromShared(this.shared, newUid),
               spawn: centerSpawn(this.shared.size),
             },
           },
@@ -118,6 +126,8 @@ export class RoomScene extends Phaser.Scene {
 
     this.furniture = new FurnitureLayer(this, this.size);
     this.furniture.setItems(this.cur.items);
+    this.walls = new WallLayer(this, this.size);
+    this.walls.setItems(this.cur.wallItems);
 
     this.hoverG = this.add.graphics().setDepth(-1700);
     this.selG = this.add.graphics().setDepth(-1690);
@@ -127,7 +137,10 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.setDepthResolver((box) => this.furniture.depthAt(box));
 
     this.ui = new Ui(this, {
-      onPickFurniture: (defId) => this.enterPlaceMode(defId),
+      onPickFurniture: (defId) => {
+        if (getDef(defId).category === 'wall') this.enterWallPlaceMode(defId);
+        else this.enterPlaceMode(defId);
+      },
       onFloorChange: (i) => {
         this.cur.floor = i;
         this.room.redraw(this.cur.floor, this.cur.wall, this.size);
@@ -297,6 +310,8 @@ export class RoomScene extends Phaser.Scene {
     // 広さが変わったので、床・占有マス・カメラを作り直す
     this.furniture.setSize(this.size);
     this.furniture.setItems(this.cur.items);
+    this.walls.setSize(this.size);
+    this.walls.setItems(this.cur.wallItems);
     this.room.redraw(this.cur.floor, this.cur.wall, this.size);
     this.avatar.refreshDepth();
     this.userZoomed = false;
@@ -398,6 +413,7 @@ export class RoomScene extends Phaser.Scene {
       wall: this.shared.wall,
       size: this.shared.size,
       items: placedFromShared(this.shared, newUid),
+      wallItems: wallFromShared(this.shared, newUid),
       spawn: centerSpawn(this.shared.size),
     };
     own.currentRoom = HOME_ROOM;
@@ -531,7 +547,8 @@ export class RoomScene extends Phaser.Scene {
       this.pinching = false;
       this.pinch = null;
       // タッチでは pointermove が来ないことがあるので、押した位置でゴーストを更新する
-      if (this.mode !== 'idle') this.updateGhost(screenToTile(p.worldX, p.worldY));
+      if (this.mode === 'wall-place' || this.mode === 'wall-move') this.updateWallGhost(p.worldX, p.worldY);
+      else if (this.mode !== 'idle') this.updateGhost(screenToTile(p.worldX, p.worldY));
     });
 
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
@@ -550,6 +567,10 @@ export class RoomScene extends Phaser.Scene {
         }
       }
       this.lastPointer = { x: p.x, y: p.y };
+      if (this.mode === 'wall-place' || this.mode === 'wall-move') {
+        this.updateWallGhost(p.worldX, p.worldY);
+        return;
+      }
       const tile = screenToTile(p.worldX, p.worldY);
       if (this.mode === 'idle') this.drawHover(tile);
       else this.updateGhost(tile);
@@ -585,6 +606,8 @@ export class RoomScene extends Phaser.Scene {
     const kb = this.input.keyboard;
     kb?.on('keydown-R', () => {
       if (this.ui.isTyping) return;
+      // 壁に掛けるものは向きが場所で決まるので回さない
+      if (this.mode === 'wall-place' || this.mode === 'wall-move') return;
       if (this.mode !== 'idle') this.rotatePlacing();
       else if (this.selectedUid) this.rotateSelected();
     });
@@ -629,6 +652,10 @@ export class RoomScene extends Phaser.Scene {
   private handleClick(worldX: number, worldY: number) {
     const tile = screenToTile(worldX, worldY);
 
+    if (this.mode === 'wall-place' || this.mode === 'wall-move') {
+      this.commitWallPlacement(worldX, worldY);
+      return;
+    }
     if (this.mode !== 'idle') {
       this.commitPlacement(tile);
       return;
@@ -644,6 +671,13 @@ export class RoomScene extends Phaser.Scene {
         return;
       }
       this.onFurnitureClick(hit);
+      return;
+    }
+
+    // 床に何も無ければ壁を見る（壁は床より奥なので、床の家具に負けてよい）
+    const wallHit = this.walls.pickAt(worldX, worldY);
+    if (wallHit) {
+      this.selectWall(wallHit.uid);
       return;
     }
 
@@ -741,6 +775,7 @@ export class RoomScene extends Phaser.Scene {
 
   private select(uid: string) {
     if (this.visiting) return; // 訪問中は人の部屋をいじれない
+    this.deselectWall();
     this.selectedUid = uid;
     this.furniture.setHighlight(uid);
     const item = this.furniture.get(uid);
@@ -751,8 +786,164 @@ export class RoomScene extends Phaser.Scene {
   private deselect() {
     this.selectedUid = null;
     this.furniture.setHighlight(null);
+    this.deselectWall();
     this.ui.showSelBar(null);
     this.selG.clear();
+  }
+
+  // ---------------- 壁のもの ----------------
+
+  private selectWall(uid: string) {
+    if (this.visiting) return;
+    // 床の選択と混ざらないように、先に片づける
+    this.selectedUid = null;
+    this.furniture.setHighlight(null);
+    this.selectedWallUid = uid;
+    this.walls.setHighlight(uid);
+    const item = this.walls.get(uid);
+    this.ui.showSelBar(item ? getDef(item.defId).name : null, { wall: true });
+    this.drawWallSelection(item ?? null);
+  }
+
+  private deselectWall() {
+    if (this.selectedWallUid === null) return;
+    this.selectedWallUid = null;
+    this.walls.setHighlight(null);
+    this.selG.clear();
+  }
+
+  /** 選択中の壁のものを枠で示す */
+  private drawWallSelection(item: PlacedWall | null) {
+    const g = this.selG;
+    g.clear();
+    if (!item) return;
+    const pts = this.walls.slotOutline(getDef(item.defId), item);
+    g.fillStyle(0xffd166, 0.18);
+    g.fillPoints(pts, true);
+    g.lineStyle(2, 0xffc93c, 0.95);
+    g.strokePoints(pts, true);
+  }
+
+  private enterWallPlaceMode(defId: string) {
+    if ((this.save.inventory[defId] ?? 0) <= 0) return;
+    this.deselect();
+    this.mode = 'wall-place';
+    this.placeDefId = defId;
+    this.moveUid = null;
+    this.ui.setPicked(defId);
+    this.ui.showPlaceBar(getDef(defId).name, { wall: true });
+    this.ui.closePanels();
+    this.hoverG.clear();
+    this.setHint();
+    this.buildWallGhost(defId, 'right');
+  }
+
+  private enterWallMoveMode(uid: string) {
+    const item = this.walls.get(uid);
+    if (!item) return;
+    this.deselect();
+    this.mode = 'wall-move';
+    this.moveUid = uid;
+    this.placeDefId = item.defId;
+    this.walls.setVisible(uid, false);
+    this.ui.showPlaceBar(`${getDef(item.defId).name}を移動`, { wall: true });
+    this.hoverG.clear();
+    this.setHint();
+    this.buildWallGhost(item.defId, item.side);
+  }
+
+  private wallGhostSide: 'right' | 'left' = 'right';
+
+  private buildWallGhost(defId: string, side: 'right' | 'left') {
+    const def = getDef(defId);
+    const tex = getWallTexture(this, def, side);
+    this.wallGhostSide = side;
+    this.ghost?.destroy();
+    this.ghost = this.add
+      .image(0, 0, tex.key)
+      .setOrigin(tex.originX, tex.originY)
+      .setAlpha(0.7)
+      .setDepth(9_000_001);
+  }
+
+  private wallSlot: WallSlot | null = null;
+  private wallOk = false;
+
+  /** 壁のゴーストを、いま指しているスロットへ合わせる */
+  private updateWallGhost(worldX: number, worldY: number) {
+    if (!this.placeDefId) return;
+    const def = getDef(this.placeDefId);
+    const origin = gridToScreen(0, 0);
+    const raw = screenToWallSlot(worldX - origin.x, worldY - origin.y, this.size);
+    const g = this.ghostG;
+    g.clear();
+    g.setDepth(-1955);
+    if (!raw) {
+      this.wallSlot = null;
+      this.wallOk = false;
+      this.ghost?.setVisible(false);
+      return;
+    }
+    const slot = this.walls.fit(def, raw);
+    this.wallSlot = slot;
+    this.wallOk = this.walls.canPlace(def, slot, this.moveUid ?? undefined);
+
+    if (slot.side !== this.wallGhostSide) this.buildWallGhost(def.id, slot.side);
+    const anchor = this.walls.slotAnchor(slot.side, slot.col, slot.level);
+    this.ghost
+      ?.setVisible(true)
+      .setPosition(anchor.x, anchor.y - def.height / 2)
+      .setTint(this.wallOk ? 0xffffff : 0xff8888)
+      .setDepth(9_000_001);
+
+    const pts = this.walls.slotOutline(def, slot);
+    const color = this.wallOk ? 0x6fe08a : 0xff6b6b;
+    g.fillStyle(color, 0.28);
+    g.fillPoints(pts, true);
+    g.lineStyle(2, color, 0.9);
+    g.strokePoints(pts, true);
+  }
+
+  private commitWallPlacement(worldX: number, worldY: number) {
+    if (!this.placeDefId) return;
+    this.updateWallGhost(worldX, worldY);
+    const slot = this.wallSlot;
+    if (!slot || !this.wallOk) {
+      this.ui.toast('ここには掛けられないよ');
+      return;
+    }
+    if (this.mode === 'wall-move' && this.moveUid) {
+      const uid = this.moveUid;
+      this.walls.update(uid, slot);
+      this.walls.setVisible(uid, true);
+      this.noteEdit();
+      this.cancelPlacing();
+      this.selectWall(uid);
+      this.persist();
+      return;
+    }
+    const defId = this.placeDefId;
+    this.walls.add({ uid: newUid(), defId, side: slot.side, col: slot.col, level: slot.level });
+    this.save.inventory[defId] = Math.max(0, (this.save.inventory[defId] ?? 0) - 1);
+    this.save.daily.placed += 1;
+    this.noteEdit();
+    this.ui.setInventory(this.save.inventory);
+    this.syncMissions();
+    this.persist();
+    if ((this.save.inventory[defId] ?? 0) <= 0) this.cancelPlacing();
+  }
+
+  private storeWallItem(uid: string) {
+    const removed = this.walls.remove(uid);
+    if (!removed) return;
+    this.save.inventory[removed.defId] = (this.save.inventory[removed.defId] ?? 0) + 1;
+    this.save.daily.stored += 1;
+    this.noteEdit();
+    this.ui.setInventory(this.save.inventory);
+    this.syncMissions();
+    this.ui.toast(`${getDef(removed.defId).name}をしまったよ`);
+    this.deselect();
+    this.persist();
   }
 
   /** 選択中の家具の占有範囲を床に示す */
@@ -774,6 +965,14 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private selAction(act: 'rotate' | 'move' | 'store' | 'deselect') {
+    // 壁のものが選ばれているときは、そちらを操作する（回転は無い）
+    const wallUid = this.selectedWallUid;
+    if (wallUid) {
+      if (act === 'move') this.enterWallMoveMode(wallUid);
+      else if (act === 'store') this.storeWallItem(wallUid);
+      else if (act === 'deselect') this.deselect();
+      return;
+    }
     const uid = this.selectedUid;
     if (!uid) return;
     switch (act) {
@@ -861,6 +1060,7 @@ export class RoomScene extends Phaser.Scene {
 
   private cancelPlacing() {
     if (this.mode === 'move' && this.moveUid) this.furniture.setVisible(this.moveUid, true);
+    if (this.mode === 'wall-move' && this.moveUid) this.walls.setVisible(this.moveUid, true);
     this.mode = 'idle';
     this.placeDefId = null;
     this.moveUid = null;
@@ -1030,6 +1230,8 @@ export class RoomScene extends Phaser.Scene {
   private setHint() {
     if (this.mode === 'place') this.ui.setHint('置きたい場所をクリック（Rで回転 / Escでやめる）');
     else if (this.mode === 'move') this.ui.setHint('移動先をクリック（Rで回転 / Escでやめる）');
+    else if (this.mode === 'wall-place' || this.mode === 'wall-move')
+      this.ui.setHint('かべをクリックで かける（Escでやめる）');
     else if (this.visiting) this.ui.setHint('ここは ひとの おへや。歩いたり すわったりできるよ');
     else this.ui.setHint('床をクリックして歩こう。家具をクリックすると操作できるよ');
   }
@@ -1037,6 +1239,7 @@ export class RoomScene extends Phaser.Scene {
   private persist() {
     if (this.visiting) return; // 人の部屋を自分のセーブに書き込まない
     this.cur.items = this.furniture.all.map((i) => ({ ...i }));
+    this.cur.wallItems = this.walls.all.map((i) => ({ ...i }));
     this.cur.spawn = { gx: this.avatar.tile.gx, gy: this.avatar.tile.gy };
     saveDebounced(this.save);
   }

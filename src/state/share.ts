@@ -10,12 +10,18 @@ import {
 } from '../config';
 import { findDef } from '../data/furniture';
 import { rotatedSize } from '../core/iso';
-import type { AvatarLook, PlacedFurniture, RoomData, Rotation } from '../types';
+import { WALL_LEVELS } from '../core/wall';
+import type { AvatarLook, PlacedFurniture, PlacedWall, RoomData, Rotation } from '../types';
 
 /** URL のハッシュに使う名前。`#r=...` の形で載る */
 const HASH_KEY = 'r';
-/** いまの形式。1 は部屋の広さを持たない（12×12 固定）ので、読むときだけ面倒を見る */
-const FORMAT = 2;
+/**
+ * いまの形式。古いものも読めるようにしておく。
+ *   1: 部屋の広さを持たない（12×12 固定）
+ *   2: 広さを持つが、壁に掛けるものを持たない
+ */
+const FORMAT = 3;
+const READABLE_FORMATS = [1, 2, 3];
 /** 名前とひとことの上限。URL の長さと表示崩れを抑える */
 export const ROOM_NAME_MAX = 16;
 export const ROOM_NOTE_MAX = 40;
@@ -30,6 +36,8 @@ export interface SharedRoom {
   roomNote: string;
   look: AvatarLook;
   items: Array<{ defId: string; gx: number; gy: number; rot: Rotation }>;
+  /** 壁に掛けてあるもの */
+  wallItems: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number }>;
 }
 
 export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
@@ -41,6 +49,7 @@ export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
     roomNote: room.note,
     look,
     items: room.items.map((i) => ({ defId: i.defId, gx: i.gx, gy: i.gy, rot: i.rot })),
+    wallItems: room.wallItems.map((i) => ({ defId: i.defId, side: i.side, col: i.col, level: i.level })),
   };
 }
 
@@ -56,6 +65,7 @@ type Packed = [
   [string, string, string, number, string, string, number, string, string], // アバター
   Array<[string, number, number, number]>, // 家具
   number, // 一辺のマス数（形式2で追加。末尾に足しているので形式1も読める）
+  Array<[string, number, number, number]>, // 壁の家具（形式3で追加）[id, side(0=right/1=left), col, level]
 ];
 
 function pack(r: SharedRoom): Packed {
@@ -69,6 +79,7 @@ function pack(r: SharedRoom): Packed {
     [l.name, l.skin, l.hair, l.hairStyle, l.eyes, l.shirt, l.outfit === 'dress' ? 1 : 0, l.pants, l.shoes],
     r.items.map((i) => [i.defId, i.gx, i.gy, i.rot]),
     r.size,
+    r.wallItems.map((i) => [i.defId, i.side === 'left' ? 1 : 0, i.col, i.level]),
   ];
 }
 
@@ -102,10 +113,10 @@ function color(v: unknown, palette: readonly string[]): string {
 
 function unpack(raw: unknown): SharedRoom | null {
   if (!Array.isArray(raw) || raw.length < 7) return null;
-  // 形式1（部屋の広さを持たない）も読めるようにしておく
-  if (raw[0] !== FORMAT && raw[0] !== 1) return null;
+  if (typeof raw[0] !== 'number' || !READABLE_FORMATS.includes(raw[0])) return null;
   const lookRaw = Array.isArray(raw[5]) ? raw[5] : [];
   const itemsRaw = Array.isArray(raw[6]) ? raw[6] : [];
+  const wallRaw = Array.isArray(raw[8]) ? raw[8] : [];
   // 知らない広さが来たら既定の広さに落とす（勝手に大きな部屋を作らせない）
   const size = ROOM_SIZES.includes(raw[7] as never) ? (raw[7] as number) : DEFAULT_ROOM_SIZE;
 
@@ -120,6 +131,22 @@ function unpack(raw: unknown): SharedRoom | null {
     const gy = num(it[2], 0, Math.max(0, size - d), 0);
     items.push({ defId: def.id, gx, gy, rot });
     if (items.length >= MAX_ROOM_SIZE * MAX_ROOM_SIZE) break; // 異常に長い URL への保険
+  }
+
+  const wallItems: SharedRoom['wallItems'] = [];
+  for (const it of wallRaw) {
+    if (!Array.isArray(it) || typeof it[0] !== 'string') continue;
+    const def = findDef(it[0]);
+    if (!def || def.category !== 'wall') continue;
+    const cols = def.size[0];
+    if (cols > size) continue;
+    wallItems.push({
+      defId: def.id,
+      side: it[1] === 1 ? 'left' : 'right',
+      col: num(it[2], 0, Math.max(0, size - cols), 0),
+      level: num(it[3], 0, WALL_LEVELS - 1, 0),
+    });
+    if (wallItems.length >= MAX_ROOM_SIZE * WALL_LEVELS * 2) break;
   }
 
   return {
@@ -140,12 +167,24 @@ function unpack(raw: unknown): SharedRoom | null {
       shoes: color(lookRaw[8], CLOTH_COLORS),
     },
     items,
+    wallItems,
   };
 }
 
 /** 検証を通した共有データから、部屋に置ける家具の配列を作る */
 export function placedFromShared(shared: SharedRoom, newUid: () => string): PlacedFurniture[] {
   return shared.items.map((i) => ({ uid: newUid(), defId: i.defId, gx: i.gx, gy: i.gy, rot: i.rot }));
+}
+
+/** 同じく、壁に掛ける家具の配列 */
+export function wallFromShared(shared: SharedRoom, newUid: () => string): PlacedWall[] {
+  return shared.wallItems.map((i) => ({
+    uid: newUid(),
+    defId: i.defId,
+    side: i.side,
+    col: i.col,
+    level: i.level,
+  }));
 }
 
 // ---------------- 圧縮と base64url ----------------

@@ -19,7 +19,7 @@ export const WALL_H = 96;
 export const WALK_SPEED = 110;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** はじめて遊ぶときの所持コイン */
 export const START_COINS = 420;

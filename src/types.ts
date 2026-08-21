@@ -13,7 +13,17 @@ export type FurnitureShape =
   | 'tv'
   | 'table';
 
-export type FurnitureCategory = 'seat' | 'table' | 'storage' | 'deco' | 'floor';
+export type FurnitureCategory = 'seat' | 'table' | 'storage' | 'deco' | 'floor' | 'wall';
+
+/** 壁に掛ける家具の見た目 */
+export type WallShape =
+  | 'window' // 窓（外の空が見える）
+  | 'painting' // 絵
+  | 'mirror'
+  | 'clock'
+  | 'sconce' // 壁付きの燭台
+  | 'shelf' // 壁棚
+  | 'tapestry'; // 壁掛けの布
 
 /** 家具のめずらしさ。価格帯とショップの並び順に使う */
 export type Rarity = 'common' | 'uncommon' | 'rare';
@@ -35,9 +45,26 @@ export interface FurnitureDef {
   walkable?: boolean;
   /** 座れる家具なら、座ったときのアバターの持ち上げ量(px) */
   seatHeight?: number;
+  /**
+   * 壁に掛ける家具のときだけ入る。
+   * このとき `size[0]` は壁に沿ったマス数、`height` は壁の上での高さ(px)を表す。
+   */
+  wallShape?: WallShape;
   /** ショップでの値段（コイン） */
   price: number;
   rarity: Rarity;
+}
+
+/** 壁に掛けてある家具 */
+export interface PlacedWall {
+  uid: string;
+  defId: string;
+  /** 'right' は gy=0 の壁、'left' は gx=0 の壁 */
+  side: 'right' | 'left';
+  /** 壁に沿ったマス番号 */
+  col: number;
+  /** 0 が上の段 */
+  level: number;
 }
 
 export interface PlacedFurniture {
@@ -92,6 +119,8 @@ export interface RoomData {
   /** 一辺のマス数（正方形） */
   size: number;
   items: PlacedFurniture[];
+  /** 壁に掛けてあるもの */
+  wallItems: PlacedWall[];
   /** この部屋に入ったときのアバターの立ち位置 */
   spawn: { gx: number; gy: number };
 }

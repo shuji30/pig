@@ -15,6 +15,7 @@ import type { MissionView } from '../state/economy';
 import { sellPrice } from '../state/economy';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { makeIconCanvas } from '../render/furnitureTexture';
+import { makeWallIconCanvas } from '../render/wallTexture';
 import type { AvatarLook, FurnitureCategory } from '../types';
 
 export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'share' | 'missions' | 'help';
@@ -364,7 +365,9 @@ export class Ui {
     $('furniture-note').textContent =
       this.tab === 'shop'
         ? 'コインで家具を買えます。もっているものは「うる」で半額になります。'
-        : 'アイテムを選んで部屋をクリックで設置。R で回転、Esc でやめる。';
+        : this.tab === 'wall'
+          ? 'えらんで かべをクリックすると掛かります。上下2段に掛けられます。'
+          : 'アイテムを選んで部屋をクリックで設置。R で回転、Esc でやめる。';
 
     if (this.tab === 'shop') {
       this.renderShop(grid);
@@ -425,7 +428,7 @@ export class Ui {
     const item = document.createElement('button');
     item.className = 'item';
     item.dataset.id = def.id;
-    item.appendChild(makeIconCanvas(this.scene, def));
+    item.appendChild(def.category === 'wall' ? makeWallIconCanvas(this.scene, def) : makeIconCanvas(this.scene, def));
     const name = document.createElement('span');
     name.textContent = def.name;
     item.appendChild(name);
@@ -586,16 +589,21 @@ export class Ui {
     document.querySelectorAll<HTMLElement>('#toolbar .tool').forEach((t) => t.classList.remove('active'));
   }
 
-  showPlaceBar(name: string | null) {
+  /** @param opts.wall 壁に掛けるものなら回転ボタンを隠す */
+  showPlaceBar(name: string | null, opts?: { wall?: boolean }) {
     const bar = $('placebar');
     bar.hidden = name === null;
     if (name) $('placebar-name').textContent = name;
+    const rotate = bar.querySelector<HTMLElement>('[data-act="rotate"]');
+    if (rotate) rotate.hidden = opts?.wall === true;
   }
 
-  showSelBar(name: string | null) {
+  showSelBar(name: string | null, opts?: { wall?: boolean }) {
     const bar = $('selbar');
     bar.hidden = name === null;
     if (name) $('selbar-name').textContent = name;
+    const rotate = bar.querySelector<HTMLElement>('[data-act="rotate"]');
+    if (rotate) rotate.hidden = opts?.wall === true;
   }
 
   setHint(text: string) {

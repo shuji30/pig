@@ -21,6 +21,7 @@ describe('load（何も保存されていないとき）', () => {
     expect(s.currentRoom).toBe(HOME_ROOM);
     expect(currentRoom(s).size).toBe(DEFAULT_ROOM_SIZE);
     expect(currentRoom(s).items.length).toBeGreaterThan(0);
+    expect(currentRoom(s).wallItems.length).toBeGreaterThan(0);
     expect(s.coins).toBeGreaterThan(0);
   });
 
@@ -157,6 +158,60 @@ describe('版の移行', () => {
     const room = currentRoom(load());
     expect(room.items[0]).toMatchObject({ gx: 10, gy: 9 });
     expect(room.spawn).toEqual({ gx: 11, gy: 11 });
+  });
+
+  it('v4 の部屋には壁の家具が無いので空で始まる', () => {
+    put({
+      version: 4,
+      rooms: { home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [], spawn: { gx: 0, gy: 0 } } },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+    });
+    expect(currentRoom(load()).wallItems).toEqual([]);
+  });
+
+  it('壁の家具は列と段を範囲に収め、壁でないものは捨てる', () => {
+    put({
+      version: 5,
+      rooms: {
+        home: {
+          name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [],
+          wallItems: [
+            { uid: 'w1', defId: 'window', side: 'left', col: 99, level: 9 },
+            { uid: 'w2', defId: 'sofa', side: 'right', col: 0, level: 0 },
+            { uid: 'w3', defId: 'ghost-wall', side: 'right', col: 0, level: 0 },
+            { uid: 'w4', defId: 'clock', side: 'right', col: 3, level: 1 },
+          ],
+          spawn: { gx: 0, gy: 0 },
+        },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+    });
+    const wall = currentRoom(load()).wallItems;
+    expect(wall.map((w) => w.defId)).toEqual(['window', 'clock']);
+    expect(wall[0]).toMatchObject({ side: 'left', col: 10, level: 1 }); // まどは2マス
+    expect(wall[1]).toMatchObject({ side: 'right', col: 3, level: 1 });
+  });
+
+  it('部屋より広い壁の家具は捨てる', () => {
+    put({
+      version: 5,
+      rooms: {
+        home: {
+          name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [],
+          wallItems: [{ uid: 'w1', defId: 'window-arch', side: 'right', col: 0, level: 0 }],
+          spawn: { gx: 0, gy: 0 },
+        },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+    });
+    // アーチまどは3マスなので 12 の部屋には入る
+    expect(currentRoom(load()).wallItems).toHaveLength(1);
   });
 
   it('知らない未来の版は読まずに初期状態へ落とす', () => {

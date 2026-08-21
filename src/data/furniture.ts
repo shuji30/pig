@@ -6,9 +6,10 @@ export const CATEGORY_LABEL: Record<FurnitureCategory, string> = {
   storage: 'しゅうのう',
   deco: 'かざり',
   floor: 'ゆか',
+  wall: 'かべ',
 };
 
-export const CATEGORY_ORDER: FurnitureCategory[] = ['seat', 'table', 'storage', 'deco', 'floor'];
+export const CATEGORY_ORDER: FurnitureCategory[] = ['seat', 'table', 'storage', 'deco', 'floor', 'wall'];
 
 export const FURNITURE: FurnitureDef[] = [
   // ---- すわる ----
@@ -72,7 +73,26 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'carpet-long', name: 'ながいカーペット', category: 'floor', shape: 'rug', size: [4, 2], height: 0, color: '#b7d4c4', accent: '#f0f8f4', walkable: true, price: 180, rarity: 'common' },
   { id: 'rug-big', name: 'おおきいロココラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#cbb392', accent: '#f6eee0', walkable: true, price: 260, rarity: 'uncommon' },
   { id: 'rug-gold', name: 'きんのラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#cfa855', accent: '#f6eee0', walkable: true, price: 460, rarity: 'rare' },
+
+  // ---- かべ ----
+  // 壁に掛けるもの。size[0] が壁に沿ったマス数、height は壁の上での高さ(px)。
+  // 描画は render/wallTexture.ts。床の家具と同じショップ・持ちものに並ぶ
+  { id: 'clock', name: 'かべどけい', category: 'wall', shape: 'box', wallShape: 'clock', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#cfa855', price: 130, rarity: 'common' },
+  { id: 'art-small', name: 'ちいさい絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [1, 1], height: 24, color: '#cfa855', accent: '#dcc6e0', price: 140, rarity: 'common' },
+  { id: 'sconce', name: 'かべしょくだい', category: 'wall', shape: 'box', wallShape: 'sconce', size: [1, 1], height: 30, color: '#cfa855', accent: '#fff3cf', price: 160, rarity: 'common' },
+  { id: 'wall-mirror', name: 'かべかがみ', category: 'wall', shape: 'box', wallShape: 'mirror', size: [1, 1], height: 34, color: '#cfa855', accent: '#e8f2f8', price: 200, rarity: 'common' },
+  { id: 'wall-shelf', name: 'かべだな', category: 'wall', shape: 'box', wallShape: 'shelf', size: [2, 1], height: 22, color: '#f3e6d2', accent: '#cfa855', price: 220, rarity: 'common' },
+  { id: 'art-rose', name: 'ばらの絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [2, 1], height: 30, color: '#cfa855', accent: '#e6a9bd', price: 300, rarity: 'uncommon' },
+  { id: 'window', name: 'まど', category: 'wall', shape: 'box', wallShape: 'window', size: [2, 1], height: 34, color: '#f3e6d2', accent: '#bcdcf0', price: 340, rarity: 'uncommon' },
+  { id: 'tapestry', name: 'タペストリー', category: 'wall', shape: 'box', wallShape: 'tapestry', size: [2, 1], height: 38, color: '#cbb0d8', accent: '#cfa855', price: 380, rarity: 'uncommon' },
+  { id: 'window-arch', name: 'アーチまど', category: 'wall', shape: 'box', wallShape: 'window', size: [3, 1], height: 38, color: '#f8f2e8', accent: '#bcdcf0', price: 520, rarity: 'rare' },
+  { id: 'art-gold', name: 'きんぶちの大きな絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [3, 1], height: 36, color: '#cfa855', accent: '#c3d6ea', price: 600, rarity: 'rare' },
 ];
+
+/** 壁に掛ける家具か */
+export function isWallDef(def: FurnitureDef): boolean {
+  return def.category === 'wall';
+}
 
 const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
 
@@ -103,7 +123,15 @@ export const STARTER_INVENTORY: Record<string, number> = {
   'plant-small': 1,
   box: 1,
   mat: 1,
+  clock: 1,
+  window: 1,
 };
+
+/** 壁の初期レイアウト */
+export const DEFAULT_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number }> = [
+  { defId: 'window', side: 'right', col: 6, level: 0 },
+  { defId: 'clock', side: 'left', col: 2, level: 0 },
+];
 
 /** 部屋の初期レイアウト */
 export const DEFAULT_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 0 | 1 | 2 | 3 }> = [

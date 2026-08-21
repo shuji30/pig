@@ -1,3 +1,4 @@
+import { WALL_LEVELS } from '../core/wall';
 import {
   CLOTH_COLORS,
   DEFAULT_ROOM_SIZE,
@@ -9,8 +10,8 @@ import {
   SKIN_COLORS,
   START_COINS,
 } from '../config';
-import { DEFAULT_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
-import type { DailyCounters, PlacedFurniture, RoomData, SaveData } from '../types';
+import { DEFAULT_LAYOUT, DEFAULT_WALL_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
+import type { DailyCounters, PlacedFurniture, PlacedWall, RoomData, SaveData } from '../types';
 import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
 
 /** はじめての部屋の名前 */
@@ -51,7 +52,7 @@ export function centerSpawn(size: number): { gx: number; gy: number } {
 }
 
 export function emptyRoom(name: string, size = DEFAULT_ROOM_SIZE): RoomData {
-  return { name, note: '', floor: 0, wall: 0, size, items: [], spawn: centerSpawn(size) };
+  return { name, note: '', floor: 0, wall: 0, size, items: [], wallItems: [], spawn: centerSpawn(size) };
 }
 
 export function defaultSave(): SaveData {
@@ -59,6 +60,11 @@ export function defaultSave(): SaveData {
   const items: PlacedFurniture[] = [];
   for (const l of DEFAULT_LAYOUT) {
     items.push({ uid: newUid(), defId: l.defId, gx: l.gx, gy: l.gy, rot: l.rot });
+    inventory[l.defId] = Math.max(0, (inventory[l.defId] ?? 0) - 1);
+  }
+  const wallItems: PlacedWall[] = [];
+  for (const l of DEFAULT_WALL_LAYOUT) {
+    wallItems.push({ uid: newUid(), defId: l.defId, side: l.side, col: l.col, level: l.level });
     inventory[l.defId] = Math.max(0, (inventory[l.defId] ?? 0) - 1);
   }
   return {
@@ -69,7 +75,7 @@ export function defaultSave(): SaveData {
     streak: 0,
     lastBonusDay: '',
     doneMissions: [],
-    rooms: { [HOME_ROOM]: { ...emptyRoom(DEFAULT_ROOM_NAME), items } },
+    rooms: { [HOME_ROOM]: { ...emptyRoom(DEFAULT_ROOM_NAME), items, wallItems } },
     currentRoom: HOME_ROOM,
     inventory,
     avatar: {
@@ -96,6 +102,26 @@ interface LegacyFlatRoom {
   roomNote?: string;
   items?: PlacedFurniture[];
   avatar?: { look?: Record<string, unknown>; gx?: number; gy?: number };
+}
+
+/** 知らない家具を捨て、壁からはみ出しているものを中へ収める */
+function cleanWallItems(items: unknown, size: number): PlacedWall[] {
+  if (!Array.isArray(items)) return [];
+  const out: PlacedWall[] = [];
+  for (const i of items) {
+    const def = findDef(i?.defId);
+    if (!def || def.category !== 'wall') continue;
+    const cols = def.size[0];
+    if (cols > size) continue;
+    out.push({
+      uid: typeof i.uid === 'string' ? i.uid : newUid(),
+      defId: def.id,
+      side: i.side === 'left' ? 'left' : 'right',
+      col: Math.min(Math.max(0, i.col ?? 0), Math.max(0, size - cols)),
+      level: Math.min(Math.max(0, Math.round(i.level ?? 0)), WALL_LEVELS - 1),
+    });
+  }
+  return out;
 }
 
 /** 知らない家具を捨て、部屋の外へ出ている家具を中へ収める */
@@ -128,6 +154,7 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
     wall: r.wall ?? 0,
     size,
     items: cleanItems(r.items, size),
+    wallItems: cleanWallItems(r.wallItems, size),
     spawn: {
       gx: Math.min(Math.max(0, r.spawn?.gx ?? centerSpawn(size).gx), size - 1),
       gy: Math.min(Math.max(0, r.spawn?.gy ?? centerSpawn(size).gy), size - 1),
@@ -143,6 +170,7 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
  * v1 → v2: コイン・ミッション・日ごとのカウンタが増えた
  * v2 → v3: 部屋の名前とひとことが増えた
  * v3 → v4: 部屋がひとつだけの前提をやめ、`rooms` / `currentRoom` に分けた
+ * v4 → v5: 壁に掛ける家具（`RoomData.wallItems`）が増えた。既存の部屋は空で始まる
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;
