@@ -164,6 +164,7 @@
           <li>「かぐ」から家具を選び、部屋をクリックで<b>設置</b>。<b>R</b>で回転。</li>
           <li>置いてある家具をクリックすると<b>移動・回転・しまう</b>ができます。</li>
           <li>「かぐ」の<b>かべ</b>タブから、窓・絵・時計などを<b>壁に掛けられます</b>（上下2段）。</li>
+          <li>家具をクリックして<b>🎨 いろ</b>で、木地と張地の色を変えられます。</li>
           <li>背景を<b>ドラッグ</b>でカメラ移動。<b>ホイール</b>か<b>2本指のピンチ</b>でズーム。</li>
           <li>下の入力欄でしゃべると<b>吹き出し</b>が出ます。</li>
           <li>「きもち」から<b>てをふる・おじぎ・よろこぶ</b>などのモーションが出せます。</li>
@@ -190,9 +191,21 @@
         <span id="selbar-name">家具</span>
         <button data-act="rotate">↻ 回転</button>
         <button data-act="move">✥ 移動</button>
+        <button data-act="recolor">🎨 いろ</button>
         <button data-act="store">📦 しまう</button>
         <button data-act="deselect">閉じる</button>
       </div>
+
+      <!-- リカラー -->
+      <section class="panel" id="panel-recolor" hidden>
+        <div class="panel-head">
+          <h2>いろをかえる ─ <span id="recolor-name">家具</span></h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <div id="recolor-body"></div>
+        <button id="btn-recolor-reset">もとの色にもどす</button>
+        <p class="note">同じ家具でも色を変えれば別の一台になります。部屋ごとに保存されます。</p>
+      </section>
 
       <div id="toast" class="toast" hidden></div>
     </div>

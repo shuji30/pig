@@ -57,6 +57,17 @@ export class WallLayer {
     return this.items.find((i) => i.uid === uid);
   }
 
+  /** 色を変えて描き直す */
+  setRecolor(uid: string, recolor: PlacedWall['recolor']) {
+    const item = this.get(uid);
+    if (!item) return;
+    if (recolor === undefined) delete item.recolor;
+    else item.recolor = recolor;
+    this.sprites.get(uid)?.destroy();
+    this.sprites.delete(uid);
+    this.createSprite(item);
+  }
+
   update(uid: string, slot: WallSlot) {
     const item = this.get(uid);
     if (!item) return;
@@ -148,7 +159,7 @@ export class WallLayer {
 
   private createSprite(item: PlacedWall) {
     const def = getDef(item.defId);
-    const tex = getWallTexture(this.scene, def, item.side);
+    const tex = getWallTexture(this.scene, def, item.side, item.recolor);
     // テクスチャの原点は「スロットの u=0, h=0」なので、そこへ合わせる
     const center = levelCenter(item.level);
     const u = item.col * WALL_COL_W;

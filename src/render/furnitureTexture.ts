@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GOLD, GOLD_LIGHT, TILE_H, TILE_W } from '../config';
 import { rotatedSize } from '../core/iso';
-import type { FurnitureDef, Rotation } from '../types';
+import type { FurnitureDef, Recolor, Rotation } from '../types';
 import { shade, tint, toInt } from './color';
 
 const HW = TILE_W / 2;
@@ -438,8 +438,35 @@ function paint(painter: IsoPainter, def: FurnitureDef) {
 }
 
 /** 家具1つ分のテクスチャを生成（同じ key は再利用） */
-export function getFurnitureTexture(scene: Phaser.Scene, def: FurnitureDef, rot: Rotation): FurnitureTexture {
-  const key = `fur:${def.id}:${rot}`;
+/**
+ * 色を差し替えた定義を作る。形は同じままなので、
+ * 1種類から何色でも増やせる（供給効率がいちばん高い増やし方）。
+ */
+export function recolored(def: FurnitureDef, recolor?: Recolor): FurnitureDef {
+  if (!recolor || (!recolor.color && !recolor.accent)) return def;
+  return {
+    ...def,
+    color: recolor.color ?? def.color,
+    accent: recolor.accent ?? def.accent,
+  };
+}
+
+/** キャッシュのキーに色を含める。同じ形の色違いは別テクスチャになる */
+function recolorKey(recolor?: Recolor): string {
+  if (!recolor) return '';
+  const c = recolor.color ?? '';
+  const a = recolor.accent ?? '';
+  return c || a ? `:${c}${a}` : '';
+}
+
+export function getFurnitureTexture(
+  scene: Phaser.Scene,
+  baseDef: FurnitureDef,
+  rot: Rotation,
+  recolor?: Recolor,
+): FurnitureTexture {
+  const def = recolored(baseDef, recolor);
+  const key = `fur:${def.id}:${rot}${recolorKey(recolor)}`;
   const hit = cache.get(key);
   if (hit && scene.textures.exists(key)) return hit;
 

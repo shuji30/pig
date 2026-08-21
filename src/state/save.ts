@@ -11,7 +11,7 @@ import {
   START_COINS,
 } from '../config';
 import { DEFAULT_LAYOUT, DEFAULT_WALL_LAYOUT, findDef, STARTER_INVENTORY } from '../data/furniture';
-import type { DailyCounters, PlacedFurniture, PlacedWall, RoomData, SaveData } from '../types';
+import type { DailyCounters, PlacedFurniture, PlacedWall, Recolor, RoomData, SaveData } from '../types';
 import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
 
 /** はじめての部屋の名前 */
@@ -104,6 +104,18 @@ interface LegacyFlatRoom {
   avatar?: { look?: Record<string, unknown>; gx?: number; gy?: number };
 }
 
+const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** リカラーの指定を検証する。色でないものは無かったことにする */
+function cleanRecolor(raw: unknown): Recolor | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Recolor;
+  const out: Recolor = {};
+  if (typeof r.color === 'string' && COLOR_RE.test(r.color)) out.color = r.color;
+  if (typeof r.accent === 'string' && COLOR_RE.test(r.accent)) out.accent = r.accent;
+  return out.color || out.accent ? out : undefined;
+}
+
 /** 知らない家具を捨て、壁からはみ出しているものを中へ収める */
 function cleanWallItems(items: unknown, size: number): PlacedWall[] {
   if (!Array.isArray(items)) return [];
@@ -113,12 +125,14 @@ function cleanWallItems(items: unknown, size: number): PlacedWall[] {
     if (!def || def.category !== 'wall') continue;
     const cols = def.size[0];
     if (cols > size) continue;
+    const recolor = cleanRecolor(i.recolor);
     out.push({
       uid: typeof i.uid === 'string' ? i.uid : newUid(),
       defId: def.id,
       side: i.side === 'left' ? 'left' : 'right',
       col: Math.min(Math.max(0, i.col ?? 0), Math.max(0, size - cols)),
       level: Math.min(Math.max(0, Math.round(i.level ?? 0)), WALL_LEVELS - 1),
+      ...(recolor ? { recolor } : {}),
     });
   }
   return out;
@@ -133,12 +147,14 @@ function cleanItems(items: unknown, size: number): PlacedFurniture[] {
     if (!def) continue;
     const rot = ((typeof i.rot === 'number' ? i.rot : 0) % 4) as PlacedFurniture['rot'];
     const [w, d] = rot % 2 === 0 ? def.size : [def.size[1], def.size[0]];
+    const recolor = cleanRecolor(i.recolor);
     out.push({
       uid: typeof i.uid === 'string' ? i.uid : newUid(),
       defId: def.id,
       gx: Math.min(Math.max(0, i.gx ?? 0), Math.max(0, size - w)),
       gy: Math.min(Math.max(0, i.gy ?? 0), Math.max(0, size - d)),
       rot,
+      ...(recolor ? { recolor } : {}),
     });
   }
   return out;

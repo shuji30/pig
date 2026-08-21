@@ -824,3 +824,23 @@ button.danger {
 #room-size-note {
   margin-top: 6px;
 }
+
+/* ---------- リカラー ---------- */
+#panel-recolor h2 {
+  font-size: 13px;
+}
+
+#btn-recolor-reset {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 2px solid #eadfe4;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}

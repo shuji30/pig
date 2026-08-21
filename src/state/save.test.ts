@@ -214,6 +214,34 @@ describe('版の移行', () => {
     expect(currentRoom(load()).wallItems).toHaveLength(1);
   });
 
+  it('リカラーは色として正しいものだけ残す', () => {
+    put({
+      version: 5,
+      rooms: {
+        home: {
+          name: 'いえ', note: '', floor: 0, wall: 0, size: 12,
+          items: [
+            { uid: 'a1', defId: 'sofa', gx: 0, gy: 0, rot: 0, recolor: { color: '#8f7a68', accent: '#7d9ff0' } },
+            { uid: 'a2', defId: 'chair', gx: 3, gy: 3, rot: 0, recolor: { color: 'red', accent: '#ffc75f' } },
+            { uid: 'a3', defId: 'stool', gx: 5, gy: 5, rot: 0, recolor: { color: 'javascript:x' } },
+            { uid: 'a4', defId: 'bench', gx: 7, gy: 7, rot: 0 },
+          ],
+          wallItems: [{ uid: 'w1', defId: 'clock', side: 'right', col: 1, level: 0, recolor: { color: '#cfa855' } }],
+          spawn: { gx: 0, gy: 0 },
+        },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+    });
+    const room = currentRoom(load());
+    expect(room.items[0].recolor).toEqual({ color: '#8f7a68', accent: '#7d9ff0' });
+    expect(room.items[1].recolor).toEqual({ accent: '#ffc75f' }); // 'red' は落ちる
+    expect(room.items[2].recolor).toBeUndefined();
+    expect(room.items[3].recolor).toBeUndefined();
+    expect(room.wallItems[0].recolor).toEqual({ color: '#cfa855' });
+  });
+
   it('知らない未来の版は読まずに初期状態へ落とす', () => {
     put({ version: 99, rooms: {}, items: [], inventory: {}, avatar: {} });
     const s = load();

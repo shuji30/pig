@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { GOLD, GOLD_LIGHT } from '../config';
 import { WALL_COL_W, type WallSide } from '../core/wall';
-import type { FurnitureDef, WallShape } from '../types';
+import type { FurnitureDef, Recolor, WallShape } from '../types';
 import { shade, toInt } from './color';
+import { recolored } from './furnitureTexture';
 
 /**
  * 壁に掛ける家具のテクスチャを、壁の傾きに合わせた平行四辺形として描く。
@@ -159,8 +160,14 @@ function drawShape(p: WallPainter, shape: WallShape, def: FurnitureDef, w: numbe
  * (家具, 壁の向き) ごとのテクスチャ。
  * 一度作ればキャッシュされる。
  */
-export function getWallTexture(scene: Phaser.Scene, def: FurnitureDef, side: WallSide): WallTexture {
-  const key = `wall:${def.id}:${side}`;
+export function getWallTexture(
+  scene: Phaser.Scene,
+  baseDef: FurnitureDef,
+  side: WallSide,
+  recolor?: Recolor,
+): WallTexture {
+  const def = recolored(baseDef, recolor);
+  const key = `wall:${def.id}:${side}${recolor?.color ?? ''}${recolor?.accent ?? ''}`;
   const hit = cache.get(key);
   if (hit && scene.textures.exists(key)) return hit;
 

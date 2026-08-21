@@ -11,7 +11,7 @@ import {
 import { findDef } from '../data/furniture';
 import { rotatedSize } from '../core/iso';
 import { WALL_LEVELS } from '../core/wall';
-import type { AvatarLook, PlacedFurniture, PlacedWall, RoomData, Rotation } from '../types';
+import type { AvatarLook, PlacedFurniture, PlacedWall, Recolor, RoomData, Rotation } from '../types';
 
 /** URL のハッシュに使う名前。`#r=...` の形で載る */
 const HASH_KEY = 'r';
@@ -19,9 +19,10 @@ const HASH_KEY = 'r';
  * いまの形式。古いものも読めるようにしておく。
  *   1: 部屋の広さを持たない（12×12 固定）
  *   2: 広さを持つが、壁に掛けるものを持たない
+ *   3: 壁に掛けるものを持つが、リカラーを持たない
  */
-const FORMAT = 3;
-const READABLE_FORMATS = [1, 2, 3];
+const FORMAT = 4;
+const READABLE_FORMATS = [1, 2, 3, 4];
 /** 名前とひとことの上限。URL の長さと表示崩れを抑える */
 export const ROOM_NAME_MAX = 16;
 export const ROOM_NOTE_MAX = 40;
@@ -35,9 +36,9 @@ export interface SharedRoom {
   roomName: string;
   roomNote: string;
   look: AvatarLook;
-  items: Array<{ defId: string; gx: number; gy: number; rot: Rotation }>;
+  items: Array<{ defId: string; gx: number; gy: number; rot: Rotation; recolor?: Recolor }>;
   /** 壁に掛けてあるもの */
-  wallItems: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number }>;
+  wallItems: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number; recolor?: Recolor }>;
 }
 
 export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
@@ -48,8 +49,20 @@ export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
     roomName: room.name,
     roomNote: room.note,
     look,
-    items: room.items.map((i) => ({ defId: i.defId, gx: i.gx, gy: i.gy, rot: i.rot })),
-    wallItems: room.wallItems.map((i) => ({ defId: i.defId, side: i.side, col: i.col, level: i.level })),
+    items: room.items.map((i) => ({
+      defId: i.defId,
+      gx: i.gx,
+      gy: i.gy,
+      rot: i.rot,
+      ...(i.recolor ? { recolor: i.recolor } : {}),
+    })),
+    wallItems: room.wallItems.map((i) => ({
+      defId: i.defId,
+      side: i.side,
+      col: i.col,
+      level: i.level,
+      ...(i.recolor ? { recolor: i.recolor } : {}),
+    })),
   };
 }
 
@@ -63,10 +76,17 @@ type Packed = [
   string, // 部屋の名前
   string, // ひとこと
   [string, string, string, number, string, string, number, string, string], // アバター
-  Array<[string, number, number, number]>, // 家具
+  Array<PackedItem>, // 家具
   number, // 一辺のマス数（形式2で追加。末尾に足しているので形式1も読める）
-  Array<[string, number, number, number]>, // 壁の家具（形式3で追加）[id, side(0=right/1=left), col, level]
+  Array<PackedWall>, // 壁の家具（形式3で追加）[id, side(0=right/1=left), col, level]
 ];
+
+/**
+ * 家具1件。リカラーしているものだけ 5番目に色が入る（形式4で追加）。
+ * 色は '#rrggbb' の '#' を落とした6文字。空文字は「変えていない」。
+ */
+type PackedItem = [string, number, number, number] | [string, number, number, number, [string, string]];
+type PackedWall = [string, number, number, number] | [string, number, number, number, [string, string]];
 
 function pack(r: SharedRoom): Packed {
   const l = r.look;
@@ -77,10 +97,26 @@ function pack(r: SharedRoom): Packed {
     r.roomName,
     r.roomNote,
     [l.name, l.skin, l.hair, l.hairStyle, l.eyes, l.shirt, l.outfit === 'dress' ? 1 : 0, l.pants, l.shoes],
-    r.items.map((i) => [i.defId, i.gx, i.gy, i.rot]),
+    r.items.map((i) => packTail([i.defId, i.gx, i.gy, i.rot], i.recolor)),
     r.size,
-    r.wallItems.map((i) => [i.defId, i.side === 'left' ? 1 : 0, i.col, i.level]),
+    r.wallItems.map((i) => packTail([i.defId, i.side === 'left' ? 1 : 0, i.col, i.level], i.recolor)),
   ];
+}
+
+/** リカラーがあるときだけ色を足す（URL を無駄に伸ばさない） */
+function packTail(head: [string, number, number, number], recolor?: Recolor): PackedItem {
+  if (!recolor || (!recolor.color && !recolor.accent)) return head;
+  return [...head, [(recolor.color ?? '').replace('#', ''), (recolor.accent ?? '').replace('#', '')]];
+}
+
+/** 6文字の16進を色へ戻す。おかしければ無かったことにする */
+function unpackRecolor(raw: unknown): Recolor | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const hex = (v: unknown) => (typeof v === 'string' && /^[0-9a-fA-F]{6}$/.test(v) ? `#${v}` : undefined);
+  const color = hex(raw[0]);
+  const accent = hex(raw[1]);
+  if (!color && !accent) return undefined;
+  return { ...(color ? { color } : {}), ...(accent ? { accent } : {}) };
 }
 
 // ---------------- 検証 ----------------
@@ -129,7 +165,8 @@ function unpack(raw: unknown): SharedRoom | null {
     const [w, d] = rotatedSize(def.size, rot);
     const gx = num(it[1], 0, Math.max(0, size - w), 0);
     const gy = num(it[2], 0, Math.max(0, size - d), 0);
-    items.push({ defId: def.id, gx, gy, rot });
+    const recolor = unpackRecolor(it[4]);
+    items.push({ defId: def.id, gx, gy, rot, ...(recolor ? { recolor } : {}) });
     if (items.length >= MAX_ROOM_SIZE * MAX_ROOM_SIZE) break; // 異常に長い URL への保険
   }
 
@@ -140,11 +177,13 @@ function unpack(raw: unknown): SharedRoom | null {
     if (!def || def.category !== 'wall') continue;
     const cols = def.size[0];
     if (cols > size) continue;
+    const recolor = unpackRecolor(it[4]);
     wallItems.push({
       defId: def.id,
       side: it[1] === 1 ? 'left' : 'right',
       col: num(it[2], 0, Math.max(0, size - cols), 0),
       level: num(it[3], 0, WALL_LEVELS - 1, 0),
+      ...(recolor ? { recolor } : {}),
     });
     if (wallItems.length >= MAX_ROOM_SIZE * WALL_LEVELS * 2) break;
   }
@@ -173,7 +212,14 @@ function unpack(raw: unknown): SharedRoom | null {
 
 /** 検証を通した共有データから、部屋に置ける家具の配列を作る */
 export function placedFromShared(shared: SharedRoom, newUid: () => string): PlacedFurniture[] {
-  return shared.items.map((i) => ({ uid: newUid(), defId: i.defId, gx: i.gx, gy: i.gy, rot: i.rot }));
+  return shared.items.map((i) => ({
+    uid: newUid(),
+    defId: i.defId,
+    gx: i.gx,
+    gy: i.gy,
+    rot: i.rot,
+    ...(i.recolor ? { recolor: i.recolor } : {}),
+  }));
 }
 
 /** 同じく、壁に掛ける家具の配列 */
@@ -184,6 +230,7 @@ export function wallFromShared(shared: SharedRoom, newUid: () => string): Placed
     side: i.side,
     col: i.col,
     level: i.level,
+    ...(i.recolor ? { recolor: i.recolor } : {}),
   }));
 }
 

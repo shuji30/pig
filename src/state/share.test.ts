@@ -30,6 +30,17 @@ const sample: SharedRoom = {
   ],
 };
 
+/** 色を変えたものを混ぜた部屋 */
+const recolored: SharedRoom = {
+  ...sample,
+  items: [
+    { defId: 'sofa', gx: 3, gy: 4, rot: 1, recolor: { color: '#8f7a68', accent: '#7d9ff0' } },
+    { defId: 'stool', gx: 2, gy: 2, rot: 0, recolor: { accent: '#ffc75f' } },
+    { defId: 'bed', gx: 8, gy: 0, rot: 0 },
+  ],
+  wallItems: [{ defId: 'window', side: 'right', col: 5, level: 0, recolor: { color: '#cfa855' } }],
+};
+
 /** UTF-8 の文字列を base64url にする（share.ts と同じ並び） */
 function b64url(text: string): string {
   const bytes = new TextEncoder().encode(text);
@@ -86,6 +97,21 @@ describe('encodeShared / decodeShared', () => {
     const room = await decodeShared(token);
     expect(room?.size).toBe(16);
     expect(room?.wallItems).toEqual([]);
+  });
+
+  it('リカラーも往復する', async () => {
+    const token = await encodeShared(recolored);
+    expect(await decodeShared(token)).toEqual(recolored);
+  });
+
+  it('色を変えていないものには色を載せない（URL を伸ばさない）', async () => {
+    const plain = await encodeShared(sample);
+    const colored = await encodeShared(recolored);
+    // 3件のうち2件だけ色つき。長くはなるが、色を持たない件は増えない
+    expect(colored.length).toBeGreaterThan(plain.length - 40);
+    const room = await decodeShared(colored);
+    expect(room?.items.filter((i) => i.recolor !== undefined)).toHaveLength(2);
+    expect(room?.items.find((i) => i.defId === 'bed')?.recolor).toBeUndefined();
   });
 
   it('壁に掛けたものも往復する', async () => {
@@ -194,7 +220,7 @@ describe('他人が作った URL の検証', () => {
   });
 
   it('形式が違えば読まない', async () => {
-    expect(await decodePacked([4, 0, 0, 'x', '', [], [], 12, []])).toBeNull();
+    expect(await decodePacked([9, 0, 0, 'x', '', [], [], 12, []])).toBeNull();
     expect(await decodePacked({ floor: 1 })).toBeNull();
     expect(await decodePacked([3, 0, 0])).toBeNull();
   });
@@ -203,6 +229,23 @@ describe('他人が作った URL の検証', () => {
     // 壁のものの形は [id, side(0=right / 1=left), col, level]
     const room = await decodePacked([3, 0, 0, 'x', '', [], [], 12, [['sofa', 0, 0, 0], ['clock', 0, 3, 1]]]);
     expect(room?.wallItems).toEqual([{ defId: 'clock', side: 'right', col: 3, level: 1 }]);
+  });
+
+  it('色でないリカラーは無かったことにする', async () => {
+    const room = await decodePacked([
+      4, 0, 0, 'x', '',
+      [],
+      [
+        ['stool', 0, 0, 0, ['javascript', 'zzzzzz']],
+        ['chair', 1, 1, 0, ['8f7a68', '']],
+        ['bench', 2, 2, 0, ['', 'ffc75f']],
+      ],
+      12,
+      [],
+    ]);
+    expect(room?.items[0].recolor).toBeUndefined();
+    expect(room?.items[1].recolor).toEqual({ color: '#8f7a68' });
+    expect(room?.items[2].recolor).toEqual({ accent: '#ffc75f' });
   });
 
   it('壁の列と段も範囲に収める', async () => {

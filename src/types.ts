@@ -59,12 +59,22 @@ export interface FurnitureDef {
 export interface PlacedWall {
   uid: string;
   defId: string;
+  /** 色を変えているとき（リカラー）だけ入る */
+  recolor?: Recolor;
   /** 'right' は gy=0 の壁、'left' は gx=0 の壁 */
   side: 'right' | 'left';
   /** 壁に沿ったマス番号 */
   col: number;
   /** 0 が上の段 */
   level: number;
+}
+
+/** 色だけ差し替える指定。無い項目はカタログの色を使う */
+export interface Recolor {
+  /** 木地・本体の色 */
+  color?: string;
+  /** 張地・画面・葉などの色 */
+  accent?: string;
 }
 
 export interface PlacedFurniture {
@@ -74,6 +84,8 @@ export interface PlacedFurniture {
   gx: number;
   gy: number;
   rot: Rotation;
+  /** 色を変えているとき（リカラー）だけ入る */
+  recolor?: Recolor;
 }
 
 /** ふくのかたち */

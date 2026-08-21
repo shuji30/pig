@@ -67,6 +67,36 @@ export const EYE_COLORS = ['#5b4630', '#7a4a2a', '#3f6ea8', '#3f8f7a', '#6b4f9e'
 export const OUTFIT_NAMES = ['シャツ', 'ワンピース'];
 export const HAIR_STYLE_NAMES = ['ショート', 'ボブ', 'ツインテール', 'ロング', 'おだんご', 'ふんわり'];
 
+/**
+ * 家具のリカラーに使うパレット。
+ * 「きじ」は木地・本体、「はりじ」は張地やクッションなど。
+ * 同じ形から色違いが作れるので、供給を増やすのにいちばん安い手段。
+ */
+export const RECOLOR_BASE = [
+  '#f3e6d2', // アイボリー
+  '#e4edf6', // ペールブルー
+  '#e2f0e8', // ミント
+  '#f4e2e6', // ローズ
+  '#f0e2f6', // ラベンダー
+  '#eadfc9', // ベージュ
+  '#cbb392', // ウォルナット
+  '#8f7a68', // ダークウッド
+  '#cfa855', // ゴールド
+  '#6c5f6b', // グレイッシュ
+];
+export const RECOLOR_ACCENT = [
+  '#e6a9bd',
+  '#a9c4dc',
+  '#b7d4c4',
+  '#dcc6e0',
+  '#e0cba8',
+  '#f8eef2',
+  '#8fd36b',
+  '#ffc75f',
+  '#7d9ff0',
+  '#3a4a6b',
+];
+
 /** ロココ調の金彩に使う色 */
 export const GOLD = '#c9a24a';
 export const GOLD_LIGHT = '#e8cf95';

@@ -36,7 +36,7 @@ import {
   wallFromShared,
   type SharedRoom,
 } from '../state/share';
-import type { AvatarLook, PlacedFurniture, PlacedWall, RoomData, Rotation, SaveData } from '../types';
+import type { AvatarLook, PlacedFurniture, PlacedWall, Recolor, RoomData, Rotation, SaveData } from '../types';
 import { Ui } from '../ui/ui';
 
 type Mode = 'idle' | 'place' | 'move' | 'wall-place' | 'wall-move';
@@ -168,6 +168,7 @@ export class RoomScene extends Phaser.Scene {
         else this.cancelPlacing();
       },
       onSelAction: (act) => this.selAction(act),
+      onRecolor: (recolor) => this.applyRecolor(recolor),
       onEmote: (kind) => {
         this.avatar.playMotion(kind);
         this.save.daily.emoted += 1;
@@ -788,6 +789,7 @@ export class RoomScene extends Phaser.Scene {
     this.furniture.setHighlight(null);
     this.deselectWall();
     this.ui.showSelBar(null);
+    this.ui.closeRecolor();
     this.selG.clear();
   }
 
@@ -964,12 +966,13 @@ export class RoomScene extends Phaser.Scene {
     g.strokePoints(pts, true);
   }
 
-  private selAction(act: 'rotate' | 'move' | 'store' | 'deselect') {
+  private selAction(act: 'rotate' | 'move' | 'recolor' | 'store' | 'deselect') {
     // 壁のものが選ばれているときは、そちらを操作する（回転は無い）
     const wallUid = this.selectedWallUid;
     if (wallUid) {
       if (act === 'move') this.enterWallMoveMode(wallUid);
       else if (act === 'store') this.storeWallItem(wallUid);
+      else if (act === 'recolor') this.openRecolor();
       else if (act === 'deselect') this.deselect();
       return;
     }
@@ -981,6 +984,9 @@ export class RoomScene extends Phaser.Scene {
         break;
       case 'move':
         this.enterMoveMode(uid);
+        break;
+      case 'recolor':
+        this.openRecolor();
         break;
       case 'store':
         this.storeItem(uid);
@@ -1022,6 +1028,41 @@ export class RoomScene extends Phaser.Scene {
     this.syncMissions();
     this.ui.toast(`${getDef(removed.defId).name}をしまったよ`);
     this.deselect();
+    this.persist();
+  }
+
+  // ---------------- リカラー ----------------
+
+  /** 選んでいる家具（床でも壁でも）の色を変えるパネルを開く */
+  private openRecolor() {
+    if (this.visiting) return;
+    const wallUid = this.selectedWallUid;
+    if (wallUid) {
+      const item = this.walls.get(wallUid);
+      if (item) this.ui.openRecolor(getDef(item.defId).name, item.recolor);
+      return;
+    }
+    const uid = this.selectedUid;
+    if (!uid) return;
+    const item = this.furniture.get(uid);
+    if (item) this.ui.openRecolor(getDef(item.defId).name, item.recolor);
+  }
+
+  private applyRecolor(recolor: Recolor | undefined) {
+    if (this.visiting) return;
+    const wallUid = this.selectedWallUid;
+    if (wallUid) {
+      this.walls.setRecolor(wallUid, recolor);
+      this.drawWallSelection(this.walls.get(wallUid) ?? null);
+    } else if (this.selectedUid) {
+      this.furniture.setRecolor(this.selectedUid, recolor);
+      this.avatar.refreshDepth();
+    } else {
+      return;
+    }
+    this.save.daily.restyled += 1;
+    this.noteEdit();
+    this.syncMissions();
     this.persist();
   }
 

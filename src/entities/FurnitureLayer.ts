@@ -73,6 +73,17 @@ export class FurnitureLayer {
     return this.items.find((i) => i.uid === uid);
   }
 
+  /** 色を変えて描き直す */
+  setRecolor(uid: string, recolor: PlacedFurniture['recolor']) {
+    const item = this.get(uid);
+    if (!item) return;
+    if (recolor === undefined) delete item.recolor;
+    else item.recolor = recolor;
+    this.sprites.get(uid)?.destroy();
+    this.sprites.delete(uid);
+    this.createSprite(item);
+  }
+
   /** 位置・回転を更新して描画も追従させる */
   update(uid: string, gx: number, gy: number, rot: Rotation) {
     const item = this.get(uid);
@@ -240,7 +251,7 @@ export class FurnitureLayer {
 
   private createSprite(item: PlacedFurniture) {
     const def = getDef(item.defId);
-    const tex = getFurnitureTexture(this.scene, def, item.rot);
+    const tex = getFurnitureTexture(this.scene, def, item.rot, item.recolor);
     const p = gridToScreen(item.gx, item.gy);
     const [w, d] = rotatedSize(def.size, item.rot);
     const sprite = this.scene.add

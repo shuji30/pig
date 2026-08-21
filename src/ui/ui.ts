@@ -6,6 +6,8 @@ import {
   HAIR_COLORS,
   HAIR_STYLE_NAMES,
   OUTFIT_NAMES,
+  RECOLOR_ACCENT,
+  RECOLOR_BASE,
   SKIN_COLORS,
   WALL_STYLES,
 } from '../config';
@@ -16,9 +18,9 @@ import { sellPrice } from '../state/economy';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { makeIconCanvas } from '../render/furnitureTexture';
 import { makeWallIconCanvas } from '../render/wallTexture';
-import type { AvatarLook, FurnitureCategory } from '../types';
+import type { AvatarLook, FurnitureCategory, Recolor } from '../types';
 
-export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'share' | 'missions' | 'help';
+export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'share' | 'missions' | 'help' | 'recolor';
 
 /** 訪問中に上部へ出す、その部屋の情報 */
 export interface VisitInfo {
@@ -35,7 +37,9 @@ export interface UiHandlers {
   onChat(text: string): void;
   onReset(): void;
   onPlaceAction(act: 'rotate' | 'cancel'): void;
-  onSelAction(act: 'rotate' | 'move' | 'store' | 'deselect'): void;
+  onSelAction(act: 'rotate' | 'move' | 'recolor' | 'store' | 'deselect'): void;
+  /** リカラーの色を選んだ。どちらも undefined ならもとの色に戻す */
+  onRecolor(recolor: Recolor | undefined): void;
   onPanelOpen(name: PanelName): void;
   onEmote(kind: MotionKind): void;
   onToggleAuto(): void;
@@ -72,6 +76,8 @@ export class Ui {
   private coins = 0;
   private toastTimer?: number;
   private visiting = false;
+  /** リカラーパネルでいま選ばれている色 */
+  private recolor: Recolor = {};
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -81,6 +87,7 @@ export class Ui {
     this.buildEmotes();
     this.buildWardrobe();
     this.buildRoomPanel();
+    this.buildRecolorPanel();
     this.wireChrome();
   }
 
@@ -148,9 +155,15 @@ export class Ui {
     });
     $('selbar').addEventListener('click', (e) => {
       const act = (e.target as HTMLElement).dataset?.act;
-      if (act === 'rotate' || act === 'move' || act === 'store' || act === 'deselect') {
+      if (act === 'rotate' || act === 'move' || act === 'recolor' || act === 'store' || act === 'deselect') {
         this.handlers.onSelAction(act);
       }
+    });
+
+    $('btn-recolor-reset').addEventListener('click', () => {
+      this.recolor = {};
+      this.refreshRecolor();
+      this.handlers.onRecolor(undefined);
     });
   }
 
@@ -235,6 +248,45 @@ export class Ui {
         this.handlers.onWallChange(i);
       }),
     );
+  }
+
+  private buildRecolorPanel() {
+    const body = $('recolor-body');
+    body.innerHTML = '';
+    body.appendChild(
+      this.swatchRow('きじ（木のところ）', RECOLOR_BASE, () => this.recolor.color ?? '', (c) => {
+        this.recolor = { ...this.recolor, color: c };
+        this.refreshRecolor();
+        this.handlers.onRecolor(this.recolor);
+      }),
+    );
+    body.appendChild(
+      this.swatchRow('はりじ（布のところ）', RECOLOR_ACCENT, () => this.recolor.accent ?? '', (c) => {
+        this.recolor = { ...this.recolor, accent: c };
+        this.refreshRecolor();
+        this.handlers.onRecolor(this.recolor);
+      }),
+    );
+  }
+
+  private refreshRecolor() {
+    this.refreshRows($('recolor-body'));
+  }
+
+  /** リカラーパネルを、選んだ家具の名前といまの色で開く */
+  openRecolor(name: string, current: Recolor | undefined) {
+    this.recolor = { ...(current ?? {}) };
+    $('recolor-name').textContent = name;
+    this.refreshRecolor();
+    const panel = $('panel-recolor');
+    if (panel.hidden) {
+      document.querySelectorAll<HTMLElement>('.panel').forEach((p) => (p.hidden = true));
+      panel.hidden = false;
+    }
+  }
+
+  closeRecolor() {
+    $('panel-recolor').hidden = true;
   }
 
   private chipRow(label: string, names: string[], current: () => number, pick: (i: number) => void): HTMLElement {
