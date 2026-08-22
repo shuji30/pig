@@ -10,7 +10,7 @@ import {
   SKIN_COLORS,
   WALL_STYLES,
 } from '../config';
-import { findDef } from '../data/furniture';
+import { findDef, resolveWallId } from '../data/furniture';
 import { rotatedSize } from '../core/iso';
 import { WALL_LEVELS } from '../core/wall';
 import type { AvatarLook, PlacedFurniture, PlacedWall, Recolor, RoomData, Rotation } from '../types';
@@ -193,7 +193,8 @@ function unpack(raw: unknown): SharedRoom | null {
   const wallItems: SharedRoom['wallItems'] = [];
   for (const it of wallRaw) {
     if (!Array.isArray(it) || typeof it[0] !== 'string') continue;
-    const def = findDef(it[0]);
+    // 壁側の id が変わったぶんを読み替えてから引く
+    const def = findDef(resolveWallId(it[0]));
     if (!def || def.category !== 'wall') continue;
     const cols = def.size[0];
     if (cols > size) continue;

@@ -107,8 +107,8 @@ describe('達成度の数え方', () => {
 
   it('月の壁のものだけを数える', () => {
     const m = findMission('moon-wall3')!;
-    expect(m.progress(ctx({ wallItems: [wall('clock'), wall('window')] }))).toBe(0);
-    expect(m.progress(ctx({ moonWallItems: [wall('clock'), wall('window'), wall('star-chart')] }))).toBe(3);
+    expect(m.progress(ctx({ wallItems: [wall('wall-clock'), wall('window')] }))).toBe(0);
+    expect(m.progress(ctx({ moonWallItems: [wall('wall-clock'), wall('window'), wall('star-chart')] }))).toBe(3);
   });
 
   it('地上のやることは、いま居る部屋の家具で進む', () => {
@@ -118,7 +118,7 @@ describe('達成度の数え方', () => {
 
   it('かべに掛けるやることは、いま居る部屋の壁で進む', () => {
     const m = findMission('wall2')!;
-    expect(m.progress(ctx({ wallItems: [wall('clock'), wall('window')] }))).toBe(2);
+    expect(m.progress(ctx({ wallItems: [wall('wall-clock'), wall('window')] }))).toBe(2);
   });
 
   it('カウンタが揃っていれば、どのやることも数で答える', () => {
@@ -127,7 +127,7 @@ describe('達成度の数え方', () => {
     const full = ctx({
       daily: daily({ placed: 1, stored: 1, sat: 1, emoted: 1, restyled: 1, bought: 1, traveled: 1 }),
       items: [item('chair')],
-      wallItems: [wall('clock')],
+      wallItems: [wall('wall-clock')],
       moonItems: [item('moon-stool')],
       moonWallItems: [wall('star-chart')],
     });

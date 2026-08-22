@@ -298,6 +298,8 @@ export class RoomScene extends Phaser.Scene {
       );
       this.persist();
     }
+    // はじめから買える額を持っている人にも気づいてもらう
+    this.time.delayedCall(2600, () => this.maybeHintRocket());
 
     this.ui.setRoomText(this.cur.name, this.cur.note);
     this.ui.setAtHome(this.visiting || this.save.currentRoom === HOME_ROOM);
@@ -1482,10 +1484,29 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setMissions(missionViews(this.save, this.missionCtx()));
   }
 
+  /** ロケットの案内を出したか（このセッション中だけ覚える） */
+  private rocketHinted = false;
+
+  /**
+   * ロケットが買える額になった時点で1回だけ知らせる。
+   * ショップは72件あって下のほうに埋もれるので、
+   * 「行き先がある」ことに気づかれないまま終わるのを防ぐ。
+   */
+  private maybeHintRocket() {
+    if (this.visiting || this.rocketHinted) return;
+    const def = getDef('rocket');
+    if ((this.save.inventory[def.id] ?? 0) > 0) return;
+    if (Object.values(this.save.rooms).some((r) => r.items.some((i) => i.defId === def.id))) return;
+    if (this.save.coins < def.price) return;
+    this.rocketHinted = true;
+    this.time.delayedCall(1400, () => this.ui.toast('🚀 ロケットが買えるよ！ショップの下のほうにいるよ'));
+  }
+
   /** 買った・売った・受け取った あとの表示更新 */
   private afterEconomyChange() {
     this.ui.setCoins(this.save.coins);
     this.ui.setRoomSize(this.size, nextRoomStep(this.size), this.save.coins);
+    this.maybeHintRocket();
     this.ui.setInventory(this.save.inventory);
     this.syncMissions();
     this.persist();

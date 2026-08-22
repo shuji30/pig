@@ -84,12 +84,15 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'dome-plant', name: 'ドームのしょくぶつ', category: 'deco', shape: 'plant', size: [1, 1], height: 70, color: '#dfe4f2', accent: '#7fc7a8', price: 260, rarity: 'uncommon' },
   { id: 'crater-rug', name: 'クレーターラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#b9bacb', accent: '#e4e6f2', walkable: true, price: 300, rarity: 'uncommon' },
   { id: 'rocket-model', name: 'ロケットのもけい', category: 'deco', shape: 'rocket', size: [1, 1], height: 54, color: '#eef2fb', accent: '#e06a6a', price: 360, rarity: 'uncommon' },
-  { id: 'rocket', name: 'ロケット', category: 'deco', shape: 'rocket', size: [2, 2], height: 118, color: '#f4f7ff', accent: '#e06a6a', travel: 'moon', price: 1500, rarity: 'rare' },
+  // 値段は「初日の所持（START_COINS + DAILY_BONUS）では足りないが、
+  // やること1件で届く」位置に置いている。行き先は ごほうび であって 関所 にしない。
+  // この意図は data/furniture.test.ts で固定してある
+  { id: 'rocket', name: '🚀 ロケット', category: 'deco', shape: 'rocket', size: [2, 2], height: 118, color: '#f4f7ff', accent: '#e06a6a', travel: 'moon', price: 480, rarity: 'rare' },
 
   // ---- かべ ----
   // 壁に掛けるもの。size[0] が壁に沿ったマス数、height は壁の上での高さ(px)。
   // 描画は render/wallTexture.ts。床の家具と同じショップ・持ちものに並ぶ
-  { id: 'clock', name: 'かべどけい', category: 'wall', shape: 'box', wallShape: 'clock', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#cfa855', price: 130, rarity: 'common' },
+  { id: 'wall-clock', name: 'かべどけい', category: 'wall', shape: 'box', wallShape: 'clock', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#cfa855', price: 130, rarity: 'common' },
   { id: 'art-small', name: 'ちいさい絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [1, 1], height: 24, color: '#cfa855', accent: '#dcc6e0', price: 140, rarity: 'common' },
   { id: 'sconce', name: 'かべしょくだい', category: 'wall', shape: 'box', wallShape: 'sconce', size: [1, 1], height: 30, color: '#cfa855', accent: '#fff3cf', price: 160, rarity: 'common' },
   { id: 'wall-mirror', name: 'かべかがみ', category: 'wall', shape: 'box', wallShape: 'mirror', size: [1, 1], height: 34, color: '#cfa855', accent: '#e8f2f8', price: 200, rarity: 'common' },
@@ -106,6 +109,22 @@ export const FURNITURE: FurnitureDef[] = [
 /** 壁に掛ける家具か */
 export function isWallDef(def: FurnitureDef): boolean {
   return def.category === 'wall';
+}
+
+/**
+ * 壁に掛けてあるものの id を読み替える表。
+ *
+ * かべどけいを 'clock' で追加してしまい、既にあった「おきどけい」（床の飾り）と
+ * id が衝突していた。`getDef('clock')` が後から定義した壁時計を返すため、
+ * おきどけいが実質使えない状態になっていた。
+ * 壁側を 'wall-clock' に改名したので、**すでに壁に掛かっている 'clock' だけ**を
+ * こちらへ読み替える。床に置いてある 'clock' はおきどけいのまま残る。
+ */
+const WALL_ID_ALIAS: Record<string, string> = { clock: 'wall-clock' };
+
+/** 壁に掛けてあるものの defId を、いまのカタログの id へ直す */
+export function resolveWallId(id: string): string {
+  return WALL_ID_ALIAS[id] ?? id;
 }
 
 const BY_ID = new Map(FURNITURE.map((f) => [f.id, f]));
@@ -137,14 +156,14 @@ export const STARTER_INVENTORY: Record<string, number> = {
   'plant-small': 1,
   box: 1,
   mat: 1,
-  clock: 1,
+  'wall-clock': 1,
   window: 1,
 };
 
 /** 壁の初期レイアウト */
 export const DEFAULT_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number }> = [
   { defId: 'window', side: 'right', col: 6, level: 0 },
-  { defId: 'clock', side: 'left', col: 2, level: 0 },
+  { defId: 'wall-clock', side: 'left', col: 2, level: 0 },
 ];
 
 /**

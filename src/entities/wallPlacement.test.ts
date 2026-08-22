@@ -37,32 +37,32 @@ const at = (uid: string, defId: string, side: 'right' | 'left', col: number, lev
 
 describe('壁に掛けられるかの判定', () => {
   it('何も無い壁には掛けられる', () => {
-    expect(canPlace([], 'clock', { side: 'right', col: 3, level: 0 }, 12)).toBe(true);
+    expect(canPlace([], 'wall-clock', { side: 'right', col: 3, level: 0 }, 12)).toBe(true);
   });
 
   it('壁からはみ出す位置には掛けられない', () => {
     // まどは2マス
     expect(canPlace([], 'window', { side: 'right', col: 11, level: 0 }, 12)).toBe(false);
     expect(canPlace([], 'window', { side: 'right', col: 10, level: 0 }, 12)).toBe(true);
-    expect(canPlace([], 'clock', { side: 'right', col: -1, level: 0 }, 12)).toBe(false);
+    expect(canPlace([], 'wall-clock', { side: 'right', col: -1, level: 0 }, 12)).toBe(false);
   });
 
   it('同じ壁の同じ段で重なる位置には掛けられない', () => {
     const items = [at('a', 'window', 'right', 4, 0)];
-    expect(canPlace(items, 'clock', { side: 'right', col: 4, level: 0 }, 12)).toBe(false);
-    expect(canPlace(items, 'clock', { side: 'right', col: 5, level: 0 }, 12)).toBe(false);
-    expect(canPlace(items, 'clock', { side: 'right', col: 6, level: 0 }, 12)).toBe(true);
-    expect(canPlace(items, 'clock', { side: 'right', col: 3, level: 0 }, 12)).toBe(true);
+    expect(canPlace(items, 'wall-clock', { side: 'right', col: 4, level: 0 }, 12)).toBe(false);
+    expect(canPlace(items, 'wall-clock', { side: 'right', col: 5, level: 0 }, 12)).toBe(false);
+    expect(canPlace(items, 'wall-clock', { side: 'right', col: 6, level: 0 }, 12)).toBe(true);
+    expect(canPlace(items, 'wall-clock', { side: 'right', col: 3, level: 0 }, 12)).toBe(true);
   });
 
   it('段がちがえば同じ列に掛けられる', () => {
     const items = [at('a', 'window', 'right', 4, 0)];
-    expect(canPlace(items, 'clock', { side: 'right', col: 4, level: 1 }, 12)).toBe(true);
+    expect(canPlace(items, 'wall-clock', { side: 'right', col: 4, level: 1 }, 12)).toBe(true);
   });
 
   it('壁がちがえば同じ列に掛けられる', () => {
     const items = [at('a', 'window', 'right', 4, 0)];
-    expect(canPlace(items, 'clock', { side: 'left', col: 4, level: 0 }, 12)).toBe(true);
+    expect(canPlace(items, 'wall-clock', { side: 'left', col: 4, level: 0 }, 12)).toBe(true);
   });
 
   it('移動中の自分自身とは重なってよい', () => {

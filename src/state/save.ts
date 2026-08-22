@@ -20,6 +20,7 @@ import {
   findDef,
   MOON_LAYOUT,
   MOON_WALL_LAYOUT,
+  resolveWallId,
   STARTER_INVENTORY,
 } from '../data/furniture';
 import type { DailyCounters, PlacedFurniture, PlacedWall, Recolor, RoomData, SaveData } from '../types';
@@ -210,7 +211,8 @@ function cleanWallItems(items: unknown, size: number): PlacedWall[] {
   if (!Array.isArray(items)) return [];
   const out: PlacedWall[] = [];
   for (const i of items) {
-    const def = findDef(i?.defId);
+    // 壁側の id が変わったぶんを読み替えてから引く
+    const def = findDef(typeof i?.defId === 'string' ? resolveWallId(i.defId) : i?.defId);
     if (!def || def.category !== 'wall') continue;
     const cols = def.size[0];
     if (cols > size) continue;

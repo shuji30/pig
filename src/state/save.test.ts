@@ -187,6 +187,7 @@ describe('版の移行', () => {
             { uid: 'w1', defId: 'window', side: 'left', col: 99, level: 9 },
             { uid: 'w2', defId: 'sofa', side: 'right', col: 0, level: 0 },
             { uid: 'w3', defId: 'ghost-wall', side: 'right', col: 0, level: 0 },
+            // 古い id。おきどけい との衝突を直したぶん 'wall-clock' に読み替わる
             { uid: 'w4', defId: 'clock', side: 'right', col: 3, level: 1 },
           ],
           spawn: { gx: 0, gy: 0 },
@@ -197,7 +198,7 @@ describe('版の移行', () => {
       avatar: { look: {} },
     });
     const wall = currentRoom(load()).wallItems;
-    expect(wall.map((w) => w.defId)).toEqual(['window', 'clock']);
+    expect(wall.map((w) => w.defId)).toEqual(['window', 'wall-clock']);
     expect(wall[0]).toMatchObject({ side: 'left', col: 10, level: 1 }); // まどは2マス
     expect(wall[1]).toMatchObject({ side: 'right', col: 3, level: 1 });
   });

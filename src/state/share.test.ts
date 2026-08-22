@@ -26,7 +26,7 @@ const sample: SharedRoom = {
   ],
   wallItems: [
     { defId: 'window', side: 'right', col: 5, level: 0 },
-    { defId: 'clock', side: 'left', col: 2, level: 1 },
+    { defId: 'wall-clock', side: 'left', col: 2, level: 1 },
   ],
   floorPatch: { '3,3': 2, '4,3': 2, '3,4': 4 },
 };
@@ -102,7 +102,7 @@ describe('encodeShared / decodeShared', () => {
   });
 
   it('床の張り替えを持たない形式4の URL も読める', async () => {
-    const token = packedToken([4, 0, 0, 'ゆかなし', '', [], [], 12, [['clock', 0, 1, 0]]]);
+    const token = packedToken([4, 0, 0, 'ゆかなし', '', [], [], 12, [['wall-clock', 0, 1, 0]]]);
     const room = await decodeShared(token);
     expect(room?.wallItems).toHaveLength(1);
     expect(room?.floorPatch).toEqual({});
@@ -239,10 +239,16 @@ describe('他人が作った URL の検証', () => {
     expect(await decodePacked([3, 0, 0])).toBeNull();
   });
 
+  it('古い壁時計の id を載せた URL も読める（読み替えられる）', async () => {
+    // 並びは [形式, ゆか, かべ, 名前, ひとこと, アバター, 家具, 広さ, 壁の家具, 床の張り替え]
+    const room = await decodePacked([5, 0, 0, 'x', '', [], [], 12, [['clock', 0, 2, 0]], []]);
+    expect(room?.wallItems).toEqual([{ defId: 'wall-clock', side: 'right', col: 2, level: 0 }]);
+  });
+
   it('壁のものでない家具は壁に入れられない', async () => {
     // 壁のものの形は [id, side(0=right / 1=left), col, level]
-    const room = await decodePacked([3, 0, 0, 'x', '', [], [], 12, [['sofa', 0, 0, 0], ['clock', 0, 3, 1]]]);
-    expect(room?.wallItems).toEqual([{ defId: 'clock', side: 'right', col: 3, level: 1 }]);
+    const room = await decodePacked([3, 0, 0, 'x', '', [], [], 12, [['sofa', 0, 0, 0], ['wall-clock', 0, 3, 1]]]);
+    expect(room?.wallItems).toEqual([{ defId: 'wall-clock', side: 'right', col: 3, level: 1 }]);
   });
 
   it('色でないリカラーは無かったことにする', async () => {
