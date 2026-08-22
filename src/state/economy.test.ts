@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ROOM_SIZE, MAX_ROOM_SIZE, ROOM_SIZES, ROOM_UNLOCK_PRICE } from '../config';
-import { expandRoom, nextRoomStep } from './economy';
+import { getPet } from '../data/pets';
+import { buyPet, expandRoom, nextRoomStep } from './economy';
+import { defaultSave } from './save';
 import type { RoomData, SaveData } from '../types';
 
 const room = (size: number = DEFAULT_ROOM_SIZE): RoomData => ({
@@ -64,5 +66,40 @@ describe('expandRoom', () => {
       /* 上限まで広げる */
     }
     expect(r.size).toBe(MAX_ROOM_SIZE);
+  });
+});
+
+describe('buyPet', () => {
+  const save = (patch: Partial<SaveData> = {}): SaveData => ({ ...defaultSave(), ...patch });
+
+  it('コインが足りればむかえられ、そのまま連れて歩く', () => {
+    const s = save({ coins: 1000, pets: [], pet: null });
+    const cat = getPet('pet-cat');
+    expect(buyPet(s, cat)).toBe(true);
+    expect(s.coins).toBe(1000 - cat.price);
+    expect(s.pets).toEqual([cat.id]);
+    expect(s.pet).toBe(cat.id);
+  });
+
+  it('コインが足りなければ何も変わらない', () => {
+    const s = save({ coins: 10, pets: [], pet: null });
+    expect(buyPet(s, getPet('pet-cat'))).toBe(false);
+    expect(s.coins).toBe(10);
+    expect(s.pets).toEqual([]);
+    expect(s.pet).toBeNull();
+  });
+
+  it('同じ種類は2匹にならない（コインも減らない）', () => {
+    const s = save({ coins: 1000, pets: ['pet-cat'], pet: 'pet-cat' });
+    expect(buyPet(s, getPet('pet-cat'))).toBe(false);
+    expect(s.coins).toBe(1000);
+    expect(s.pets).toEqual(['pet-cat']);
+  });
+
+  it('別の種類はもう1匹むかえられ、新しい子と歩く', () => {
+    const s = save({ coins: 2000, pets: ['pet-cat'], pet: 'pet-cat' });
+    expect(buyPet(s, getPet('pet-dog'))).toBe(true);
+    expect(s.pets).toEqual(['pet-cat', 'pet-dog']);
+    expect(s.pet).toBe('pet-dog');
   });
 });

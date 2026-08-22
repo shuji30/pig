@@ -329,6 +329,55 @@ describe('版の移行', () => {
     expect(d.traveled).toBe(3);
   });
 
+  it('v6 のセーブはペットを飼っていない状態で始まる', () => {
+    put({
+      version: 6,
+      rooms: {
+        home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, floorPatch: {}, items: [], wallItems: [], spawn: { gx: 0, gy: 0 } },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+    });
+    const s = load();
+    expect(s.pets).toEqual([]);
+    expect(s.pet).toBeNull();
+  });
+
+  it('知らないペットの id と、飼っていないのに連れている状態は落とす', () => {
+    put({
+      version: 7,
+      rooms: {
+        home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, floorPatch: {}, items: [], wallItems: [], spawn: { gx: 0, gy: 0 } },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+      pets: ['pet-cat', 'pet-cat', 'nope', 42],
+      pet: 'pet-dog',
+    });
+    const s = load();
+    expect(s.pets).toEqual(['pet-cat']); // 重複と知らない id を落とす
+    expect(s.pet).toBeNull(); // 飼っていないものは連れていない扱い
+  });
+
+  it('連れているペットは残る', () => {
+    put({
+      version: 7,
+      rooms: {
+        home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, floorPatch: {}, items: [], wallItems: [], spawn: { gx: 0, gy: 0 } },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+      pets: ['pet-cat', 'pet-dog'],
+      pet: 'pet-dog',
+    });
+    const s = load();
+    expect(s.pets).toEqual(['pet-cat', 'pet-dog']);
+    expect(s.pet).toBe('pet-dog');
+  });
+
   it('知らない未来の版は読まずに初期状態へ落とす', () => {
     put({ version: 99, rooms: {}, items: [], inventory: {}, avatar: {} });
     const s = load();

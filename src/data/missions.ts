@@ -13,11 +13,15 @@ export interface MissionCtx {
   /** 月コロニーの家具と壁。無ければ空 */
   moonItems: readonly PlacedFurniture[];
   moonWallItems: readonly PlacedWall[];
+  /** ペットを連れているか */
+  hasPet: boolean;
 }
 
 export interface MissionDef {
   id: string;
   label: string;
+  /** ペットを連れている人にだけ出す */
+  needsPet?: boolean;
   /** 達成に必要な数 */
   goal: number;
   /** もらえるコイン */
@@ -47,6 +51,8 @@ export const MISSIONS: MissionDef[] = [
   { id: 'items12', label: '部屋の家具を12個にする', goal: 12, reward: 60, progress: (c) => c.items.length },
   { id: 'wall2', label: 'かべに2つ掛けておく', goal: 2, reward: 40, progress: (c) => c.wallItems.length },
   { id: 'use2', label: '家具で2回あそぶ', goal: 2, reward: 25, progress: (c) => c.daily.used },
+  // ペットを飼っていない人には出さない（達成できない課題を出さないため）
+  { id: 'pat2', label: 'ペットを2回なでる', goal: 2, reward: 25, needsPet: true, progress: (c) => c.daily.patted },
 ];
 
 /**
@@ -110,9 +116,9 @@ function dayHash(day: string): number {
 }
 
 /** 日付から決まる3件。同じ日なら何度読み込んでも同じ組み合わせになる */
-export function todaysMissions(day: string): MissionDef[] {
+export function todaysMissions(day: string, hasPet = false): MissionDef[] {
   let h = dayHash(day);
-  const pool = [...MISSIONS];
+  const pool = MISSIONS.filter((m) => hasPet || m.needsPet !== true);
   const picked: MissionDef[] = [];
   for (let n = 0; n < 3 && pool.length > 0; n++) {
     h = Math.imul(h ^ (h >>> 13), 2246822519) >>> 0;

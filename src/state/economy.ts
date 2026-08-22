@@ -1,4 +1,5 @@
 import { DAILY_BONUS, ROOM_SIZES, ROOM_UNLOCK_PRICE, SELL_RATE, STREAK_BONUS, STREAK_MAX } from '../config';
+import type { PetDef } from '../data/pets';
 import {
   findMission,
   todaysMissions,
@@ -42,6 +43,21 @@ export function buy(save: SaveData, def: FurnitureDef): boolean {
   return true;
 }
 
+/**
+ * ペットを1匹むかえる。むかえたら true。
+ * 同じ種類は1匹まで（同じねこが2匹いる状態にしない）。売ることはできない
+ * ようにしてある（生きものを売り買いさせない）。
+ */
+export function buyPet(save: SaveData, def: PetDef): boolean {
+  if (save.pets.includes(def.id)) return false;
+  if (save.coins < def.price) return false;
+  save.coins -= def.price;
+  save.pets.push(def.id);
+  save.pet = def.id;
+  save.daily.bought += 1;
+  return true;
+}
+
 /** しまってある家具を1つ売る。売れた額を返す（売れなければ 0） */
 export function sell(save: SaveData, def: FurnitureDef): number {
   const have = save.inventory[def.id] ?? 0;
@@ -74,7 +90,7 @@ export interface MissionView {
 
 /** その日のやること。月コロニーがあれば月のぶんが1件足される */
 function missionsFor(save: SaveData, ctx: MissionCtx): MissionDef[] {
-  const list = todaysMissions(save.daily.day);
+  const list = todaysMissions(save.daily.day, ctx.hasPet);
   const moon = todaysMoonMission(save.daily.day, ctx.hasMoon);
   return moon ? [...list, moon] : list;
 }

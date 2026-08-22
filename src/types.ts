@@ -130,6 +130,8 @@ export interface DailyCounters {
   traveled: number;
   /** 家具でなにかした回数（ねる・みる・うつる など。すわるは sat で数える） */
   used: number;
+  /** ペットをなでた回数 */
+  patted: number;
 }
 
 /**
@@ -176,5 +178,9 @@ export interface SaveData {
   currentRoom: string;
   /** しまってある家具（defId -> 個数）。部屋をまたいで共有する */
   inventory: Record<string, number>;
+  /** 飼っているペットの id。買った順に増える */
+  pets: string[];
+  /** いま連れているペット（連れていなければ null）。部屋を移ってもついてくる */
+  pet: string | null;
   avatar: { look: AvatarLook };
 }

@@ -19,6 +19,7 @@ const daily = (patch: Partial<DailyCounters> = {}): DailyCounters => ({
   bought: 0,
   traveled: 0,
   used: 0,
+  patted: 0,
   ...patch,
 });
 
@@ -32,6 +33,7 @@ const ctx = (patch: Partial<MissionCtx> = {}): MissionCtx => ({
   hasMoon: false,
   moonItems: [],
   moonWallItems: [],
+  hasPet: false,
   ...patch,
 });
 

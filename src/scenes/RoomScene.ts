@@ -6,17 +6,28 @@ import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay
 import { screenToWallSlot, type WallSlot } from '../core/wall';
 import { getDef, interactionsOf } from '../data/furniture';
 import { getInteraction, type InteractionKind } from '../data/interactions';
+import { findPet, getPet } from '../data/pets';
 import type { MissionCtx } from '../data/missions';
 import type { MotionKind } from '../data/motions';
 import { AutoPlay } from '../entities/AutoPlay';
 import { Avatar } from '../entities/Avatar';
+import { Pet } from '../entities/Pet';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { WallLayer } from '../entities/WallLayer';
 import { getFurnitureTexture } from '../render/furnitureTexture';
 import { getWallTexture } from '../render/wallTexture';
 import { RoomView } from '../render/room';
 import { saveRoomPng } from '../render/snapshot';
-import { buy, claimDailyBonus, claimMissions, expandRoom, missionViews, nextRoomStep, sell } from '../state/economy';
+import {
+  buy,
+  buyPet,
+  claimDailyBonus,
+  claimMissions,
+  expandRoom,
+  missionViews,
+  nextRoomStep,
+  sell,
+} from '../state/economy';
 import { metricsSummary, track } from '../state/metrics';
 import {
   centerSpawn,
@@ -182,6 +193,29 @@ export class RoomScene extends Phaser.Scene {
         else this.cancelPlacing();
       },
       onSelAction: (act) => this.selAction(act),
+      onBuyPet: (petId) => {
+        if (this.visiting) return;
+        const def = findPet(petId);
+        if (!def) return;
+        if (!buyPet(this.save, def)) {
+          this.ui.toast(this.save.pets.includes(def.id) ? 'もう いっしょにいるよ' : 'コインが足りないよ');
+          return;
+        }
+        this.ui.toast(`${def.name}が やってきた！`);
+        track('buy');
+        this.syncPet();
+        this.afterEconomyChange();
+      },
+      onSetPet: (petId) => {
+        if (this.visiting) return;
+        if (petId !== null && !this.save.pets.includes(petId)) return;
+        this.save.pet = petId;
+        this.syncPet();
+        this.ui.setPets(this.save.pets, this.save.pet);
+        this.ui.toast(petId === null ? 'おうちで待っててもらうね' : `${getPet(petId).name}と いっしょ`);
+        this.syncMissions();
+        this.persist();
+      },
       onInteract: (kind) => {
         const uid = this.selectedUid;
         const item = uid ? this.furniture.get(uid) : null;
@@ -300,6 +334,8 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setBrush(this.brush);
     this.syncRoomSize();
     this.ui.setInventory(this.save.inventory);
+    this.ui.setPets(this.save.pets, this.save.pet);
+    this.syncPet();
     this.ui.setCoins(this.save.coins);
     this.syncMissions();
     this.setHint();
@@ -424,6 +460,7 @@ export class RoomScene extends Phaser.Scene {
     this.walls.setItems(this.cur.wallItems);
     this.repaintRoom();
     this.avatar.refreshDepth();
+    this.pet?.refreshDepth();
     this.userZoomed = false;
     this.applyFitZoom();
     this.centerOnRoom();
@@ -541,6 +578,7 @@ export class RoomScene extends Phaser.Scene {
 
   override update(_time: number, delta: number) {
     this.avatar.update(delta);
+    this.pet?.update(delta);
     this.auto.update(delta);
     this.syncUse();
     // 繰り返し再生の開始・終了に合わせてボタンとヒントを切り替える
@@ -784,6 +822,12 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
 
+    // ペットは家具より先に見る（家具の前に立っていても なでられるように）
+    if (this.petAt(worldX, worldY)) {
+      this.patPet();
+      return;
+    }
+
     const inRoom = tile.gx >= 0 && tile.gy >= 0 && tile.gx < this.size && tile.gy < this.size;
     const hit = this.furniture.pickAt(worldX, worldY);
     if (hit) {
@@ -843,6 +887,98 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     if (!this.startUse(item, kinds[0])) this.ui.toast('近づけないみたい…');
+  }
+
+  // ---------------- ペット ----------------
+
+  private pet: Pet | null = null;
+
+  /**
+   * セーブの内容に合わせてペットを出す／消す。
+   * 部屋を移ったときにも呼ぶ（連れているものは付いてくる）。
+   */
+  private syncPet() {
+    const id = this.save.pet;
+    const def = id ? findPet(id) : undefined;
+    if (!def) {
+      this.pet?.destroy();
+      this.pet = null;
+      return;
+    }
+    const spot = this.petSpawn();
+    if (!this.pet) {
+      this.pet = new Pet(this, def, spot.gx, spot.gy, {
+        ownerTile: () => this.avatar.tile,
+        pathTo: (from, to) => findPath(from, to, this.size, this.size, this.blockedFn),
+        pathNear: (from, to) =>
+          findPathAdjacent(from, this.aroundTiles(to), this.size, this.size, this.blockedFn)?.path ?? null,
+        randomTileNear: (from, radius) => this.freeTileNear(from, radius),
+      });
+      this.pet.setDepthResolver((box) => this.furniture.depthAt(box));
+    } else {
+      this.pet.setDef(def);
+      this.pet.placeAt(spot.gx, spot.gy);
+    }
+    this.pet.setFloaty(this.save.currentRoom === MOON_ROOM);
+  }
+
+  /** 飼い主のとなりで、空いているマス */
+  private petSpawn(): Tile {
+    const near = this.aroundTiles(this.avatar.tile);
+    for (const t of near) {
+      if (!this.furniture.isBlocked(t.gx, t.gy)) return t;
+    }
+    return this.avatar.tile;
+  }
+
+  /** そのマスのまわり8マス（部屋の中だけ） */
+  private aroundTiles(t: Tile): Tile[] {
+    const out: Tile[] = [];
+    for (const [dx, dy] of [
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+      [0, -1],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ] as Array<[number, number]>) {
+      const gx = t.gx + dx;
+      const gy = t.gy + dy;
+      if (gx < 0 || gy < 0 || gx >= this.size || gy >= this.size) continue;
+      if (this.furniture.isBlocked(gx, gy)) continue;
+      out.push({ gx, gy });
+    }
+    return out;
+  }
+
+  /** 近くの歩けるマスをひとつ選ぶ（ペットのうろうろ用） */
+  private freeTileNear(from: Tile, radius: number): Tile | null {
+    for (let i = 0; i < 12; i++) {
+      const gx = Phaser.Math.Clamp(from.gx + Phaser.Math.Between(-radius, radius), 0, this.size - 1);
+      const gy = Phaser.Math.Clamp(from.gy + Phaser.Math.Between(-radius, radius), 0, this.size - 1);
+      if (gx === from.gx && gy === from.gy) continue;
+      if (this.furniture.isBlocked(gx, gy)) continue;
+      return { gx, gy };
+    }
+    return null;
+  }
+
+  /** 画面のその点がペットかどうか（当たりは体のまわりの丸で見る） */
+  private petAt(worldX: number, worldY: number): boolean {
+    if (!this.pet) return false;
+    const c = this.pet.container;
+    return Math.hypot(worldX - c.x, worldY - (c.y - 14)) < 17;
+  }
+
+  /** なでる */
+  private patPet() {
+    if (!this.pet) return;
+    this.pet.pat();
+    this.save.daily.patted += 1;
+    this.syncMissions();
+    this.persist();
   }
 
   // ---------------- 家具でできること ----------------
@@ -1289,6 +1425,7 @@ export class RoomScene extends Phaser.Scene {
     this.noteEdit();
     this.select(uid);
     this.avatar.refreshDepth();
+    this.pet?.refreshDepth();
     this.persist();
   }
 
@@ -1297,6 +1434,7 @@ export class RoomScene extends Phaser.Scene {
     const removed = this.furniture.remove(uid);
     if (!removed) return;
     this.avatar.refreshDepth();
+    this.pet?.refreshDepth();
     this.drawGlow();
     this.save.inventory[removed.defId] = (this.save.inventory[removed.defId] ?? 0) + 1;
     this.save.daily.stored += 1;
@@ -1367,6 +1505,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.setFloaty(roomId === MOON_ROOM);
     this.ensureAvatarStandable();
     this.avatar.refreshDepth();
+    this.syncPet(); // 連れているペットは部屋を移ってもついてくる
 
     this.userZoomed = false;
     this.applyFitZoom();
@@ -1459,6 +1598,7 @@ export class RoomScene extends Phaser.Scene {
     } else if (this.selectedUid) {
       this.furniture.setRecolor(this.selectedUid, recolor);
       this.avatar.refreshDepth();
+      this.pet?.refreshDepth();
     } else {
       return;
     }
@@ -1581,6 +1721,7 @@ export class RoomScene extends Phaser.Scene {
       this.drawGlow();
       this.furniture.setVisible(uid, true);
       this.avatar.refreshDepth();
+      this.pet?.refreshDepth();
       this.cancelPlacing();
       this.select(uid);
       this.persist();
@@ -1601,6 +1742,7 @@ export class RoomScene extends Phaser.Scene {
     // アバターが家具の中に閉じ込められないよう、押し出す
     this.ensureAvatarStandable();
     this.avatar.refreshDepth();
+    this.pet?.refreshDepth();
 
     if ((this.save.inventory[defId] ?? 0) <= 0) {
       this.cancelPlacing();
@@ -1641,6 +1783,7 @@ export class RoomScene extends Phaser.Scene {
       hasMoon: !this.visiting && moon !== undefined,
       moonItems: moon?.items ?? [],
       moonWallItems: moon?.wallItems ?? [],
+      hasPet: !this.visiting && this.save.pet !== null,
     };
   }
 
@@ -1672,6 +1815,7 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setRoomSize(this.size, nextRoomStep(this.size), this.save.coins);
     this.maybeHintRocket();
     this.ui.setInventory(this.save.inventory);
+    this.ui.setPets(this.save.pets, this.save.pet);
     this.syncMissions();
     this.persist();
   }

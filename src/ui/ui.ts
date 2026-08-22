@@ -18,7 +18,9 @@ import { MOTIONS, type MotionKind } from '../data/motions';
 import type { MissionView } from '../state/economy';
 import { sellPrice } from '../state/economy';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
+import { PETS } from '../data/pets';
 import { makeIconCanvas } from '../render/furnitureTexture';
+import { makePetIconCanvas } from '../render/petArt';
 import { makeWallIconCanvas } from '../render/wallTexture';
 import type { AvatarLook, FurnitureCategory, Recolor } from '../types';
 
@@ -40,6 +42,10 @@ export interface UiHandlers {
   onReset(): void;
   onPlaceAction(act: 'rotate' | 'cancel'): void;
   onSelAction(act: 'rotate' | 'move' | 'recolor' | 'store' | 'deselect'): void;
+  /** ペットをむかえる */
+  onBuyPet(petId: string): void;
+  /** 連れて歩くペットを決める（null で おうちに置く） */
+  onSetPet(petId: string | null): void;
   /** 選択バーの「できること」（すわる・ねる・みる など）をおした */
   onInteract(kind: InteractionKind): void;
   /** リカラーの色を選んだ。どちらも undefined ならもとの色に戻す */
@@ -80,8 +86,10 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 /** DOM 側の UI 全般 */
 export class Ui {
-  private tab: FurnitureCategory | 'shop' = 'seat';
+  private tab: FurnitureCategory | 'shop' | 'pet' = 'seat';
   private inventory: Record<string, number> = {};
+  private pets: string[] = [];
+  private pet: string | null = null;
   private look!: AvatarLook;
   private floorIdx = 0;
   private wallIdx = 0;
@@ -193,7 +201,7 @@ export class Ui {
   private buildTabs() {
     const tabs = $('furniture-tabs');
     tabs.innerHTML = '';
-    const add = (key: FurnitureCategory | 'shop', label: string) => {
+    const add = (key: FurnitureCategory | 'shop' | 'pet', label: string) => {
       const b = document.createElement('button');
       b.className = 'tab';
       b.textContent = label;
@@ -206,6 +214,7 @@ export class Ui {
     };
     for (const cat of CATEGORY_ORDER) add(cat, CATEGORY_LABEL[cat]);
     add('shop', '🛍 ショップ');
+    add('pet', '🐾 ペット');
   }
 
   private buildEmotes() {
@@ -448,6 +457,13 @@ export class Ui {
     if (on) this.closePanels();
   }
 
+  /** 飼っているペットと、いま連れているものを表示に反映する */
+  setPets(pets: string[], pet: string | null) {
+    this.pets = [...pets];
+    this.pet = pet;
+    if (this.tab === 'pet') this.renderCatalog();
+  }
+
   setInventory(inv: Record<string, number>) {
     this.inventory = inv;
     this.renderCatalog();
@@ -481,7 +497,9 @@ export class Ui {
     const grid = $('furniture-grid');
     grid.innerHTML = '';
     $('furniture-note').textContent =
-      this.tab === 'shop'
+      this.tab === 'pet'
+        ? 'ペットは部屋を移ってもついてきます。押すとなでられます（うることはできません）。'
+        : this.tab === 'shop'
         ? 'コインで家具を買えます。もっているものは「うる」で半額になります。'
         : this.tab === 'wall'
           ? 'えらんで かべをクリックすると掛かります。上下2段に掛けられます。'
@@ -489,6 +507,10 @@ export class Ui {
 
     if (this.tab === 'shop') {
       this.renderShop(grid);
+      return;
+    }
+    if (this.tab === 'pet') {
+      this.renderPets(grid);
       return;
     }
     const list = FURNITURE.filter((f) => f.category === this.tab && (this.inventory[f.id] ?? 0) > 0);
@@ -503,6 +525,37 @@ export class Ui {
       const item = this.itemButton(def.id, `×${this.inventory[def.id]}`);
       item.classList.toggle('selected', def.id === this.pickedDefId);
       item.addEventListener('click', () => this.handlers.onPickFurniture(def.id));
+      grid.appendChild(item);
+    }
+  }
+
+  /** ペット。飼っているものは「つれる／おうちで待つ」、まだのものは値段を出す */
+  private renderPets(grid: HTMLElement) {
+    for (const def of PETS) {
+      const owned = this.pets.includes(def.id);
+      const active = this.pet === def.id;
+      const item = document.createElement('button');
+      item.className = 'item';
+      item.dataset.id = def.id;
+      item.classList.toggle('selected', active);
+      item.appendChild(makePetIconCanvas(this.scene, def));
+      const name = document.createElement('span');
+      name.textContent = def.name;
+      item.append(name);
+      if (owned) {
+        const state = document.createElement('span');
+        state.className = 'count';
+        state.textContent = active ? 'いっしょ' : 'おうち';
+        item.appendChild(state);
+        item.addEventListener('click', () => this.handlers.onSetPet(active ? null : def.id));
+      } else {
+        const price = document.createElement('span');
+        price.className = 'price';
+        price.textContent = `🪙${def.price}`;
+        item.appendChild(price);
+        item.classList.toggle('locked', this.coins < def.price);
+        item.addEventListener('click', () => this.handlers.onBuyPet(def.id));
+      }
       grid.appendChild(item);
     }
   }

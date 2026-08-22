@@ -23,6 +23,7 @@ import {
   resolveWallId,
   STARTER_INVENTORY,
 } from '../data/furniture';
+import { findPet } from '../data/pets';
 import type { DailyCounters, PlacedFurniture, PlacedWall, Recolor, RoomData, SaveData } from '../types';
 import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
 
@@ -58,7 +59,7 @@ export function dayBefore(day: string): string {
 }
 
 export function emptyDaily(day: string): DailyCounters {
-  return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0, traveled: 0, used: 0 };
+  return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0, traveled: 0, used: 0, patted: 0 };
 }
 
 /**
@@ -81,6 +82,7 @@ function cleanDaily(raw: unknown, fallbackDay: string): DailyCounters {
     bought: num(r.bought),
     traveled: num(r.traveled),
     used: num(r.used),
+    patted: num(r.patted),
   };
 }
 
@@ -131,6 +133,8 @@ export function defaultSave(): SaveData {
     rooms: { [HOME_ROOM]: { ...emptyRoom(DEFAULT_ROOM_NAME), items, wallItems } },
     currentRoom: HOME_ROOM,
     inventory,
+    pets: [],
+    pet: null,
     avatar: {
       look: {
         name: 'ピグ',
@@ -283,6 +287,7 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
  * v3 → v4: 部屋がひとつだけの前提をやめ、`rooms` / `currentRoom` に分けた
  * v4 → v5: 壁に掛ける家具（`RoomData.wallItems`）が増えた。既存の部屋は空で始まる
  * v5 → v6: 床の部分張り替え（`RoomData.floorPatch`）が増えた。既存の部屋は空で始まる
+ * v6 → v7: ペット（`pets` / `pet`）が増えた。既存のセーブは「飼っていない」で始まる
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -335,8 +340,24 @@ function migrate(raw: unknown): SaveData | null {
     rooms,
     currentRoom,
     inventory,
+    ...cleanPets(old.pets, old.pet),
     avatar: { look: { ...base.avatar.look, ...old.avatar?.look } },
   };
+}
+
+/**
+ * 飼っているペット。カタログから消えた id は捨て、連れているものが
+ * 飼っていないものになっていたら連れていない扱いにする。
+ */
+function cleanPets(rawPets: unknown, rawPet: unknown): { pets: string[]; pet: string | null } {
+  const pets: string[] = [];
+  if (Array.isArray(rawPets)) {
+    for (const id of rawPets) {
+      if (typeof id === 'string' && findPet(id) && !pets.includes(id)) pets.push(id);
+    }
+  }
+  const pet = typeof rawPet === 'string' && pets.includes(rawPet) ? rawPet : null;
+  return { pets, pet };
 }
 
 /** 日付が変わっていたら、その日のカウンタとミッションを入れ替える */
