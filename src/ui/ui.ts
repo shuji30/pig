@@ -415,6 +415,18 @@ export class Ui {
     this.refreshRoomPanel();
   }
 
+  /** 時間帯の表示。null なら隠す（いつも同じ空の部屋） */
+  setTimeOfDay(style: { icon: string; label: string } | null) {
+    const el = $('tod');
+    el.hidden = style === null;
+    if (!style) return;
+    el.textContent = '';
+    el.append(document.createTextNode(`${style.icon} `));
+    const b = document.createElement('b');
+    b.textContent = style.label;
+    el.appendChild(b);
+  }
+
   /** 地上の部屋にいるか。よその部屋にいるときだけ 🌍 を出す */
   setAtHome(atHome: boolean) {
     $('btn-earth').hidden = atHome;

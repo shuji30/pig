@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { FLOOR_STYLES, TILE_H, TILE_W, WALL_H, WALL_STYLES } from '../config';
 import { gridToScreen } from '../core/iso';
+import { applyTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { shade } from './color';
 
 const HW = TILE_W / 2;
@@ -13,6 +14,13 @@ export class RoomView {
   private size = 12;
   /** 部分的に張り替えた床。キーは "gx,gy" */
   private patch: Record<string, number> = {};
+  /** 時間帯。null なら色調をかけない（月コロニーなど、いつも同じ空の部屋） */
+  private tod: TimeOfDay | null = null;
+
+  /** 時間帯の色調をかけた色 */
+  private tone(color: number): number {
+    return this.tod === null ? color : applyTimeOfDay(color, TIME_OF_DAY[this.tod]);
+  }
 
   constructor(scene: Phaser.Scene) {
     this.wallG = scene.add.graphics().setDepth(-2000);
@@ -23,9 +31,16 @@ export class RoomView {
    * @param size 一辺のマス数（部屋ごとに変わる）
    * @param patch 部分的に張り替えた床（"gx,gy" -> ゆかの番号）
    */
-  redraw(floorIdx: number, wallIdx: number, size: number, patch: Record<string, number> = {}) {
+  redraw(
+    floorIdx: number,
+    wallIdx: number,
+    size: number,
+    patch: Record<string, number> = {},
+    tod: TimeOfDay | null = null,
+  ) {
     this.size = size;
     this.patch = patch;
+    this.tod = tod;
     this.drawWalls(WALL_STYLES[wallIdx % WALL_STYLES.length]);
     this.drawFloor(FLOOR_STYLES[floorIdx % FLOOR_STYLES.length]);
   }
@@ -45,9 +60,9 @@ export class RoomView {
           { x: p.x, y: p.y + TILE_H },
           { x: p.x - HW, y: p.y + HH },
         ];
-        g.fillStyle((gx + gy) % 2 === 0 ? style.a : style.b, 1);
+        g.fillStyle(this.tone((gx + gy) % 2 === 0 ? style.a : style.b), 1);
         g.fillPoints(pts, true);
-        g.lineStyle(1, style.line, 0.5);
+        g.lineStyle(1, this.tone(style.line), 0.5);
         g.strokePoints(pts, true);
       }
     }
@@ -57,7 +72,7 @@ export class RoomView {
     const e = gridToScreen(this.size, 0);
     const s = gridToScreen(this.size, this.size);
     const w = gridToScreen(0, this.size);
-    g.lineStyle(2, shade(style.line, 0.8), 0.9);
+    g.lineStyle(2, this.tone(shade(style.line, 0.8)), 0.9);
     g.strokePoints([n, e, s, w], true);
   }
 
@@ -69,12 +84,12 @@ export class RoomView {
     const w = gridToScreen(0, this.size);
 
     // 右側の壁（gy = 0 の縁）
-    this.wallQuad(g, n, e, style.a);
+    this.wallQuad(g, n, e, this.tone(style.a));
     // 左側の壁（gx = 0 の縁）
-    this.wallQuad(g, n, w, style.b);
+    this.wallQuad(g, n, w, this.tone(style.b));
 
     // 継ぎ目
-    g.lineStyle(1, shade(style.b, 0.7), 0.6);
+    g.lineStyle(1, this.tone(shade(style.b, 0.7)), 0.6);
     g.lineBetween(n.x, n.y, n.x, n.y - WALL_H);
   }
 

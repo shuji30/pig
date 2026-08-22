@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { FLOOR_STYLES, ROOM_THEMES, TILE_H, TILE_W, WALL_H } from '../config';
 import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
+import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
 import { getDef } from '../data/furniture';
 import type { MissionCtx } from '../data/missions';
@@ -62,6 +63,8 @@ export class RoomScene extends Phaser.Scene {
   private ui!: Ui;
   private auto!: AutoPlay;
 
+  /** 夜の灯り。床の上・家具の下に敷く */
+  private glowG!: Phaser.GameObjects.Graphics;
   private hoverG!: Phaser.GameObjects.Graphics;
   private selG!: Phaser.GameObjects.Graphics;
   private ghost: Phaser.GameObjects.Image | null = null;
@@ -129,13 +132,13 @@ export class RoomScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor('#2b2430');
     this.room = new RoomView(this);
-    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
 
     this.furniture = new FurnitureLayer(this, this.size);
     this.furniture.setItems(this.cur.items);
     this.walls = new WallLayer(this, this.size);
     this.walls.setItems(this.cur.wallItems);
 
+    this.glowG = this.add.graphics().setDepth(-1850);
     this.hoverG = this.add.graphics().setDepth(-1700);
     this.selG = this.add.graphics().setDepth(-1690);
     this.ghostG = this.add.graphics().setDepth(9_000_000);
@@ -150,7 +153,7 @@ export class RoomScene extends Phaser.Scene {
       },
       onFloorChange: (i) => {
         this.cur.floor = i;
-        this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+        this.repaintRoom();
         this.save.daily.restyled += 1;
         this.noteEdit();
         this.syncMissions();
@@ -158,7 +161,7 @@ export class RoomScene extends Phaser.Scene {
       },
       onWallChange: (i) => {
         this.cur.wall = i;
-        this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+        this.repaintRoom();
         this.save.daily.restyled += 1;
         this.noteEdit();
         this.syncMissions();
@@ -234,7 +237,7 @@ export class RoomScene extends Phaser.Scene {
         if (!theme || this.visiting) return;
         this.cur.floor = theme.floor;
         this.cur.wall = theme.wall;
-        this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+        this.repaintRoom();
         this.ui.setStyles(this.cur.floor, this.cur.wall);
         this.save.daily.restyled += 1;
         this.noteEdit();
@@ -298,6 +301,9 @@ export class RoomScene extends Phaser.Scene {
 
     this.ui.setRoomText(this.cur.name, this.cur.note);
     this.ui.setAtHome(this.visiting || this.save.currentRoom === HOME_ROOM);
+    // 時間帯を反映し、以後1分ごとに見張る（日をまたいでも自然に切り替わる）
+    this.syncTimeOfDay(true);
+    this.time.addEvent({ delay: 60_000, loop: true, callback: () => this.syncTimeOfDay() });
     this.avatar.setFloaty(!this.visiting && this.save.currentRoom === MOON_ROOM);
     this.refreshMetricsLine();
     if (this.shared) {
@@ -329,6 +335,56 @@ export class RoomScene extends Phaser.Scene {
     return this.cur.size;
   }
 
+  // ---------------- 時間帯 ----------------
+
+  /** いま画面に出している時間帯。月コロニーでは null（いつも星空） */
+  private tod: TimeOfDay | null = null;
+
+  /**
+   * その部屋に時間帯の色調をかけるか。
+   * 月コロニーは「いつも星空」なので、朝夕でドームの外が明るくならないようにする。
+   */
+  private todFor(roomId: string): TimeOfDay | null {
+    return roomId === MOON_ROOM ? null : currentTimeOfDay();
+  }
+
+  /** 床・壁・夜の灯りを、いまの時間帯で描き直す */
+  private repaintRoom() {
+    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch, this.tod);
+    this.drawGlow();
+  }
+
+  /** 夜だけ、灯りをともす家具の足元にぼんやりした光を落とす */
+  private drawGlow() {
+    const g = this.glowG;
+    g.clear();
+    if (this.tod === null || !TIME_OF_DAY[this.tod].lampsOn) return;
+    for (const spot of this.furniture.lampSpots()) {
+      // 外側から内側へ重ねて、にじんだ灯りにする
+      for (const [k, a] of [
+        [1, 0.05],
+        [0.68, 0.07],
+        [0.4, 0.1],
+      ] as Array<[number, number]>) {
+        g.fillStyle(0xffe6a8, a);
+        g.fillEllipse(spot.x, spot.y, spot.r * 2 * k, spot.r * k);
+      }
+    }
+  }
+
+  /**
+   * 時間帯が変わったかを見て、変わっていれば描き直す。
+   * @param force 変わっていなくても反映する（起動時に使う。
+   *   月コロニーは最初から null なので、差分だけ見ていると表示が消えない）
+   */
+  private syncTimeOfDay(force = false) {
+    const next = this.todFor(this.save.currentRoom);
+    if (!force && next === this.tod) return;
+    this.tod = next;
+    this.repaintRoom();
+    this.ui.setTimeOfDay(next === null ? null : TIME_OF_DAY[next]);
+  }
+
   // ---------------- 部屋をひろげる ----------------
 
   /** 「ひろさ」の表示をいまの状態に合わせる */
@@ -349,7 +405,7 @@ export class RoomScene extends Phaser.Scene {
     this.furniture.setItems(this.cur.items);
     this.walls.setSize(this.size);
     this.walls.setItems(this.cur.wallItems);
-    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+    this.repaintRoom();
     this.avatar.refreshDepth();
     this.userZoomed = false;
     this.applyFitZoom();
@@ -1075,6 +1131,7 @@ export class RoomScene extends Phaser.Scene {
     const removed = this.furniture.remove(uid);
     if (!removed) return;
     this.avatar.refreshDepth();
+    this.drawGlow();
     this.save.inventory[removed.defId] = (this.save.inventory[removed.defId] ?? 0) + 1;
     this.save.daily.stored += 1;
     this.noteEdit();
@@ -1129,11 +1186,15 @@ export class RoomScene extends Phaser.Scene {
     this.save.currentRoom = roomId;
     const room = this.cur;
 
+    // 月コロニーは時間帯の色調をかけないので、描く前に決めておく
+    this.tod = this.todFor(roomId);
+    this.ui.setTimeOfDay(this.tod === null ? null : TIME_OF_DAY[this.tod]);
+
     this.furniture.setSize(room.size);
     this.furniture.setItems(room.items);
     this.walls.setSize(room.size);
     this.walls.setItems(room.wallItems);
-    this.room.redraw(room.floor, room.wall, room.size, room.floorPatch);
+    this.repaintRoom();
 
     this.avatar.stop();
     this.avatar.placeAt(room.spawn.gx, room.spawn.gy);
@@ -1188,7 +1249,7 @@ export class RoomScene extends Phaser.Scene {
       if (before === this.brush) return; // もう同じ柄
       this.cur.floorPatch[key] = this.brush;
     }
-    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+    this.repaintRoom();
     this.save.daily.restyled += 1;
     this.noteEdit();
     this.persist();
@@ -1200,7 +1261,7 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     this.cur.floorPatch = {};
-    this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch);
+    this.repaintRoom();
     this.noteEdit();
     this.persist();
     this.ui.toast('ゆかをぜんぶ もどしたよ');
@@ -1351,6 +1412,7 @@ export class RoomScene extends Phaser.Scene {
       const uid = this.moveUid;
       this.furniture.update(uid, gx, gy, this.placeRot);
       this.noteEdit();
+      this.drawGlow();
       this.furniture.setVisible(uid, true);
       this.avatar.refreshDepth();
       this.cancelPlacing();
@@ -1367,6 +1429,7 @@ export class RoomScene extends Phaser.Scene {
     this.noteEdit();
     this.ui.setInventory(this.save.inventory);
     this.syncMissions();
+    this.drawGlow();
     this.persist();
 
     // アバターが家具の中に閉じ込められないよう、押し出す

@@ -254,6 +254,22 @@ export class FurnitureLayer {
     return behind + HALF;
   }
 
+  /**
+   * 灯りをともす家具の位置（画面座標）と、灯りの大きさ。
+   * 夜だけ床にぼんやりした光を落とすのに使う。
+   */
+  lampSpots(): Array<{ x: number; y: number; r: number }> {
+    const out: Array<{ x: number; y: number; r: number }> = [];
+    for (const item of this.items) {
+      const def = getDef(item.defId);
+      if (def.shape !== 'lamp') continue;
+      const f = this.footprint(item);
+      const p = gridToScreen(f.gx + f.w / 2, f.gy + f.d / 2);
+      out.push({ x: p.x, y: p.y, r: 34 + def.height * 0.34 });
+    }
+    return out;
+  }
+
   /** 画面座標にある家具を、手前のものから探す（透明部分は無視） */
   pickAt(worldX: number, worldY: number): PlacedFurniture | null {
     const ordered = [...this.items].sort((a, b) => {
