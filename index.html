@@ -9,6 +9,14 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%A0%3C/text%3E%3C/svg%3E"
     />
+    <!-- ホーム画面に追加して、オフラインでも遊べるようにする -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="My Little Room" />
+    <meta name="description" content="自分の部屋を飾って、URLで人に見せられる箱庭。ロケットで月コロニーにも行けます。" />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
@@ -190,9 +198,25 @@
           <li>もらった URL を開くと<b>その部屋を歩けます</b>。「とりこむ」で自分の部屋にもできます。</li>
           <li>「みせる」の<b>📷 画像でほぞん</b>で、部屋の名前入りの PNG が保存できます。</li>
           <li>変更は自動的にブラウザへ保存されます。</li>
+          <li><b>ホーム画面に追加</b>すると、アプリのように開けて<b>オフラインでも遊べます</b>。
+            iPhone は Safari の<b>共有 → ホーム画面に追加</b>。Android・PC は下のボタンから。</li>
+          <li>⚠️ iPhone では、ホーム画面のアプリと Safari で<b>保存が別</b>になります。
+            追加する前に「みせる」で<b>URL をコピー</b>しておき、追加したアプリで開いて
+            <b>とりこむ</b>と、部屋をそのまま移せます。</li>
         </ul>
+        <div id="install-row" hidden>
+          <button id="btn-install" class="primary">📲 ホーム画面に追加</button>
+        </div>
+        <p class="note" id="offline-note" hidden></p>
         <p class="note" id="metrics-line"></p>
       </section>
+
+      <!-- あたらしいバージョンが配られたときの帯 -->
+      <div id="update-bar" hidden>
+        <span>あたらしいバージョンがあります</span>
+        <button id="btn-update" class="primary">読み込み直す</button>
+        <button id="btn-update-later">あとで</button>
+      </div>
 
       <!-- 配置モードのバー -->
       <div id="placebar" class="ctxbar" hidden>

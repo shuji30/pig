@@ -627,6 +627,43 @@ button.danger {
   box-shadow: none;
 }
 
+/* あたらしいバージョンが配られたときの帯 */
+#update-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 70px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 22px;
+  background: var(--panel-bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  z-index: 26;
+  font-size: 12px;
+  max-width: calc(100vw - 16px);
+}
+
+#update-bar span {
+  font-weight: 700;
+}
+
+#update-bar button {
+  font-size: 12px;
+  padding: 7px 12px;
+}
+
+/* あそびかたの中の「ホーム画面に追加」 */
+#install-row {
+  margin: 10px 0 4px;
+}
+
+#install-row button {
+  width: 100%;
+  padding: 10px;
+}
+
 /* 選択バーの「できること」（すわる・ねる・みる など） */
 #selbar-acts {
   display: flex;

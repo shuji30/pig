@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { RoomScene } from './scenes/RoomScene';
+import { setupPwa } from './pwa/install';
 import { decodeShared, shareTokenInLocation } from './state/share';
 
 /**
@@ -36,6 +37,10 @@ async function boot() {
   // 「こうなった」を追う用。中身はすべて端末の中にしか無いので、
   // 見えて困るものは無い
   (window as unknown as { game: Phaser.Game }).game = game;
+
+  // ホーム画面への追加とオフライン対応。開発中は登録しない
+  // （古い保存が残って、直したはずのものが直らなくなる）
+  setupPwa(import.meta.env.PROD);
 }
 
 void boot();
