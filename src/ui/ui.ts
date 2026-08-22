@@ -13,6 +13,7 @@ import {
   WALL_STYLES,
 } from '../config';
 import { CATEGORY_LABEL, CATEGORY_ORDER, FURNITURE, getDef } from '../data/furniture';
+import type { InteractionKind } from '../data/interactions';
 import { MOTIONS, type MotionKind } from '../data/motions';
 import type { MissionView } from '../state/economy';
 import { sellPrice } from '../state/economy';
@@ -39,6 +40,8 @@ export interface UiHandlers {
   onReset(): void;
   onPlaceAction(act: 'rotate' | 'cancel'): void;
   onSelAction(act: 'rotate' | 'move' | 'recolor' | 'store' | 'deselect'): void;
+  /** 選択バーの「できること」（すわる・ねる・みる など）をおした */
+  onInteract(kind: InteractionKind): void;
   /** リカラーの色を選んだ。どちらも undefined ならもとの色に戻す */
   onRecolor(recolor: Recolor | undefined): void;
   onPanelOpen(name: PanelName): void;
@@ -713,12 +716,25 @@ export class Ui {
     if (rotate) rotate.hidden = opts?.wall === true;
   }
 
-  showSelBar(name: string | null, opts?: { wall?: boolean }) {
+  showSelBar(
+    name: string | null,
+    opts?: { wall?: boolean; acts?: Array<{ kind: InteractionKind; icon: string; label: string; active: boolean }> },
+  ) {
     const bar = $('selbar');
     bar.hidden = name === null;
     if (name) $('selbar-name').textContent = name;
     const rotate = bar.querySelector<HTMLElement>('[data-act="rotate"]');
     if (rotate) rotate.hidden = opts?.wall === true;
+    // 家具でできること。家具ごとに数が変わるので毎回作り直す
+    const acts = $('selbar-acts');
+    acts.innerHTML = '';
+    for (const a of opts?.acts ?? []) {
+      const btn = document.createElement('button');
+      btn.className = a.active ? 'act on' : 'act';
+      btn.textContent = `${a.icon} ${a.label}`;
+      btn.addEventListener('click', () => this.handlers.onInteract(a.kind));
+      acts.appendChild(btn);
+    }
   }
 
   setHint(text: string) {

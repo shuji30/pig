@@ -1,3 +1,5 @@
+import type { InteractionKind } from './data/interactions';
+
 /** 家具の回転（90度単位）。0=正面が南、1=西、2=北、3=東 を向く */
 export type Rotation = 0 | 1 | 2 | 3;
 
@@ -46,6 +48,12 @@ export interface FurnitureDef {
   walkable?: boolean;
   /** 座れる家具なら、座ったときのアバターの持ち上げ量(px) */
   seatHeight?: number;
+  /**
+   * この家具でできること。省略したときは seatHeight があれば ['sit'] とみなす
+   * （interactionsOf() 参照）。順番どおりに選択バーへ並び、先頭が
+   * 「家具をおしたときにやること」になる。
+   */
+  interactions?: InteractionKind[];
   /**
    * 壁に掛ける家具のときだけ入る。
    * このとき `size[0]` は壁に沿ったマス数、`height` は壁の上での高さ(px)を表す。
@@ -120,6 +128,8 @@ export interface DailyCounters {
   bought: number;
   /** ロケットで別の部屋へ行った回数 */
   traveled: number;
+  /** 家具でなにかした回数（ねる・みる・うつる など。すわるは sat で数える） */
+  used: number;
 }
 
 /**

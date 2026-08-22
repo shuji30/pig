@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { boxOf, canPlaceBox, contains, insideRoom, overlaps, type Box, type PlacementQuery } from './placement';
+import {
+  boxOf,
+  canPlaceBox,
+  contains,
+  frontTiles,
+  insideRoom,
+  overlaps,
+  type Box,
+  type PlacementQuery,
+} from './placement';
 
 /** 置いてある家具から、判定用の部屋の状態を組み立てる */
 function room(
@@ -86,5 +95,38 @@ describe('canPlaceBox', () => {
 
   it('ラグでも部屋の外へは出せない', () => {
     expect(canPlaceBox(box(10, 10, 3, 3), true, room([]))).toBe(false);
+  });
+});
+
+describe('frontTiles', () => {
+  const box: Box = { gx: 3, gy: 4, w: 2, d: 1 };
+
+  it('rot 0 は +gy 側（画面の左下）', () => {
+    expect(frontTiles(box, 0)).toEqual([
+      { gx: 3, gy: 5 },
+      { gx: 4, gy: 5 },
+    ]);
+  });
+
+  it('rot 2 は -gy 側', () => {
+    expect(frontTiles(box, 2)).toEqual([
+      { gx: 3, gy: 3 },
+      { gx: 4, gy: 3 },
+    ]);
+  });
+
+  it('rot 1 は +gx 側、rot 3 は -gx 側', () => {
+    expect(frontTiles(box, 1)).toEqual([{ gx: 5, gy: 4 }]);
+    expect(frontTiles(box, 3)).toEqual([{ gx: 2, gy: 4 }]);
+  });
+
+  it('正面の幅は、その向きの見かけの幅と同じ数だけある', () => {
+    const wide: Box = { gx: 0, gy: 0, w: 3, d: 2 };
+    expect(frontTiles(wide, 0)).toHaveLength(3);
+    expect(frontTiles(wide, 1)).toHaveLength(2);
+  });
+
+  it('部屋の外を指すこともある（呼ぶ側で落とす）', () => {
+    expect(frontTiles({ gx: 0, gy: 0, w: 1, d: 1 }, 2)).toEqual([{ gx: 0, gy: -1 }]);
   });
 });

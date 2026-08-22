@@ -590,12 +590,29 @@ button.danger {
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
-  border-radius: 999px;
+  /* 1段のときは丸い帯、狭い画面で折り返したときは角丸の箱になる高さ */
+  border-radius: 22px;
   background: var(--panel-bg);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
   z-index: 15;
   font-size: 12px;
+  /* スマホでは画面からはみ出すので折り返す */
+  flex-wrap: wrap;
+  justify-content: center;
+  /* 中身の幅いっぱいに広げてから、画面の幅で止める（縦に細長くならないように） */
+  width: max-content;
+  max-width: calc(100vw - 16px);
+}
+
+.ctxbar button,
+.ctxbar span {
   white-space: nowrap;
+}
+
+/* ボタンの中の言葉。狭い画面では絵柄だけにする */
+.ctxbar .lbl {
+  font-weight: inherit;
+  padding: 0;
 }
 
 .ctxbar span {
@@ -608,6 +625,29 @@ button.danger {
   padding: 6px 11px;
   background: #f6eef2;
   box-shadow: none;
+}
+
+/* 選択バーの「できること」（すわる・ねる・みる など） */
+#selbar-acts {
+  display: flex;
+  gap: 6px;
+  padding: 0;
+  font-weight: 400;
+}
+
+#selbar-acts:empty {
+  display: none;
+}
+
+.ctxbar button.act {
+  background: #fdf3d8;
+  outline: 1px solid #e6cf9a;
+}
+
+.ctxbar button.act.on {
+  background: #f7d98c;
+  outline: 1.5px solid #cfa855;
+  font-weight: 700;
 }
 
 /* ---------- トースト ---------- */
@@ -633,6 +673,24 @@ button.danger {
 }
 
 @media (max-width: 480px) {
+  /* 家具を選んでいる帯が2段になって、拡大縮小のボタンを覆ってしまうため、
+     言葉を落として1段に収める。何が選ばれているかは部屋の中の枠で分かる */
+  #selbar-name {
+    display: none;
+  }
+  .ctxbar .lbl {
+    display: none;
+  }
+  .ctxbar {
+    gap: 5px;
+  }
+  /* 帯が画面の端まで来るので、拡大縮小のボタンをその下へ逃がす */
+  #zoombar {
+    top: 112px;
+  }
+  .ctxbar button {
+    padding: 6px 8px;
+  }
   .brand {
     font-size: 12px;
   }

@@ -26,6 +26,29 @@ export function insideRoom(box: Box, roomW: number, roomH: number): boolean {
   return box.gx >= 0 && box.gy >= 0 && box.gx + box.w <= roomW && box.gy + box.d <= roomH;
 }
 
+/**
+ * 家具の正面のとなりのマス。rot 0 は +gy（画面の左下）を向いている。
+ * テレビや鏡は「正面に立つ」ほうが自然で、裏に回ると家具でアバターが隠れる。
+ */
+export function frontTiles(box: Box, rot: Rotation): Array<{ gx: number; gy: number }> {
+  const out: Array<{ gx: number; gy: number }> = [];
+  switch (rot) {
+    case 0:
+      for (let x = box.gx; x < box.gx + box.w; x++) out.push({ gx: x, gy: box.gy + box.d });
+      break;
+    case 1:
+      for (let y = box.gy; y < box.gy + box.d; y++) out.push({ gx: box.gx + box.w, gy: y });
+      break;
+    case 2:
+      for (let x = box.gx; x < box.gx + box.w; x++) out.push({ gx: x, gy: box.gy - 1 });
+      break;
+    default:
+      for (let y = box.gy; y < box.gy + box.d; y++) out.push({ gx: box.gx - 1, gy: y });
+      break;
+  }
+  return out;
+}
+
 /** 置けるかの判定に必要な、部屋のいまの状態 */
 export interface PlacementQuery {
   roomW: number;

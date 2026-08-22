@@ -7,6 +7,8 @@ export interface AutoPlayHost {
   wanderOnce(): boolean;
   /** 座れる家具へ向かう。向かえたら true */
   sitSomewhere(): boolean;
+  /** 家具でできること（ねる・みる・みずやり など）をひとつやる。始められたら true */
+  useSomething(): boolean;
   /** 立ち上がる */
   standUp(): void;
   playEmote(kind: MotionKind): void;
@@ -83,9 +85,14 @@ export class AutoPlay {
       this.startedLoop = false;
       if (this.host.wanderOnce()) return;
       this.emote();
-    } else if (roll < 0.66) {
+    } else if (roll < 0.62) {
       this.startedLoop = false;
       if (this.host.sitSomewhere()) return;
+      this.emote();
+    } else if (roll < 0.76) {
+      // 部屋に置いたものを使ってみせる（置いた甲斐が見える時間）
+      this.startedLoop = false;
+      if (this.host.useSomething()) return;
       this.emote();
     } else if (roll < 0.94) {
       this.emote();

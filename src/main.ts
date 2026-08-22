@@ -11,7 +11,7 @@ async function boot() {
   const shared = token ? await decodeShared(token) : null;
   const broken = token !== null && shared === null;
 
-  new Phaser.Game({
+  const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
     backgroundColor: '#2b2430',
@@ -31,6 +31,11 @@ async function boot() {
     },
     scene: [new RoomScene(shared, broken)],
   });
+
+  // 中を触れる口を1つだけ開けておく。動作確認と、遊ぶ人からの
+  // 「こうなった」を追う用。中身はすべて端末の中にしか無いので、
+  // 見えて困るものは無い
+  (window as unknown as { game: Phaser.Game }).game = game;
 }
 
 void boot();

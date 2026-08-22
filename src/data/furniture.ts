@@ -1,3 +1,4 @@
+import type { InteractionKind } from './interactions';
 import type { FurnitureCategory, FurnitureDef } from '../types';
 
 export const CATEGORY_LABEL: Record<FurnitureCategory, string> = {
@@ -22,11 +23,11 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'stool-gold', name: 'きんのスツール', category: 'seat', shape: 'chair', size: [1, 1], height: 26, color: '#cfa855', accent: '#fdf3d2', seatHeight: 20, price: 210, rarity: 'uncommon' },
   { id: 'armchair', name: 'アームチェア', category: 'seat', shape: 'sofa', size: [1, 1], height: 46, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 230, rarity: 'uncommon' },
   { id: 'sofa', name: 'カナッペ', category: 'seat', shape: 'sofa', size: [2, 1], height: 48, color: '#f3e6d2', accent: '#a9c4dc', seatHeight: 20, price: 240, rarity: 'uncommon' },
-  { id: 'daybed', name: 'デイベッド', category: 'seat', shape: 'bed', size: [2, 2], height: 34, color: '#eee0e8', accent: '#fdf8f2', seatHeight: 18, price: 320, rarity: 'uncommon' },
+  { id: 'daybed', name: 'デイベッド', category: 'seat', shape: 'bed', size: [2, 2], height: 34, color: '#eee0e8', accent: '#fdf8f2', seatHeight: 18, interactions: ['sit', 'sleep'], price: 320, rarity: 'uncommon' },
   { id: 'sofa-long', name: 'ながいカナッペ', category: 'seat', shape: 'sofa', size: [3, 1], height: 48, color: '#f3e6d2', accent: '#b7d4c4', seatHeight: 20, price: 330, rarity: 'uncommon' },
-  { id: 'bed', name: 'ロココベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#f2e4ea', accent: '#fdf8f2', seatHeight: 18, price: 480, rarity: 'rare' },
+  { id: 'bed', name: 'ロココベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#f2e4ea', accent: '#fdf8f2', seatHeight: 18, interactions: ['sit', 'sleep'], price: 480, rarity: 'rare' },
   { id: 'sofa-royal', name: 'ロイヤルソファ', category: 'seat', shape: 'sofa', size: [3, 1], height: 50, color: '#cbb0d8', accent: '#f0e2f6', seatHeight: 20, price: 520, rarity: 'rare' },
-  { id: 'bed-canopy', name: 'てんがいベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#d8c6e4', accent: '#fbf6ff', seatHeight: 18, price: 640, rarity: 'rare' },
+  { id: 'bed-canopy', name: 'てんがいベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#d8c6e4', accent: '#fbf6ff', seatHeight: 18, interactions: ['sit', 'sleep'], price: 640, rarity: 'rare' },
 
   // ---- つくえ ----
   { id: 'side-table', name: 'サイドテーブル', category: 'table', shape: 'table', size: [1, 1], height: 26, color: '#dcc7a4', accent: '#efeae1', price: 90, rarity: 'common' },
@@ -36,7 +37,7 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'console', name: 'コンソール', category: 'table', shape: 'table', size: [2, 1], height: 38, color: '#e9d9bd', accent: '#ece4d6', price: 130, rarity: 'common' },
   { id: 'desk', name: 'ビューロー', category: 'table', shape: 'table', size: [2, 1], height: 36, color: '#dcc7a4', accent: '#ece4d6', price: 190, rarity: 'uncommon' },
   { id: 'table-dining', name: '大理石テーブル', category: 'table', shape: 'table', size: [2, 2], height: 34, color: '#e5d3b3', accent: '#ece4d6', price: 220, rarity: 'uncommon' },
-  { id: 'vanity', name: 'ドレッサー', category: 'table', shape: 'box', size: [1, 1], height: 64, color: '#f4ead9', accent: '#e3d2b6', price: 260, rarity: 'uncommon' },
+  { id: 'vanity', name: 'ドレッサー', category: 'table', shape: 'box', size: [1, 1], height: 64, color: '#f4ead9', accent: '#e3d2b6', interactions: ['mirror'], price: 260, rarity: 'uncommon' },
   { id: 'desk-gold', name: 'きんのデスク', category: 'table', shape: 'table', size: [2, 1], height: 36, color: '#cfa855', accent: '#f4efe6', price: 470, rarity: 'rare' },
 
   // ---- しゅうのう ----
@@ -44,24 +45,24 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'box', name: 'ほうせきばこ', category: 'storage', shape: 'box', size: [1, 1], height: 24, color: '#e6a9bd', accent: '#f8eef2', price: 70, rarity: 'common' },
   { id: 'basket', name: 'かご', category: 'storage', shape: 'box', size: [1, 1], height: 20, color: '#c9a870', accent: '#a1834f', price: 70, rarity: 'common' },
   { id: 'chest', name: 'チェスト', category: 'storage', shape: 'box', size: [2, 1], height: 34, color: '#dcc0a0', accent: '#f2ddc0', price: 130, rarity: 'common' },
-  { id: 'shelf', name: 'ブックキャビネット', category: 'storage', shape: 'box', size: [1, 1], height: 78, color: '#f2e7d5', accent: '#e0cdae', price: 210, rarity: 'uncommon' },
+  { id: 'shelf', name: 'ブックキャビネット', category: 'storage', shape: 'box', size: [1, 1], height: 78, color: '#f2e7d5', accent: '#e0cdae', interactions: ['read'], price: 210, rarity: 'uncommon' },
   { id: 'cabinet', name: 'コモード', category: 'storage', shape: 'box', size: [2, 1], height: 46, color: '#f4ead9', accent: '#e3d2b6', price: 230, rarity: 'uncommon' },
-  { id: 'shelf-tall', name: 'トールシェルフ', category: 'storage', shape: 'box', size: [1, 1], height: 86, color: '#eee2cf', accent: '#d8c3a0', price: 240, rarity: 'uncommon' },
+  { id: 'shelf-tall', name: 'トールシェルフ', category: 'storage', shape: 'box', size: [1, 1], height: 86, color: '#eee2cf', accent: '#d8c3a0', interactions: ['read'], price: 240, rarity: 'uncommon' },
   { id: 'fridge', name: 'きんのれいぞうこ', category: 'storage', shape: 'box', size: [1, 1], height: 70, color: '#f8f3ea', accent: '#e6dccb', price: 300, rarity: 'uncommon' },
   { id: 'wardrobe', name: 'クローゼット', category: 'storage', shape: 'box', size: [2, 1], height: 78, color: '#f6ecdd', accent: '#e0cdae', price: 300, rarity: 'uncommon' },
-  { id: 'curio', name: 'キュリオケース', category: 'storage', shape: 'box', size: [1, 1], height: 72, color: '#f8f3ea', accent: '#cfa855', price: 480, rarity: 'rare' },
+  { id: 'curio', name: 'キュリオケース', category: 'storage', shape: 'box', size: [1, 1], height: 72, color: '#f8f3ea', accent: '#cfa855', interactions: ['read'], price: 480, rarity: 'rare' },
 
   // ---- かざり ----
-  { id: 'plant-small', name: 'ミニはちうえ', category: 'deco', shape: 'plant', size: [1, 1], height: 32, color: '#e0cba8', accent: '#6fbf63', price: 90, rarity: 'common' },
+  { id: 'plant-small', name: 'ミニはちうえ', category: 'deco', shape: 'plant', size: [1, 1], height: 32, color: '#e0cba8', accent: '#6fbf63', interactions: ['water'], price: 90, rarity: 'common' },
   { id: 'clock', name: 'おきどけい', category: 'deco', shape: 'box', size: [1, 1], height: 30, color: '#fbf7f0', accent: '#cfa855', price: 110, rarity: 'common' },
   { id: 'candle-small', name: 'ミニキャンドル', category: 'deco', shape: 'lamp', size: [1, 1], height: 44, color: '#cfa855', accent: '#fdf3d2', price: 120, rarity: 'common' },
-  { id: 'rose-vase', name: 'ばらの花びん', category: 'deco', shape: 'plant', size: [1, 1], height: 40, color: '#f2e4ea', accent: '#e06a86', price: 140, rarity: 'common' },
-  { id: 'plant', name: 'ゴールドのはちうえ', category: 'deco', shape: 'plant', size: [1, 1], height: 64, color: '#e0cba8', accent: '#5d9e63', price: 150, rarity: 'common' },
-  { id: 'mirror', name: 'かがみ', category: 'deco', shape: 'box', size: [1, 1], height: 70, color: '#f2f2f4', accent: '#cfa855', price: 250, rarity: 'uncommon' },
+  { id: 'rose-vase', name: 'ばらの花びん', category: 'deco', shape: 'plant', size: [1, 1], height: 40, color: '#f2e4ea', accent: '#e06a86', interactions: ['water'], price: 140, rarity: 'common' },
+  { id: 'plant', name: 'ゴールドのはちうえ', category: 'deco', shape: 'plant', size: [1, 1], height: 64, color: '#e0cba8', accent: '#5d9e63', interactions: ['water'], price: 150, rarity: 'common' },
+  { id: 'mirror', name: 'かがみ', category: 'deco', shape: 'box', size: [1, 1], height: 70, color: '#f2f2f4', accent: '#cfa855', interactions: ['mirror'], price: 250, rarity: 'uncommon' },
   { id: 'lamp', name: 'キャンドルスタンド', category: 'deco', shape: 'lamp', size: [1, 1], height: 86, color: '#cfa855', accent: '#fdf3d2', price: 260, rarity: 'uncommon' },
-  { id: 'topiary', name: 'トピアリー', category: 'deco', shape: 'plant', size: [1, 1], height: 72, color: '#e0cba8', accent: '#5d9e63', price: 280, rarity: 'uncommon' },
-  { id: 'tv', name: 'きんぶちテレビ', category: 'deco', shape: 'tv', size: [2, 1], height: 50, color: '#cfa855', accent: '#3a4a6b', price: 420, rarity: 'rare' },
-  { id: 'gramophone', name: 'ちくおんき', category: 'deco', shape: 'box', size: [1, 1], height: 44, color: '#cfa855', accent: '#3a4a6b', price: 430, rarity: 'rare' },
+  { id: 'topiary', name: 'トピアリー', category: 'deco', shape: 'plant', size: [1, 1], height: 72, color: '#e0cba8', accent: '#5d9e63', interactions: ['water'], price: 280, rarity: 'uncommon' },
+  { id: 'tv', name: 'きんぶちテレビ', category: 'deco', shape: 'tv', size: [2, 1], height: 50, color: '#cfa855', accent: '#3a4a6b', interactions: ['watch'], price: 420, rarity: 'rare' },
+  { id: 'gramophone', name: 'ちくおんき', category: 'deco', shape: 'box', size: [1, 1], height: 44, color: '#cfa855', accent: '#3a4a6b', interactions: ['music'], price: 430, rarity: 'rare' },
   { id: 'chandelier-stand', name: 'シャンデリアスタンド', category: 'deco', shape: 'lamp', size: [1, 1], height: 96, color: '#cfa855', accent: '#fff3cf', price: 560, rarity: 'rare' },
 
   // ---- ゆか ----
@@ -81,7 +82,7 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'moon-sofa', name: 'つきのカナッペ', category: 'seat', shape: 'sofa', size: [2, 1], height: 48, color: '#dfe4f2', accent: '#8fa8cf', seatHeight: 20, price: 300, rarity: 'uncommon' },
   { id: 'moon-table', name: 'げっせきのテーブル', category: 'table', shape: 'table', size: [2, 2], height: 30, color: '#e6e9f4', accent: '#b9c6de', price: 280, rarity: 'uncommon' },
   { id: 'star-lamp', name: 'ほしのランプ', category: 'deco', shape: 'lamp', size: [1, 1], height: 88, color: '#cfa855', accent: '#dff0ff', price: 320, rarity: 'uncommon' },
-  { id: 'dome-plant', name: 'ドームのしょくぶつ', category: 'deco', shape: 'plant', size: [1, 1], height: 70, color: '#dfe4f2', accent: '#7fc7a8', price: 260, rarity: 'uncommon' },
+  { id: 'dome-plant', name: 'ドームのしょくぶつ', category: 'deco', shape: 'plant', size: [1, 1], height: 70, color: '#dfe4f2', accent: '#7fc7a8', interactions: ['water'], price: 260, rarity: 'uncommon' },
   { id: 'crater-rug', name: 'クレーターラグ', category: 'floor', shape: 'rug', size: [3, 3], height: 0, color: '#b9bacb', accent: '#e4e6f2', walkable: true, price: 300, rarity: 'uncommon' },
   { id: 'rocket-model', name: 'ロケットのもけい', category: 'deco', shape: 'rocket', size: [1, 1], height: 54, color: '#eef2fb', accent: '#e06a6a', price: 360, rarity: 'uncommon' },
   // 値段は「初日の所持（START_COINS + DAILY_BONUS）では足りないが、
@@ -120,6 +121,19 @@ export function isWallDef(def: FurnitureDef): boolean {
  * 壁側を 'wall-clock' に改名したので、**すでに壁に掛かっている 'clock' だけ**を
  * こちらへ読み替える。床に置いてある 'clock' はおきどけいのまま残る。
  */
+/**
+ * その家具でできることの一覧。定義に書いていなければ、座れる家具は
+ * すわるだけ、それ以外は何もできない。既存の16脚に何も足さずに
+ * 「すわる」を一般化するためにこの形にしている。
+ */
+export function interactionsOf(def: FurnitureDef): readonly InteractionKind[] {
+  if (def.interactions) return def.interactions;
+  return def.seatHeight !== undefined ? SIT_ONLY : NONE;
+}
+
+const SIT_ONLY: readonly InteractionKind[] = ['sit'];
+const NONE: readonly InteractionKind[] = [];
+
 const WALL_ID_ALIAS: Record<string, string> = { clock: 'wall-clock' };
 
 /** 壁に掛けてあるものの defId を、いまのカタログの id へ直す */

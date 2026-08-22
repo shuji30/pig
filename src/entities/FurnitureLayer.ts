@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { sortForDraw, type DepthItem } from '../core/depthSort';
 import { gridToScreen, rotatedSize } from '../core/iso';
-import { boxOf, canPlaceBox, type PlacementQuery } from '../core/placement';
+import { boxOf, canPlaceBox, frontTiles, type PlacementQuery } from '../core/placement';
 import { findDef, getDef } from '../data/furniture';
 import { getFurnitureTexture } from '../render/furnitureTexture';
 import type { FurnitureDef, PlacedFurniture, Rotation } from '../types';
@@ -195,6 +195,14 @@ export class FurnitureLayer {
       }
     }
     return out;
+  }
+
+  /** 家具の正面のとなりで、立てるマス */
+  frontTiles(item: PlacedFurniture): Array<{ gx: number; gy: number }> {
+    const f = this.footprint(item);
+    return frontTiles({ gx: f.gx, gy: f.gy, w: f.w, d: f.d }, item.rot).filter(
+      (t) => t.gx >= 0 && t.gy >= 0 && t.gx < this.size && t.gy < this.size && !this.isBlocked(t.gx, t.gy),
+    );
   }
 
   /** 座る位置（画面座標）と重ね順 */

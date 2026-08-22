@@ -46,6 +46,7 @@ export const MISSIONS: MissionDef[] = [
   { id: 'rug1', label: 'ゆかに ラグをしく', goal: 1, reward: 30, progress: (c) => countCategory(c.items, 'floor') },
   { id: 'items12', label: '部屋の家具を12個にする', goal: 12, reward: 60, progress: (c) => c.items.length },
   { id: 'wall2', label: 'かべに2つ掛けておく', goal: 2, reward: 40, progress: (c) => c.wallItems.length },
+  { id: 'use2', label: '家具で2回あそぶ', goal: 2, reward: 25, progress: (c) => c.daily.used },
 ];
 
 /**

@@ -4,7 +4,8 @@ import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
-import { getDef } from '../data/furniture';
+import { getDef, interactionsOf } from '../data/furniture';
+import { getInteraction, type InteractionKind } from '../data/interactions';
 import type { MissionCtx } from '../data/missions';
 import type { MotionKind } from '../data/motions';
 import { AutoPlay } from '../entities/AutoPlay';
@@ -65,6 +66,8 @@ export class RoomScene extends Phaser.Scene {
 
   /** 夜の灯り。床の上・家具の下に敷く */
   private glowG!: Phaser.GameObjects.Graphics;
+  /** 家具でなにかしている間の光 */
+  private useGlowG!: Phaser.GameObjects.Graphics;
   private hoverG!: Phaser.GameObjects.Graphics;
   private selG!: Phaser.GameObjects.Graphics;
   private ghost: Phaser.GameObjects.Image | null = null;
@@ -139,6 +142,7 @@ export class RoomScene extends Phaser.Scene {
     this.walls.setItems(this.cur.wallItems);
 
     this.glowG = this.add.graphics().setDepth(-1850);
+    this.useGlowG = this.add.graphics().setDepth(-1840);
     this.hoverG = this.add.graphics().setDepth(-1700);
     this.selG = this.add.graphics().setDepth(-1690);
     this.ghostG = this.add.graphics().setDepth(9_000_000);
@@ -178,6 +182,16 @@ export class RoomScene extends Phaser.Scene {
         else this.cancelPlacing();
       },
       onSelAction: (act) => this.selAction(act),
+      onInteract: (kind) => {
+        const uid = this.selectedUid;
+        const item = uid ? this.furniture.get(uid) : null;
+        if (!item) return;
+        if (this.using?.uid === item.uid && this.using.kind === kind) {
+          this.endUse();
+          return;
+        }
+        if (!this.startUse(item, kind)) this.ui.toast('近づけないみたい…');
+      },
       onRecolor: (recolor) => this.applyRecolor(recolor),
       onEmote: (kind) => {
         this.avatar.playMotion(kind);
@@ -268,6 +282,7 @@ export class RoomScene extends Phaser.Scene {
     this.auto = new AutoPlay({
       wanderOnce: () => this.wanderOnce(),
       sitSomewhere: () => this.sitSomewhere(),
+      useSomething: () => this.useSomething(),
       standUp: () => this.avatar.standUp(),
       playEmote: (kind) => this.avatar.playMotion(kind),
       stopLoopMotion: () => {
@@ -527,6 +542,7 @@ export class RoomScene extends Phaser.Scene {
   override update(_time: number, delta: number) {
     this.avatar.update(delta);
     this.auto.update(delta);
+    this.syncUse();
     // 繰り返し再生の開始・終了に合わせてボタンとヒントを切り替える
     const loop = this.avatar.loopingMotion;
     if (loop !== this.lastLoopEmote) {
@@ -819,39 +835,149 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
 
-    if (def.seatHeight === undefined) return;
-
-    if (this.avatar.sittingOn === item.uid) {
-      this.avatar.standUp();
+    // 家具をおしたら、その家具でできることの先頭をやる
+    const kinds = interactionsOf(def);
+    if (kinds.length === 0) return;
+    if (this.using?.uid === item.uid) {
+      this.endUse();
       return;
     }
-    if (!this.goSit(item)) this.ui.toast('近づけないみたい…');
+    if (!this.startUse(item, kinds[0])) this.ui.toast('近づけないみたい…');
   }
 
-  /** 家具のそばまで歩いて座る。向かえたら true */
-  private goSit(item: PlacedFurniture): boolean {
-    const def = getDef(item.defId);
-    if (def.seatHeight === undefined) return false;
-    const found = findPathAdjacent(
-      this.avatar.tile,
-      this.furniture.neighborTiles(item),
-      this.size,
-      this.size,
-      this.blockedFn,
-    );
+  // ---------------- 家具でできること ----------------
+
+  /** いま家具でしていること（していなければ null） */
+  private using: { uid: string; kind: InteractionKind } | null = null;
+
+  /** 家具のそばまで歩いて、着いたらはじめる。向かえたら true */
+  private startUse(item: PlacedFurniture, kind: InteractionKind): boolean {
+    const inter = getInteraction(kind);
+    // そばに立つものは、まず正面をねらう。裏に回ると家具でアバターが隠れる
+    const found =
+      (inter.stance === 'beside' ? this.pathToOneOf(this.furniture.frontTiles(item)) : null) ??
+      this.pathToOneOf(this.furniture.neighborTiles(item));
     if (!found) return false;
-    if (this.avatar.sittingOn) this.avatar.standUp();
+    this.endUse();
     this.avatar.walk(found.path, () => {
       const still = this.furniture.get(item.uid);
       if (!still) return;
-      const spot = this.furniture.seatSpot(still);
-      const facing = this.furniture.seatFacing(still);
-      this.avatar.sit(still.uid, spot, (def.seatHeight ?? 16) + 6, facing.back, facing.flip, spot.depth);
-      this.save.daily.sat += 1;
-      this.syncMissions();
-      this.persist();
+      this.beginUse(still, inter.kind);
     });
     return true;
+  }
+
+  private pathToOneOf(targets: Array<{ gx: number; gy: number }>) {
+    if (targets.length === 0) return null;
+    return findPathAdjacent(this.avatar.tile, targets, this.size, this.size, this.blockedFn);
+  }
+
+  /** 家具のとなりに着いたところから、姿勢とモーションを決める */
+  private beginUse(item: PlacedFurniture, kind: InteractionKind) {
+    const inter = getInteraction(kind);
+    const def = getDef(item.defId);
+    if (inter.stance !== 'beside') {
+      const spot = this.furniture.seatSpot(item);
+      const facing = this.furniture.seatFacing(item);
+      this.avatar.sit(item.uid, spot, (def.seatHeight ?? 16) + 6, facing.back, facing.flip, spot.depth);
+      // 長いほうへ体を伸ばす。頭は画面の上側へ出す
+      const f = this.furniture.footprint(item);
+      this.avatar.setLying(inter.stance === 'lie', f.d >= f.w ? 1 : -1);
+    } else {
+      // となりに立って家具の方を向く。ずれの大きい軸だけを見る
+      const f = this.furniture.footprint(item);
+      const dx = f.gx + (f.w - 1) / 2 - this.avatar.tile.gx;
+      const dy = f.gy + (f.d - 1) / 2 - this.avatar.tile.gy;
+      if (Math.abs(dx) >= Math.abs(dy)) this.avatar.faceToward(Math.sign(dx), 0);
+      else this.avatar.faceToward(0, Math.sign(dy));
+    }
+    if (inter.motion) this.avatar.playMotion(inter.motion);
+    this.using = { uid: item.uid, kind };
+    this.drawUseGlow();
+    this.pulseUseGlow(true);
+    // すわるは今までどおり sat で数える（ミッションの意味を変えないため）
+    if (kind === 'sit') this.save.daily.sat += 1;
+    else {
+      this.save.daily.used += 1;
+      this.ui.toast(inter.toast);
+    }
+    this.syncMissions();
+    this.syncSelBar();
+    this.persist();
+  }
+
+  /**
+   * やめる。座っているものからは立ち上がる。
+   * @param standUp false のときは姿勢をそのままにする（歩き出したときなど）
+   */
+  private endUse(standUp = true) {
+    if (!this.using) return;
+    const inter = getInteraction(this.using.kind);
+    this.using = null;
+    if (inter.motion) this.avatar.stopMotion();
+    if (standUp && this.avatar.sittingOn) this.avatar.standUp();
+    this.pulseUseGlow(false);
+    this.drawUseGlow();
+    this.syncSelBar();
+  }
+
+  /** している家具の足元をぼんやり光らせる */
+  private drawUseGlow() {
+    const g = this.useGlowG;
+    g.clear();
+    if (!this.using) return;
+    const color = getInteraction(this.using.kind).glow;
+    const item = this.furniture.get(this.using.uid);
+    if (color === null || !item) return;
+    const f = this.furniture.footprint(item);
+    const p = gridToScreen(f.gx + f.w / 2, f.gy + f.d / 2);
+    const r = 30 + getDef(item.defId).height * 0.3;
+    for (const [k, a] of [
+      [1, 0.1],
+      [0.66, 0.13],
+      [0.38, 0.17],
+    ] as Array<[number, number]>) {
+      g.fillStyle(color, a);
+      g.fillEllipse(p.x, p.y, r * 2 * k, r * k);
+    }
+  }
+
+  private glowPulse?: Phaser.Tweens.Tween;
+
+  /** している間、光をゆっくり明滅させる */
+  private pulseUseGlow(on: boolean) {
+    this.glowPulse?.remove();
+    this.glowPulse = undefined;
+    this.useGlowG.setAlpha(1);
+    if (!on) return;
+    this.glowPulse = this.tweens.add({
+      targets: this.useGlowG,
+      alpha: 0.45,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  /**
+   * 歩き出した・家具が消えた・別のことをしはじめた を見て、勝手にやめる。
+   * 開始のたびに解除を書くと必ずどこかで漏れるので、毎フレームここで見る。
+   */
+  private syncUse() {
+    const cur = this.using;
+    if (!cur) return;
+    const inter = getInteraction(cur.kind);
+    const gone = !this.furniture.get(cur.uid);
+    const motionLost = inter.motion !== null && this.avatar.loopingMotion !== inter.motion;
+    const seatLost = inter.stance !== 'beside' && this.avatar.sittingOn !== cur.uid;
+    if (gone || motionLost || seatLost || this.avatar.isWalking) this.endUse(false);
+  }
+
+  /** 家具のそばまで歩いて座る（おまかせ用）。向かえたら true */
+  private goSit(item: PlacedFurniture): boolean {
+    if (!interactionsOf(getDef(item.defId)).includes('sit')) return false;
+    return this.startUse(item, 'sit');
   }
 
   // ---------------- 放置中の自動行動 ----------------
@@ -877,11 +1003,26 @@ export class RoomScene extends Phaser.Scene {
   /** 座れる家具をひとつ選んで向かう */
   private sitSomewhere(): boolean {
     const seats = this.furniture.all.filter(
-      (i) => getDef(i.defId).seatHeight !== undefined && i.uid !== this.avatar.sittingOn,
+      (i) => interactionsOf(getDef(i.defId)).includes('sit') && i.uid !== this.avatar.sittingOn,
     );
     if (seats.length === 0) return false;
     const pick = seats[Phaser.Math.Between(0, seats.length - 1)];
     return this.goSit(pick);
+  }
+
+  /** 家具でできることをひとつ選んで向かう（おまかせ用） */
+  private useSomething(): boolean {
+    const pool: Array<{ item: PlacedFurniture; kind: InteractionKind }> = [];
+    for (const item of this.furniture.all) {
+      for (const kind of interactionsOf(getDef(item.defId))) {
+        // すわるは sitSomewhere が受け持っているので、ここでは扱わない
+        if (kind === 'sit' || this.using?.uid === item.uid) continue;
+        pool.push({ item, kind });
+      }
+    }
+    if (pool.length === 0) return false;
+    const pick = pool[Phaser.Math.Between(0, pool.length - 1)];
+    return this.startUse(pick.item, pick.kind);
   }
 
   // ---------------- 選択 ----------------
@@ -892,8 +1033,31 @@ export class RoomScene extends Phaser.Scene {
     this.selectedUid = uid;
     this.furniture.setHighlight(uid);
     const item = this.furniture.get(uid);
-    this.ui.showSelBar(item ? getDef(item.defId).name : null);
+    this.ui.showSelBar(item ? getDef(item.defId).name : null, { acts: this.actsFor(item ?? null) });
     this.drawSelection(item ?? null);
+  }
+
+  /** 選択バーに並べる「できること」のボタン */
+  private actsFor(item: PlacedFurniture | null) {
+    if (!item) return [];
+    return interactionsOf(getDef(item.defId)).map((kind) => {
+      const inter = getInteraction(kind);
+      return {
+        kind,
+        icon: inter.icon,
+        label: inter.label,
+        active: this.using?.uid === item.uid && this.using.kind === kind,
+      };
+    });
+  }
+
+  /** している・していないの表示を選択バーに反映する */
+  private syncSelBar() {
+    const uid = this.selectedUid;
+    if (!uid) return;
+    const item = this.furniture.get(uid);
+    if (!item) return;
+    this.ui.showSelBar(getDef(item.defId).name, { acts: this.actsFor(item) });
   }
 
   private deselect() {

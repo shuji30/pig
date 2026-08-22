@@ -301,6 +301,7 @@ describe('版の移行', () => {
     });
     const d = load().daily;
     expect(d.traveled).toBe(0);
+    expect(d.used).toBe(0);
     for (const v of Object.values(d)) {
       if (typeof v === 'number') expect(Number.isFinite(v)).toBe(true);
     }

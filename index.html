@@ -167,7 +167,9 @@
         </div>
         <ul class="help">
           <li>床を<b>クリック</b>するとアバターがそこまで歩きます。</li>
-          <li>イスやソファ、ベッドをクリックすると<b>座る</b>ことができます。</li>
+          <li>イスやソファをクリックすると<b>座る</b>ことができます。</li>
+          <li>ベッドは<b>ねる</b>、テレビは<b>みる</b>、かがみは<b>うつる</b>、はちうえは<b>みずやり</b>。
+            家具をクリックしたときに出る帯に、その家具でできることが並びます。</li>
           <li>「かぐ」から家具を選び、部屋をクリックで<b>設置</b>。<b>R</b>で回転。</li>
           <li>置いてある家具をクリックすると<b>移動・回転・しまう</b>ができます。</li>
           <li>「かぐ」の<b>かべ</b>タブから、窓・絵・時計などを<b>壁に掛けられます</b>（上下2段）。</li>
@@ -209,11 +211,12 @@
       <!-- 家具選択中のバー -->
       <div id="selbar" class="ctxbar" hidden>
         <span id="selbar-name">家具</span>
-        <button data-act="rotate">↻ 回転</button>
-        <button data-act="move">✥ 移動</button>
-        <button data-act="recolor">🎨 いろ</button>
-        <button data-act="store">📦 しまう</button>
-        <button data-act="deselect">閉じる</button>
+        <span id="selbar-acts"></span>
+        <button data-act="rotate">↻<span class="lbl"> 回転</span></button>
+        <button data-act="move">✥<span class="lbl"> 移動</span></button>
+        <button data-act="recolor">🎨<span class="lbl"> いろ</span></button>
+        <button data-act="store">📦<span class="lbl"> しまう</span></button>
+        <button data-act="deselect">✕<span class="lbl"> 閉じる</span></button>
       </div>
 
       <!-- リカラー -->

@@ -142,8 +142,22 @@ export class Avatar {
     this.updateDepth();
   }
 
+  /** ベッドに横になっているか */
+  private lying = false;
+  /** 横になる向き。+1 は頭が画面の右上、-1 は左上 */
+  private lieTilt: 1 | -1 = 1;
+
+  /** 横になる／起きる（家具の上に乗っているときだけ意味がある） */
+  setLying(on: boolean, tilt: 1 | -1 = 1) {
+    if (this.lying === on && this.lieTilt === tilt) return;
+    this.lying = on;
+    this.lieTilt = tilt;
+    this.dirty = true;
+  }
+
   standUp() {
     if (!this.sittingOn) return;
+    this.lying = false;
     this.sittingOn = null;
     const p = tileCenter(this.tile.gx, this.tile.gy);
     this.container.setPosition(p.x, p.y);
@@ -345,6 +359,11 @@ export class Avatar {
     this.dirty = true;
   }
 
+  /** 家具の方を向かせる（マス座標の差を渡す） */
+  faceToward(dgx: number, dgy: number) {
+    this.setFacing(dgx, dgy);
+  }
+
   setDepthResolver(fn: (box: { gx0: number; gx1: number; gy0: number; gy1: number }) => number) {
     this.depthResolver = fn;
     this.updateDepth();
@@ -369,10 +388,13 @@ export class Avatar {
   private redraw() {
     const g = this.gfx;
     const look = this.look;
-    const sitting = this.sittingOn !== null;
+    const onFurniture = this.sittingOn !== null;
+    const lying = this.lying && onFurniture;
+    // 横になっているときは、脚を折らずにまっすぐ描いてから傾ける
+    const sitting = onFurniture && !lying;
     const back = this.facingBack;
     g.clear();
-    this.label.setY(sitting ? -54 : -70);
+    this.label.setY(onFurniture ? -54 : -70);
     if (this.bubble) this.bubble.setY(this.bubbleBaseY - this.bubbleHeight / 2);
 
     const swing = sitting ? 0 : [0, 2.4, 0, -2.4][this.frame];
@@ -480,11 +502,60 @@ export class Avatar {
         headDip = 2;
         break;
       }
+      // ---- 家具でできること ----
+      case 'watch': {
+        // 前のめりでじっと見る。ときどき笑って肩がゆれる
+        const b = Math.sin(p * Math.PI * 2);
+        headDip = 2.2 + b * 0.6;
+        ty = 0.8;
+        liftL = liftR = 0.08;
+        break;
+      }
+      case 'preen': {
+        // 手をほおに添えて、かるく首をかたむける
+        const b = Math.sin(p * Math.PI * 2);
+        liftL = liftR = 0.62;
+        dxL = dxR = -3;
+        handIn = 5;
+        handYFix = upper - 18;
+        angle = (3 + b * 1.6) * (this.flip ? -1 : 1);
+        break;
+      }
+      case 'read': {
+        // 両手を胸の前で開いて、うつむいて読む
+        liftL = liftR = 0.4;
+        dxL = dxR = -2;
+        handIn = 3.2;
+        handYFix = upper - 6;
+        headDip = 3.4;
+        ty = 0.6;
+        break;
+      }
+      case 'water': {
+        // 前にかがんで、じょうろを傾けるように腕を出す
+        const k = Math.abs(Math.sin(p * Math.PI * 2));
+        angle = (6 + k * 2.5) * (this.flip ? -1 : 1);
+        ty = 1;
+        headDip = 2.6;
+        liftR = 0.45 + k * 0.12;
+        liftL = 0.1;
+        dxR = 3;
+        break;
+      }
       default:
         break;
     }
 
     headY += headDip;
+
+    // ベッドに横になる。足元を軸に 64 度倒し、体の中ほどがマットレスの
+    // 真ん中に来るまで寄せる（頭は tilt の向きへ出る）
+    if (lying) {
+      const t = this.lieTilt;
+      angle = 64 * t;
+      tx = -15 * t;
+      ty = 8;
+    }
 
     // 歩いている間は上半身だけ動かす（位置がずれると座標がおかしくなるため）
     if (this.target) {
@@ -502,7 +573,7 @@ export class Avatar {
 
     // 影は床に置いたまま。跳ぶと小さくなる
     this.shadow.clear();
-    if (!sitting) {
+    if (!onFurniture) {
       const air = Math.max(0, -ty);
       this.shadow.fillStyle(0x000000, Math.max(0.05, 0.15 - air * 0.007));
       this.shadow.fillEllipse(tx * 0.4, 1, 30 - air * 0.9, 12 - air * 0.36);
