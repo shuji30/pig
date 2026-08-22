@@ -11,6 +11,7 @@ import {
   WALL_STYLES,
 } from '../config';
 import { findDef, resolveWallId } from '../data/furniture';
+import { findPet } from '../data/pets';
 import { rotatedSize } from '../core/iso';
 import { WALL_LEVELS } from '../core/wall';
 import type { AvatarLook, PlacedFurniture, PlacedWall, Recolor, RoomData, Rotation } from '../types';
@@ -23,9 +24,10 @@ const HASH_KEY = 'r';
  *   2: 広さを持つが、壁に掛けるものを持たない
  *   3: 壁に掛けるものを持つが、リカラーを持たない
  *   4: リカラーを持つが、床の部分張り替えを持たない
+ *   5: 床の部分張り替えを持つが、ペットを持たない
  */
-const FORMAT = 5;
-const READABLE_FORMATS = [1, 2, 3, 4, 5];
+const FORMAT = 6;
+const READABLE_FORMATS = [1, 2, 3, 4, 5, 6];
 /** 名前とひとことの上限。URL の長さと表示崩れを抑える */
 export const ROOM_NAME_MAX = 16;
 export const ROOM_NOTE_MAX = 40;
@@ -44,10 +46,17 @@ export interface SharedRoom {
   wallItems: Array<{ defId: string; side: 'right' | 'left'; col: number; level: number; recolor?: Recolor }>;
   /** 部分的に張り替えた床（"gx,gy" -> ゆかの番号） */
   floorPatch: Record<string, number>;
+  /**
+   * その部屋にいるペットの id（いなければ null）。
+   * 訪ねた人には見えるが、**とりこんでも自分のものにはならない**
+   * （もらえてしまうとコインを払う意味が無くなる）
+   */
+  pet: string | null;
 }
 
-export function sharedFromRoom(room: RoomData, look: AvatarLook): SharedRoom {
+export function sharedFromRoom(room: RoomData, look: AvatarLook, pet: string | null = null): SharedRoom {
   return {
+    pet: pet !== null && findPet(pet) ? pet : null,
     floor: room.floor,
     wall: room.wall,
     size: room.size,
@@ -86,6 +95,7 @@ type Packed = [
   number, // 一辺のマス数（形式2で追加。末尾に足しているので形式1も読める）
   Array<PackedWall>, // 壁の家具（形式3で追加）[id, side(0=right/1=left), col, level]
   Array<[number, number, number]>, // 床の張り替え（形式5で追加）[gx, gy, ゆかの番号]
+  string, // 連れているペットの id（形式6で追加。いなければ空文字）
 ];
 
 /**
@@ -108,6 +118,7 @@ function pack(r: SharedRoom): Packed {
     r.size,
     r.wallItems.map((i) => packTail([i.defId, i.side === 'left' ? 1 : 0, i.col, i.level], i.recolor)),
     packPatch(r.floorPatch),
+    r.pet ?? '',
   ];
 }
 
@@ -241,6 +252,8 @@ function unpack(raw: unknown): SharedRoom | null {
     },
     items,
     wallItems,
+    // 知らないペットは「いない」にする（他人の URL なので必ず引き直す）
+    pet: typeof raw[10] === 'string' && findPet(raw[10]) ? raw[10] : null,
   };
 }
 

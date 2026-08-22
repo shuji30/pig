@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ROOM_SIZE, FLOOR_STYLES } from '../config';
-import { decodeShared, encodeShared, ROOM_NAME_MAX, type SharedRoom } from './share';
+import { decodeShared, encodeShared, ROOM_NAME_MAX, sharedFromRoom, type SharedRoom } from './share';
 
 const sample: SharedRoom = {
   floor: 2,
@@ -29,6 +29,7 @@ const sample: SharedRoom = {
     { defId: 'wall-clock', side: 'left', col: 2, level: 1 },
   ],
   floorPatch: { '3,3': 2, '4,3': 2, '3,4': 4 },
+  pet: 'pet-cat',
 };
 
 /** 色を変えたものを混ぜた部屋 */
@@ -106,6 +107,48 @@ describe('encodeShared / decodeShared', () => {
     const room = await decodeShared(token);
     expect(room?.wallItems).toHaveLength(1);
     expect(room?.floorPatch).toEqual({});
+  });
+
+  it('ペットを持たない形式5の URL も読める（ペットはいない扱い）', async () => {
+    const token = packedToken([5, 0, 0, 'ペットなし', '', [], [['stool', 1, 1, 0]], 12, [], [[1, 1, 2]]]);
+    const room = await decodeShared(token);
+    expect(room?.pet).toBeNull();
+    expect(room?.floorPatch).toEqual({ '1,1': 2 });
+  });
+
+  it('ペットも往復する', async () => {
+    const token = await encodeShared(sample);
+    expect((await decodeShared(token))?.pet).toBe('pet-cat');
+  });
+
+  it('知らないペットの id は「いない」に落とす（他人の URL なので引き直す）', async () => {
+    const token = packedToken([6, 0, 0, 'へや', '', [], [], 12, [], [], 'pet-dragon']);
+    expect((await decodeShared(token))?.pet).toBeNull();
+  });
+
+  it('ペットの id でないもの（数値・オブジェクト）も「いない」に落とす', async () => {
+    for (const bad of [42, { id: 'pet-cat' }, ['pet-cat'], null]) {
+      const token = packedToken([6, 0, 0, 'へや', '', [], [], 12, [], [], bad]);
+      expect((await decodeShared(token))?.pet, JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it('sharedFromRoom は知らないペットを載せない', () => {
+    const room = {
+      name: 'へや',
+      note: '',
+      floor: 0,
+      wall: 0,
+      size: 12,
+      floorPatch: {},
+      items: [],
+      wallItems: [],
+      spawn: { gx: 0, gy: 0 },
+    };
+    expect(sharedFromRoom(room, sample.look, 'pet-cat').pet).toBe('pet-cat');
+    expect(sharedFromRoom(room, sample.look, 'nope').pet).toBeNull();
+    expect(sharedFromRoom(room, sample.look, null).pet).toBeNull();
+    expect(sharedFromRoom(room, sample.look).pet).toBeNull();
   });
 
   it('床の張り替えも往復する', async () => {

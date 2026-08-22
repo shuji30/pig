@@ -139,6 +139,10 @@ export class RoomScene extends Phaser.Scene {
             },
           },
           currentRoom: VISIT_ROOM,
+          // その部屋の主のペットを出す。自分のペットは連れて行かない
+          // （おじゃましているのは相手の部屋なので）
+          pets: this.shared.pet ? [this.shared.pet] : [],
+          pet: this.shared.pet,
           avatar: { look: { ...own.avatar.look } },
         }
       : own;
@@ -271,7 +275,8 @@ export class RoomScene extends Phaser.Scene {
         this.cur.note = note.slice(0, ROOM_NOTE_MAX);
         this.persist();
       },
-      requestShareUrl: async () => shareUrlFor(await encodeShared(sharedFromRoom(this.cur, this.save.avatar.look))),
+      requestShareUrl: async () =>
+        shareUrlFor(await encodeShared(sharedFromRoom(this.cur, this.save.avatar.look, this.save.pet))),
       onShareCopied: () => {
         track('share');
         this.refreshMetricsLine();
@@ -566,6 +571,8 @@ export class RoomScene extends Phaser.Scene {
       spawn: centerSpawn(this.shared.size),
     };
     own.currentRoom = HOME_ROOM;
+    // ペットは渡さない。もらえてしまうとコインを払う意味が無くなる
+    // （部屋の中身だけを写す）。この約束は state/share.test.ts で固定してある
     // 置いてあるぶんは持ちものから引かない。取りこみでコインを稼げてしまうため、
     // しまったときに増える方向だけを許す
     saveDebounced(own);
