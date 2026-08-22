@@ -12,6 +12,12 @@ vi.stubGlobal('localStorage', {
 
 const put = (data: unknown) => store.set(SAVE_KEY, JSON.stringify(data));
 
+/** 端末のローカル日付（save.ts の today() と同じ形） */
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 beforeEach(() => store.clear());
 
 describe('load（何も保存されていないとき）', () => {
@@ -278,6 +284,47 @@ describe('版の移行', () => {
       avatar: { look: {} },
     });
     expect(currentRoom(load()).floorPatch).toEqual({});
+  });
+
+  it('数え方が増えても、古いカウンタは 0 で埋まる', () => {
+    // traveled を持たない古いセーブ。undefined が残るとミッションの進みが NaN になる
+    put({
+      version: 6,
+      rooms: {
+        home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, floorPatch: {}, items: [], wallItems: [], spawn: { gx: 0, gy: 0 } },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+      daily: { day: '2020-01-01', placed: 3, stored: 1, sat: 2, emoted: 4, restyled: 1, bought: 2 },
+    });
+    const d = load().daily;
+    expect(d.traveled).toBe(0);
+    for (const v of Object.values(d)) {
+      if (typeof v === 'number') expect(Number.isFinite(v)).toBe(true);
+    }
+  });
+
+  it('数でないカウンタは 0 に落とす', () => {
+    put({
+      version: 6,
+      rooms: {
+        home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, floorPatch: {}, items: [], wallItems: [], spawn: { gx: 0, gy: 0 } },
+      },
+      currentRoom: 'home',
+      inventory: {},
+      avatar: { look: {} },
+      // 日付は今日にしておく（日が変わるとカウンタごと入れ替わってしまうため）
+      daily: { day: todayStr(), placed: 'いっぱい', stored: -5, sat: NaN, emoted: 2.7, restyled: null, bought: 1, traveled: 3 },
+    });
+    const d = load().daily;
+    expect(d.placed).toBe(0);
+    expect(d.stored).toBe(0);
+    expect(d.sat).toBe(0);
+    expect(d.emoted).toBe(2); // 小数は切り捨て
+    expect(d.restyled).toBe(0);
+    expect(d.bought).toBe(1);
+    expect(d.traveled).toBe(3);
   });
 
   it('知らない未来の版は読まずに初期状態へ落とす', () => {

@@ -57,7 +57,29 @@ export function dayBefore(day: string): string {
 }
 
 export function emptyDaily(day: string): DailyCounters {
-  return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0 };
+  return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0, traveled: 0 };
+}
+
+/**
+ * 保存されていたその日のカウンタを、いまの形に揃える。
+ * 数え方が増えたときに古いセーブで undefined が残ると、
+ * ミッションの進み方が NaN になってしまうため、必ずここを通す。
+ */
+function cleanDaily(raw: unknown, fallbackDay: string): DailyCounters {
+  const base = emptyDaily(fallbackDay);
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Partial<DailyCounters>;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+  return {
+    day: typeof r.day === 'string' ? r.day : base.day,
+    placed: num(r.placed),
+    stored: num(r.stored),
+    sat: num(r.sat),
+    emoted: num(r.emoted),
+    restyled: num(r.restyled),
+    bought: num(r.bought),
+    traveled: num(r.traveled),
+  };
 }
 
 /** その広さの部屋の、まんなか少し手前 */
@@ -303,7 +325,7 @@ function migrate(raw: unknown): SaveData | null {
     autoPlay: old.autoPlay ?? base.autoPlay,
     // v1 にはコインの概念がなかったので、初回ぶんを配る
     coins: old.coins ?? base.coins,
-    daily: old.daily ?? base.daily,
+    daily: cleanDaily(old.daily, base.daily.day),
     streak: old.streak ?? base.streak,
     lastBonusDay: old.lastBonusDay ?? base.lastBonusDay,
     doneMissions: Array.isArray(old.doneMissions) ? old.doneMissions : [],

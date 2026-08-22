@@ -4,6 +4,7 @@ import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
 import { getDef } from '../data/furniture';
+import type { MissionCtx } from '../data/missions';
 import type { MotionKind } from '../data/motions';
 import { AutoPlay } from '../entities/AutoPlay';
 import { Avatar } from '../entities/Avatar';
@@ -1145,6 +1146,7 @@ export class RoomScene extends Phaser.Scene {
     const center = gridToScreen(this.size / 2, this.size / 2);
     this.cameras.main.centerOn(center.x, center.y - WALL_H / 3);
 
+    this.save.daily.traveled += 1;
     this.ui.setStyles(room.floor, room.wall);
     this.ui.setRoomText(room.name, room.note);
     this.ui.setAtHome(roomId === HOME_ROOM);
@@ -1400,8 +1402,17 @@ export class RoomScene extends Phaser.Scene {
 
   // ---------------- コインとミッション ----------------
 
-  private missionCtx() {
-    return { daily: this.save.daily, items: this.furniture.all };
+  private missionCtx(): MissionCtx {
+    const moon = this.save.rooms[MOON_ROOM];
+    return {
+      daily: this.save.daily,
+      items: this.furniture.all,
+      wallItems: this.walls.all,
+      // 月のやることは、月コロニーができてから出す（達成できない課題を出さない）
+      hasMoon: !this.visiting && moon !== undefined,
+      moonItems: moon?.items ?? [],
+      moonWallItems: moon?.wallItems ?? [],
+    };
   }
 
   private syncMissions() {

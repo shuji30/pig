@@ -1,5 +1,11 @@
 import { DAILY_BONUS, ROOM_SIZES, ROOM_UNLOCK_PRICE, SELL_RATE, STREAK_BONUS, STREAK_MAX } from '../config';
-import { findMission, todaysMissions, type MissionCtx, type MissionDef } from '../data/missions';
+import {
+  findMission,
+  todaysMissions,
+  todaysMoonMission,
+  type MissionCtx,
+  type MissionDef,
+} from '../data/missions';
 import type { FurnitureDef, RoomData, SaveData } from '../types';
 import { dayBefore, today } from './save';
 
@@ -66,8 +72,15 @@ export interface MissionView {
   done: boolean;
 }
 
+/** その日のやること。月コロニーがあれば月のぶんが1件足される */
+function missionsFor(save: SaveData, ctx: MissionCtx): MissionDef[] {
+  const list = todaysMissions(save.daily.day);
+  const moon = todaysMoonMission(save.daily.day, ctx.hasMoon);
+  return moon ? [...list, moon] : list;
+}
+
 export function missionViews(save: SaveData, ctx: MissionCtx): MissionView[] {
-  return todaysMissions(save.daily.day).map((def) => ({
+  return missionsFor(save, ctx).map((def) => ({
     def,
     progress: Math.min(def.goal, def.progress(ctx)),
     done: save.doneMissions.includes(def.id),
@@ -81,7 +94,7 @@ export function missionViews(save: SaveData, ctx: MissionCtx): MissionView[] {
 export function claimMissions(save: SaveData, ctx: MissionCtx): { amount: number; count: number } {
   let amount = 0;
   let count = 0;
-  for (const id of todaysMissions(save.daily.day).map((m) => m.id)) {
+  for (const id of missionsFor(save, ctx).map((m) => m.id)) {
     if (save.doneMissions.includes(id)) continue;
     const def = findMission(id);
     if (!def || def.progress(ctx) < def.goal) continue;

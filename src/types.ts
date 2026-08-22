@@ -118,6 +118,8 @@ export interface DailyCounters {
   emoted: number;
   restyled: number;
   bought: number;
+  /** ロケットで別の部屋へ行った回数 */
+  traveled: number;
 }
 
 /**
