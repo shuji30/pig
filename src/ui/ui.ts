@@ -15,6 +15,8 @@ import {
 import { CATEGORY_LABEL, CATEGORY_ORDER, FURNITURE, getDef } from '../data/furniture';
 import type { InteractionKind } from '../data/interactions';
 import { MOTIONS, type MotionKind } from '../data/motions';
+import { STAMPS } from '../data/stamps';
+import { makeStampIconCanvas } from '../render/stampArt';
 import type { MissionView } from '../state/economy';
 import { sellPrice } from '../state/economy';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
@@ -42,6 +44,8 @@ export interface UiHandlers {
   onReset(): void;
   onPlaceAction(act: 'rotate' | 'cancel'): void;
   onSelAction(act: 'rotate' | 'move' | 'recolor' | 'store' | 'deselect'): void;
+  /** スタンプを出す */
+  onStamp(stampId: string): void;
   /** ペットをむかえる */
   onBuyPet(petId: string): void;
   /** 連れて歩くペットを決める（null で おうちに置く） */
@@ -110,6 +114,7 @@ export class Ui {
   ) {
     this.buildTabs();
     this.buildEmotes();
+    this.buildStamps();
     this.buildWardrobe();
     this.buildRoomPanel();
     this.buildRecolorPanel();
@@ -231,6 +236,22 @@ export class Ui {
       name.textContent = m.label;
       btn.append(icon, name);
       btn.addEventListener('click', () => this.handlers.onEmote(m.kind));
+      grid.appendChild(btn);
+    }
+  }
+
+  private buildStamps() {
+    const grid = $('stamp-grid');
+    grid.innerHTML = '';
+    for (const s of STAMPS) {
+      const btn = document.createElement('button');
+      btn.className = 'item';
+      btn.dataset.stamp = s.id;
+      btn.appendChild(makeStampIconCanvas(this.scene, s));
+      const name = document.createElement('span');
+      name.textContent = s.label;
+      btn.appendChild(name);
+      btn.addEventListener('click', () => this.handlers.onStamp(s.id));
       grid.appendChild(btn);
     }
   }

@@ -7,6 +7,7 @@ import { screenToWallSlot, type WallSlot } from '../core/wall';
 import { getDef, interactionsOf } from '../data/furniture';
 import { getInteraction, type InteractionKind } from '../data/interactions';
 import { findPet, getPet } from '../data/pets';
+import { findStamp } from '../data/stamps';
 import type { MissionCtx } from '../data/missions';
 import type { MotionKind } from '../data/motions';
 import { AutoPlay } from '../entities/AutoPlay';
@@ -233,6 +234,16 @@ export class RoomScene extends Phaser.Scene {
       onRecolor: (recolor) => this.applyRecolor(recolor),
       onEmote: (kind) => {
         this.avatar.playMotion(kind);
+        this.save.daily.emoted += 1;
+        this.syncMissions();
+        this.persist();
+      },
+      onStamp: (stampId) => {
+        const def = findStamp(stampId);
+        if (!def) return;
+        this.avatar.showStamp(def);
+        // 気持ちを出したことに変わりはないので、エモートと同じ数え方にする
+        // （やることの意味を増やさない）
         this.save.daily.emoted += 1;
         this.syncMissions();
         this.persist();

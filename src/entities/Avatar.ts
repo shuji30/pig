@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
 import { drawAvatarBody } from '../render/avatarArt';
+import { drawStamp } from '../render/stampArt';
+import type { StampDef } from '../data/stamps';
 import { getMotion, type FaceKind, type MotionDef, type MotionKind } from '../data/motions';
 import type { AvatarLook } from '../types';
 
@@ -173,10 +175,51 @@ export class Avatar {
     this.updateDepth();
   }
 
-  say(text: string) {
+  /**
+   * スタンプを吹き出しに出す。言葉のかわりに気持ちを1枚で見せる。
+   * 吹き出しは言葉と共用なので、あとから出したほうが残る
+   */
+  showStamp(def: StampDef) {
+    const R = 21;
+    const w = R * 2 + 16;
+    const h = R * 2 + 16;
+    const g = this.scene.add.graphics();
+    g.fillStyle(0xffffff, 0.96);
+    g.lineStyle(2, 0xe9d3dd, 1);
+    g.fillRoundedRect(-w / 2, -h / 2, w, h, 12);
+    g.strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
+    g.fillTriangle(-5, h / 2 - 1, 5, h / 2 - 1, 0, h / 2 + 7);
+
+    const art = this.scene.add.graphics();
+    drawStamp(art, def, R);
+
+    this.setBubble(this.scene.add.container(0, 0, [g, art]), h, 3600);
+    // ぽんと出す
+    this.bubble?.setScale(0.6);
+    this.scene.tweens.add({
+      targets: this.bubble,
+      scale: 1,
+      duration: 260,
+      ease: 'Back.easeOut',
+    });
+  }
+
+  /** 吹き出しを差し替える。前のものは消し、時間が来たら片づける */
+  private setBubble(next: Phaser.GameObjects.Container, height: number, ms: number) {
     this.bubble?.destroy();
     this.bubbleTimer?.remove();
+    this.bubbleHeight = height;
+    this.bubble = next;
+    next.setPosition(0, this.bubbleBaseY - height / 2);
+    this.container.add(next);
+    this.bubbleTimer = this.scene.time.delayedCall(ms, () => {
+      this.bubble?.destroy();
+      this.bubble = null;
+      this.bubbleHeight = 0;
+    });
+  }
 
+  say(text: string) {
     const txt = this.scene.add
       .text(0, 0, text, {
         fontFamily: '"Hiragino Maru Gothic ProN", "Yu Gothic UI", sans-serif',
@@ -198,14 +241,7 @@ export class Avatar {
     g.strokeRoundedRect(-w / 2, -h / 2, w, h, 9);
     g.fillTriangle(-5, h / 2 - 1, 5, h / 2 - 1, 0, h / 2 + 7);
 
-    this.bubbleHeight = h;
-    this.bubble = this.scene.add.container(0, this.bubbleBaseY - h / 2, [g, txt]);
-    this.container.add(this.bubble);
-    this.bubbleTimer = this.scene.time.delayedCall(4200, () => {
-      this.bubble?.destroy();
-      this.bubble = null;
-      this.bubbleHeight = 0;
-    });
+    this.setBubble(this.scene.add.container(0, 0, [g, txt]), h, 4200);
   }
 
   /** 吹き出しの下端の高さ */

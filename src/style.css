@@ -627,6 +627,15 @@ button.danger {
   box-shadow: none;
 }
 
+/* パネルの中の小見出し（きもち → スタンプ など） */
+.subhead {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  opacity: 0.75;
+}
+
 /* あたらしいバージョンが配られたときの帯 */
 #update-bar {
   position: absolute;
