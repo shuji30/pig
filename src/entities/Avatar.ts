@@ -249,6 +249,13 @@ export class Avatar {
     return this.sittingOn !== null ? -76 : -92;
   }
 
+  /** 片づける（おきゃくさんが帰るときなど） */
+  destroy() {
+    this.bubbleTimer?.remove();
+    this.glyph?.destroy();
+    this.container.destroy();
+  }
+
   /** モーションを再生する（歩行や着席は止めない） */
   playMotion(kind: MotionKind) {
     // 繰り返し中のものをもう一度押したら止める

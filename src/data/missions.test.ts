@@ -20,6 +20,7 @@ const daily = (patch: Partial<DailyCounters> = {}): DailyCounters => ({
   traveled: 0,
   used: 0,
   patted: 0,
+  guested: 0,
   ...patch,
 });
 

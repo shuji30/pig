@@ -1,5 +1,16 @@
 import Phaser from 'phaser';
-import { FLOOR_STYLES, ROOM_THEMES, TILE_H, TILE_W, WALL_H } from '../config';
+import {
+  FLOOR_STYLES,
+  GUEST_FIRST_MAX,
+  GUEST_FIRST_MIN,
+  GUEST_GAP_MAX,
+  GUEST_GAP_MIN,
+  GUEST_GIFT,
+  ROOM_THEMES,
+  TILE_H,
+  TILE_W,
+  WALL_H,
+} from '../config';
 import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
@@ -8,6 +19,8 @@ import { getDef, interactionsOf } from '../data/furniture';
 import { getInteraction, type InteractionKind } from '../data/interactions';
 import { findPet, getPet } from '../data/pets';
 import { findStamp } from '../data/stamps';
+import { makeGuestLook } from '../data/guests';
+import { Guest } from '../entities/Guest';
 import type { MissionCtx } from '../data/missions';
 import type { MotionKind } from '../data/motions';
 import { AutoPlay } from '../entities/AutoPlay';
@@ -352,6 +365,7 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setInventory(this.save.inventory);
     this.ui.setPets(this.save.pets, this.save.pet);
     this.syncPet();
+    this.resetGuestSchedule();
     this.ui.setCoins(this.save.coins);
     this.syncMissions();
     this.setHint();
@@ -477,6 +491,7 @@ export class RoomScene extends Phaser.Scene {
     this.repaintRoom();
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
+    this.guest?.refreshDepth();
     this.userZoomed = false;
     this.applyFitZoom();
     this.centerOnRoom();
@@ -597,6 +612,7 @@ export class RoomScene extends Phaser.Scene {
   override update(_time: number, delta: number) {
     this.avatar.update(delta);
     this.pet?.update(delta);
+    this.updateGuest(delta);
     this.auto.update(delta);
     this.syncUse();
     // 繰り返し再生の開始・終了に合わせてボタンとヒントを切り替える
@@ -905,6 +921,121 @@ export class RoomScene extends Phaser.Scene {
       return;
     }
     if (!this.startUse(item, kinds[0])) this.ui.toast('近づけないみたい…');
+  }
+
+  // ---------------- おきゃくさん ----------------
+
+  private guest: Guest | null = null;
+  /** 次のおきゃくさんが来るまでの残り時間(ms)。null は「来ない部屋」 */
+  private guestIn: number | null = null;
+
+  /** その部屋におきゃくさんが来るか。自分の家だけ、訪問中は来ない */
+  private guestsAllowed(): boolean {
+    return !this.visiting && this.save.currentRoom === HOME_ROOM;
+  }
+
+  /** 部屋に入ったとき・移ったときに、来客の予定を組み直す */
+  private resetGuestSchedule() {
+    this.guest?.destroy();
+    this.guest = null;
+    this.guestIn = this.guestsAllowed() ? Phaser.Math.Between(GUEST_FIRST_MIN, GUEST_FIRST_MAX) : null;
+  }
+
+  private updateGuest(delta: number) {
+    if (this.guest) {
+      this.guest.update(delta);
+      return;
+    }
+    if (this.guestIn === null || !this.guestsAllowed()) return;
+    this.guestIn -= delta;
+    if (this.guestIn > 0) return;
+    this.guestIn = null;
+    this.spawnGuest();
+  }
+
+  /** 部屋のふち（手前側）の、立てるマス。ここから入って、ここから帰る */
+  private doorTile(): Tile {
+    const edge: Tile[] = [];
+    for (let i = 0; i < this.size; i++) {
+      for (const t of [
+        { gx: this.size - 1, gy: i },
+        { gx: i, gy: this.size - 1 },
+      ]) {
+        if (!this.furniture.isBlocked(t.gx, t.gy)) edge.push(t);
+      }
+    }
+    if (edge.length === 0) return { gx: this.size - 1, gy: this.size - 1 };
+    return edge[Phaser.Math.Between(0, edge.length - 1)];
+  }
+
+  private spawnGuest() {
+    const door = this.doorTile();
+    this.guest = new Guest(this, makeGuestLook(), door, {
+      pathTo: (from, to) => findPath(from, to, this.size, this.size, this.blockedFn),
+      lookSpots: () => this.guestLookSpots(),
+      doorTile: () => this.doorTile(),
+      trySit: (g) => this.guestSit(g),
+      onLeave: (g) => this.guestLeft(g),
+    });
+    this.guest.setDepthResolver((box) => this.furniture.depthAt(box));
+    this.save.daily.guested += 1;
+    this.ui.toast(`${this.guest.name}さんが あそびに きたよ`);
+    this.persist();
+  }
+
+  /** 見に行く先。置いてある家具のとなり（無ければ部屋のどこか） */
+  private guestLookSpots(): Tile[] {
+    const out: Tile[] = [];
+    for (const item of this.furniture.all) {
+      const near = this.furniture.neighborTiles(item);
+      if (near.length > 0) out.push(near[Phaser.Math.Between(0, near.length - 1)]);
+    }
+    if (out.length > 0) return out;
+    const any = this.freeTileNear({ gx: Math.floor(this.size / 2), gy: Math.floor(this.size / 2) }, 4);
+    return any ? [any] : [];
+  }
+
+  /** 座れる家具へ行って座らせる */
+  private guestSit(guest: Guest): boolean {
+    const seats = this.furniture.all.filter(
+      (i) => interactionsOf(getDef(i.defId)).includes('sit') && i.uid !== this.avatar.sittingOn,
+    );
+    if (seats.length === 0) return false;
+    const item = seats[Phaser.Math.Between(0, seats.length - 1)];
+    const found = findPathAdjacent(
+      guest.avatar.tile,
+      this.furniture.neighborTiles(item),
+      this.size,
+      this.size,
+      this.blockedFn,
+    );
+    if (!found) return false;
+    if (guest.avatar.sittingOn) guest.avatar.standUp();
+    guest.avatar.walk(found.path, () => {
+      const still = this.furniture.get(item.uid);
+      if (!still) return;
+      const def = getDef(still.defId);
+      const spot = this.furniture.seatSpot(still);
+      const facing = this.furniture.seatFacing(still);
+      guest.avatar.sit(still.uid, spot, (def.seatHeight ?? 16) + 6, facing.back, facing.flip, spot.depth);
+    });
+    return true;
+  }
+
+  /** 帰った。その日の最初の人は おみやげを置いていく */
+  private guestLeft(guest: Guest) {
+    guest.destroy();
+    this.guest = null;
+    this.guestIn = this.guestsAllowed() ? Phaser.Math.Between(GUEST_GAP_MIN, GUEST_GAP_MAX) : null;
+    if (this.visiting) return;
+    // 何度も呼んで稼げないよう、その日の1人目だけ
+    if (this.save.daily.guested === 1) {
+      this.save.coins += GUEST_GIFT;
+      this.ui.toast(`おみやげを もらった（🪙+${GUEST_GIFT}）`);
+      this.afterEconomyChange();
+    } else {
+      this.persist();
+    }
   }
 
   // ---------------- ペット ----------------
@@ -1444,6 +1575,7 @@ export class RoomScene extends Phaser.Scene {
     this.select(uid);
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
+    this.guest?.refreshDepth();
     this.persist();
   }
 
@@ -1453,6 +1585,7 @@ export class RoomScene extends Phaser.Scene {
     if (!removed) return;
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
+    this.guest?.refreshDepth();
     this.drawGlow();
     this.save.inventory[removed.defId] = (this.save.inventory[removed.defId] ?? 0) + 1;
     this.save.daily.stored += 1;
@@ -1524,6 +1657,7 @@ export class RoomScene extends Phaser.Scene {
     this.ensureAvatarStandable();
     this.avatar.refreshDepth();
     this.syncPet(); // 連れているペットは部屋を移ってもついてくる
+    this.resetGuestSchedule(); // おきゃくさんは自分の家にだけ来る
 
     this.userZoomed = false;
     this.applyFitZoom();
@@ -1617,6 +1751,7 @@ export class RoomScene extends Phaser.Scene {
       this.furniture.setRecolor(this.selectedUid, recolor);
       this.avatar.refreshDepth();
       this.pet?.refreshDepth();
+      this.guest?.refreshDepth();
     } else {
       return;
     }
@@ -1740,6 +1875,7 @@ export class RoomScene extends Phaser.Scene {
       this.furniture.setVisible(uid, true);
       this.avatar.refreshDepth();
       this.pet?.refreshDepth();
+      this.guest?.refreshDepth();
       this.cancelPlacing();
       this.select(uid);
       this.persist();
@@ -1761,6 +1897,7 @@ export class RoomScene extends Phaser.Scene {
     this.ensureAvatarStandable();
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
+    this.guest?.refreshDepth();
 
     if ((this.save.inventory[defId] ?? 0) <= 0) {
       this.cancelPlacing();

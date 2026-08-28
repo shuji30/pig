@@ -59,7 +59,7 @@ export function dayBefore(day: string): string {
 }
 
 export function emptyDaily(day: string): DailyCounters {
-  return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0, traveled: 0, used: 0, patted: 0 };
+  return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0, traveled: 0, used: 0, patted: 0, guested: 0 };
 }
 
 /**
@@ -83,6 +83,7 @@ function cleanDaily(raw: unknown, fallbackDay: string): DailyCounters {
     traveled: num(r.traveled),
     used: num(r.used),
     patted: num(r.patted),
+    guested: num(r.guested),
   };
 }
 

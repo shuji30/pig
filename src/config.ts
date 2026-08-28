@@ -18,6 +18,15 @@ export const WALL_H = 96;
 /** アバターの歩行速度(px/秒。画面上の距離) */
 export const WALK_SPEED = 110;
 
+/** はじめの おきゃくさんが来るまでの時間(ms)。遊び始めてすぐには来ない */
+export const GUEST_FIRST_MIN = 70_000;
+export const GUEST_FIRST_MAX = 130_000;
+/** 帰ってから次の人が来るまで */
+export const GUEST_GAP_MIN = 190_000;
+export const GUEST_GAP_MAX = 320_000;
+/** その日の最初のおきゃくさんが置いていく おみやげ */
+export const GUEST_GIFT = 40;
+
 export const SAVE_KEY = 'pig-sandbox.save.v1';
 export const SAVE_VERSION = 7;
 

@@ -132,6 +132,8 @@ export interface DailyCounters {
   used: number;
   /** ペットをなでた回数 */
   patted: number;
+  /** おきゃくさんが来た回数 */
+  guested: number;
 }
 
 /**
