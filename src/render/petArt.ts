@@ -26,19 +26,31 @@ export function drawPet(g: Phaser.GameObjects.Graphics, def: PetDef, pose: PetPo
   const eye = toInt(def.eye);
   const line = shade(body, 0.62);
   const bird = def.shape === 'bird';
+  const hamster = def.shape === 'hamster';
+  const turtle = def.shape === 'turtle';
 
   const sit = pose.sitting || pose.sleeping;
   // すわると体が沈み、頭の位置も下がる
   const bodyY = (sit ? -7 : -9) + pose.breathe * 0.5;
-  const bodyRx = bird ? 8.5 : 10.5;
-  const bodyRy = sit ? 8.5 : 7.5;
-  const headY = bodyY - (sit ? 9 : 10.5) + pose.breathe;
-  const headR = bird ? 6.6 : 7.6;
+  // ハムスターは小さく丸く、かめは低く横長にする
+  const bodyRx = bird ? 8.5 : hamster ? 8.8 : turtle ? 12 : 10.5;
+  const bodyRy = (sit ? 8.5 : 7.5) * (hamster ? 0.86 : turtle ? 0.72 : 1);
+  // かめの頭はこうらの**前**（画面では下）へ出す。上に置くとこうらに隠れる
+  const headLift = hamster ? (sit ? 9 : 10.5) * 0.8 : turtle ? -4.6 : sit ? 9 : 10.5;
+  const headY = bodyY - headLift + pose.breathe;
+  const headR = bird ? 6.6 : hamster ? 6.4 : turtle ? 5.6 : 7.6;
 
   // ---- しっぽ（体より先に描いて後ろに回す） ----
   if (!bird) {
     const wag = pose.swing * 2.2;
-    if (def.shape === 'cat') {
+    if (hamster) {
+      // ちょこんとした短いしっぽ
+      g.fillStyle(tint(body, 0.3), 1);
+      g.fillCircle(-bodyRx - 0.5, bodyY + 2, 2);
+    } else if (turtle) {
+      g.fillStyle(shade(body, 0.9), 1);
+      g.fillTriangle(-bodyRx + 2, bodyY - 1, -bodyRx - 3, bodyY + 1, -bodyRx + 2, bodyY + 2.5);
+    } else if (def.shape === 'cat') {
       // 細いしっぽを3つの丸でつなぐ。体の外へ出す（隠れると生きものらしさが消える）
       const base = { x: -bodyRx + 2, y: bodyY + 2 };
       for (const [i, k] of [0.0, 0.5, 1.0].entries()) {
@@ -81,6 +93,22 @@ export function drawPet(g: Phaser.GameObjects.Graphics, def: PetDef, pose: PetPo
   // ---- 体 ----
   g.fillStyle(body, 1);
   g.fillEllipse(0, bodyY, bodyRx * 2, bodyRy * 2);
+  if (turtle) {
+    // こうら。ふちを一段濃くして、六角の模様を散らす
+    g.fillStyle(shade(accent, 0.82), 1);
+    g.fillEllipse(0, bodyY - 1.5, bodyRx * 1.94, bodyRy * 2.1);
+    g.fillStyle(accent, 1);
+    g.fillEllipse(0, bodyY - 2.5, bodyRx * 1.6, bodyRy * 1.7);
+    g.fillStyle(shade(accent, 0.86), 1);
+    for (const [dx, dy] of [
+      [0, -2],
+      [-5.5, 0.5],
+      [5.5, 0.5],
+      [0, 3],
+    ] as Array<[number, number]>) {
+      g.fillCircle(dx, bodyY - 2.5 + dy, 2.1);
+    }
+  }
   // おなかの明るいところ（前を向いているときだけ）
   if (!pose.back) {
     g.fillStyle(tint(body, 0.3), 1);
@@ -127,6 +155,15 @@ export function drawPet(g: Phaser.GameObjects.Graphics, def: PetDef, pose: PetPo
       g.fillStyle(shade(body, 0.9), 1);
       g.fillEllipse(s * 6.4, headY - 1.4, 4.6, 8.6);
     }
+  } else if (hamster) {
+    for (const s of [-1, 1]) {
+      g.fillStyle(shade(body, 0.92), 1);
+      g.fillCircle(s * 4.6, headY - headR + 1.2, 3);
+      g.fillStyle(accent, 1);
+      g.fillCircle(s * 4.6, headY - headR + 1.4, 1.6);
+    }
+  } else if (turtle) {
+    // 耳は無い。頭がこうらから前に出ているだけ
   } else {
     // ことりの冠羽
     g.fillStyle(accent, 1);
@@ -168,6 +205,12 @@ export function drawPet(g: Phaser.GameObjects.Graphics, def: PetDef, pose: PetPo
   if (bird) {
     g.fillStyle(accent, 1);
     g.fillTriangle(-2, eyeY + 2.4, 2, eyeY + 2.4, 0, eyeY + 5.6);
+  } else if (turtle) {
+    // くちばしの代わりに、にっこりした口だけ
+    g.lineStyle(1.2, line, 1);
+    g.beginPath();
+    g.arc(0, eyeY + 1.6, 2.2, Math.PI * 0.15, Math.PI * 0.85);
+    g.strokePath();
   } else {
     // 鼻と口（ω のかたち）
     g.fillStyle(accent, 1);
@@ -179,10 +222,12 @@ export function drawPet(g: Phaser.GameObjects.Graphics, def: PetDef, pose: PetPo
     g.beginPath();
     g.arc(1.3, eyeY + 4.4, 1.5, 0, Math.PI);
     g.strokePath();
-    // ほお
-    g.fillStyle(accent, 0.5);
-    g.fillEllipse(-headR * 0.72, eyeY + 2.2, 3.4, 2.2);
-    g.fillEllipse(headR * 0.72, eyeY + 2.2, 3.4, 2.2);
+    // ほお。ハムスターはふくらませる
+    g.fillStyle(accent, hamster ? 0.9 : 0.5);
+    const cw = hamster ? 5.2 : 3.4;
+    const ch = hamster ? 4 : 2.2;
+    g.fillEllipse(-headR * 0.78, eyeY + 2.2, cw, ch);
+    g.fillEllipse(headR * 0.78, eyeY + 2.2, cw, ch);
   }
 }
 

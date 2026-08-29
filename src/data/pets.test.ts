@@ -28,7 +28,16 @@ describe('ペットのカタログ', () => {
   });
 
   it('種類（かたち）は描ける4つのどれか', () => {
-    for (const p of PETS) expect(['cat', 'dog', 'rabbit', 'bird']).toContain(p.shape);
+    for (const p of PETS) expect(['cat', 'dog', 'rabbit', 'bird', 'hamster', 'turtle']).toContain(p.shape);
+  });
+
+  it('どのかたちも1匹以上いる（描いたのに出ない絵を残さない）', () => {
+    for (const shape of ['cat', 'dog', 'rabbit', 'bird', 'hamster', 'turtle']) {
+      expect(
+        PETS.some((p) => p.shape === shape),
+        shape,
+      ).toBe(true);
+    }
   });
 
   it('findPet は知らない id で undefined、getPet は投げる', () => {

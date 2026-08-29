@@ -30,7 +30,10 @@ export type WallShape =
   | 'clock'
   | 'sconce' // 壁付きの燭台
   | 'shelf' // 壁棚
-  | 'tapestry'; // 壁掛けの布
+  | 'tapestry' // 壁掛けの布
+  | 'garland' // 花づな（たわんだ曲線）
+  | 'plate' // かざり皿
+  | 'vine'; // 壁掛けのグリーン
 
 /** 家具のめずらしさ。価格帯とショップの並び順に使う */
 export type Rarity = 'common' | 'uncommon' | 'rare';

@@ -76,6 +76,13 @@ describe('カタログの整合性', () => {
     for (const f of FURNITURE) expect(drawable, f.id).toContain(f.shape);
   });
 
+  it('壁の形も描き分けているものだけ', () => {
+    const drawable = ['window', 'painting', 'mirror', 'clock', 'sconce', 'shelf', 'tapestry', 'garland', 'plate', 'vine'];
+    for (const f of FURNITURE) {
+      if (f.wallShape) expect(drawable, f.id).toContain(f.wallShape);
+    }
+  });
+
   it('壁に掛けるものには wallShape がある', () => {
     for (const f of FURNITURE) {
       if (f.category === 'wall') expect(f.wallShape, f.id).toBeDefined();

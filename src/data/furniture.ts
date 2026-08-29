@@ -99,6 +99,12 @@ export const FURNITURE: FurnitureDef[] = [
   // ---- かべ ----
   // 壁に掛けるもの。size[0] が壁に沿ったマス数、height は壁の上での高さ(px)。
   // 描画は render/wallTexture.ts。床の家具と同じショップ・持ちものに並ぶ
+  { id: 'wall-plate', name: 'かざりざら', category: 'wall', shape: 'box', wallShape: 'plate', size: [1, 1], height: 24, color: '#f8f2e8', accent: '#a9c4dc', price: 120, rarity: 'common' },
+  { id: 'wall-vine', name: 'かべのグリーン', category: 'wall', shape: 'box', wallShape: 'vine', size: [1, 1], height: 34, color: '#e0cba8', accent: '#6fbf63', price: 170, rarity: 'common' },
+  { id: 'garland', name: 'はなづな', category: 'wall', shape: 'box', wallShape: 'garland', size: [2, 1], height: 24, color: '#8fb59a', accent: '#e6a9bd', price: 190, rarity: 'common' },
+  { id: 'wall-plate-set', name: 'かざりざら3まい', category: 'wall', shape: 'box', wallShape: 'plate', size: [2, 1], height: 26, color: '#f8f2e8', accent: '#e6a9bd', price: 270, rarity: 'uncommon' },
+  { id: 'wall-vine-big', name: 'おおきなグリーン', category: 'wall', shape: 'box', wallShape: 'vine', size: [2, 1], height: 40, color: '#e0cba8', accent: '#5d9e63', price: 330, rarity: 'uncommon' },
+  { id: 'garland-gold', name: 'きんのはなづな', category: 'wall', shape: 'box', wallShape: 'garland', size: [3, 1], height: 26, color: '#cfa855', accent: '#f7e6a8', price: 560, rarity: 'rare' },
   { id: 'wall-clock', name: 'かべどけい', category: 'wall', shape: 'box', wallShape: 'clock', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#cfa855', price: 130, rarity: 'common' },
   { id: 'art-small', name: 'ちいさい絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [1, 1], height: 24, color: '#cfa855', accent: '#dcc6e0', price: 140, rarity: 'common' },
   { id: 'sconce', name: 'かべしょくだい', category: 'wall', shape: 'box', wallShape: 'sconce', size: [1, 1], height: 30, color: '#cfa855', accent: '#fff3cf', price: 160, rarity: 'common' },

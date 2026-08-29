@@ -142,6 +142,73 @@ function drawShape(p: WallPainter, shape: WallShape, def: FurnitureDef, w: numbe
       p.disc(w * 0.75, h * 0.56, 4, shade(accent, 1.1));
       break;
     }
+    case 'garland': {
+      // 両端の留め具から、たわんだ弧を描いて花をつなぐ
+      const n = Math.max(7, Math.round(w / 7));
+      const sag = h * 0.42;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const u = 2 + (w - 4) * t;
+        // 放物線でたるみを作る（両端が高く、中央が低い）
+        const hh = h - 4 - sag * 4 * t * (1 - t);
+        p.disc(u, hh, 2.2, shade(color, 0.8));
+      }
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const u = 2 + (w - 4) * t;
+        const hh = h - 4 - sag * 4 * t * (1 - t);
+        if (i % 2 === 0) {
+          // 花
+          for (let k = 0; k < 5; k++) {
+            const a = (k / 5) * Math.PI * 2;
+            p.disc(u + Math.cos(a) * 2.6, hh + Math.sin(a) * 2.6, 1.8, accent);
+          }
+          p.disc(u, hh, 1.6, GOLD_LIGHT);
+        }
+      }
+      // 両端のリボン
+      for (const u of [2, w - 2]) {
+        p.quad(u - 2, h - 8, u + 2, h - 2, GOLD);
+        p.disc(u, h - 2, 2.6, GOLD_LIGHT);
+      }
+      break;
+    }
+    case 'plate': {
+      // 皿は丸い。並べる枚数は幅から決める
+      // 枚数はマス数から決める（1マス=1枚、2マス=3枚…）。幅から割ると端数で欠ける
+      const count = Math.max(1, def.size[0] * 2 - 1);
+      const r = Math.min(h * 0.9, w / count) * 0.46;
+      for (let i = 0; i < count; i++) {
+        const u = (w * (i + 0.5)) / count;
+        const hh = h / 2 + (i % 2 === 1 ? h * 0.12 : 0); // 少し高さをずらして並べる
+        p.disc(u, hh, r + 1.4, shade(GOLD, 0.85));
+        p.disc(u, hh, r, color);
+        p.disc(u, hh, r * 0.74, shade(color, 1.08));
+        p.disc(u, hh, r * 0.46, accent);
+        p.disc(u, hh, r * 0.2, shade(accent, 1.2));
+      }
+      break;
+    }
+    case 'vine': {
+      // 上の鉢 → 左右へ垂れる葉
+      const potW = Math.min(w * 0.5, 16);
+      p.quad(w / 2 - potW / 2, h - 10, w / 2 + potW / 2, h - 1, shade(color, 0.9));
+      p.quad(w / 2 - potW / 2 - 1.5, h - 4, w / 2 + potW / 2 + 1.5, h - 1, GOLD);
+      const strands = w > 40 ? 4 : 3;
+      for (let sIdx = 0; sIdx < strands; sIdx++) {
+        const dir = sIdx % 2 === 0 ? -1 : 1;
+        const spread = (Math.floor(sIdx / 2) + 1) * (w * 0.16);
+        const len = h - 12 - sIdx * 2;
+        for (let i = 1; i <= 6; i++) {
+          const t = i / 6;
+          const u = w / 2 + dir * spread * t;
+          const hh = h - 10 - len * t;
+          p.disc(u, hh, 3 - t * 0.6, shade(accent, 1 - sIdx * 0.06));
+          if (i % 2 === 0) p.disc(u + dir * 3, hh + 1.5, 2.2, shade(accent, 1.12));
+        }
+      }
+      break;
+    }
     case 'tapestry': {
       // 上の吊り棒 → 布 → すそのふさ
       p.quad(-2, h - 4, w + 2, h, GOLD);
