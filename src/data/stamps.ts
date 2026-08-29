@@ -15,7 +15,11 @@ export type StampShape =
   | 'sweat'
   | 'flower'
   | 'cake'
-  | 'sleep';
+  | 'sleep'
+  | 'sun'
+  | 'moon'
+  | 'crown'
+  | 'cup';
 
 export interface StampDef {
   id: string;
@@ -40,6 +44,10 @@ export const STAMPS: StampDef[] = [
   { id: 'thanks', label: 'ありがとう', shape: 'flower', color: '#e6a9bd', accent: '#f7e6a8' },
   { id: 'party', label: 'おめでとう', shape: 'cake', color: '#f4e2e6', accent: '#e0637f' },
   { id: 'sleepy', label: 'ねむい', shape: 'sleep', color: '#a9b6d8', accent: '#e6ecf8' },
+  { id: 'morning', label: 'おはよう', shape: 'sun', color: '#f0b53c', accent: '#fff0c4' },
+  { id: 'night', label: 'おやすみ', shape: 'moon', color: '#c9b6e8', accent: '#f2ecff' },
+  { id: 'best', label: 'さいこう', shape: 'crown', color: '#e8c86a', accent: '#fff6d8' },
+  { id: 'tea', label: 'おちゃどうぞ', shape: 'cup', color: '#e6a9bd', accent: '#f8eef2' },
 ];
 
 const BY_ID = new Map(STAMPS.map((s) => [s.id, s]));

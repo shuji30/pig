@@ -88,6 +88,12 @@ describe('カタログとの整合', () => {
     }
   });
 
+  it('新しくできること（ひく・あたたまる）は そばに立ってやる', () => {
+    for (const kind of ['play', 'warm'] as const) {
+      expect(getInteraction(kind).stance).toBe('beside');
+    }
+  });
+
   it('ベッドは ねる ことができる', () => {
     for (const id of ['bed', 'bed-canopy', 'daybed']) {
       expect(interactionsOf(getDef(id)), id).toContain('sleep');

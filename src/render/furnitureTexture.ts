@@ -493,6 +493,65 @@ function paint(painter: IsoPainter, def: FurnitureDef) {
       painter.blob(0.5, 0.5, H - 3, 3.4, 4.2, '#ffd77a');
       break;
     }
+    case 'round': {
+      // 丸いもの。箱では曲線が出せないので blob（楕円）で天板と台座を作る
+      const r = Math.min(W, D) * 0.5;
+      painter.blob(W / 2, D / 2, 0, HW * r * 0.72, 3.5, shade(c, 0.9)); // 足元
+      painter.box(W / 2 - 0.09, D / 2 - 0.09, W / 2 + 0.09, D / 2 + 0.09, 2, H - 5, GOLD); // 一本脚
+      painter.box(W / 2 - 0.14, D / 2 - 0.14, W / 2 + 0.14, D / 2 + 0.14, H - 9, H - 5, GOLD_LIGHT);
+      painter.blob(W / 2, D / 2, H - 5, HW * r * 0.94, 5, c); // 天板
+      painter.blob(W / 2, D / 2, H - 1.5, HW * r * 0.7, 3, tint(c, 0.3)); // 天板の照り
+      break;
+    }
+    case 'piano': {
+      // ロココのスピネット。胴 → 鍵盤 → 譜面台 → 猫脚
+      const legH = H * 0.42;
+      cabrioleLegs(painter, W, D, 0.3, legH, c);
+      painter.box(0.06, 0.12, W - 0.06, D - 0.1, legH, H * 0.76, c); // 胴
+      painter.box(0.06, 0.12, W - 0.06, D - 0.1, H * 0.76, H * 0.79, GOLD); // 胴の縁
+      // 鍵盤（白鍵の帯に、黒鍵を等間隔で乗せる）
+      painter.box(0.1, D - 0.34, W - 0.1, D - 0.06, H * 0.62, H * 0.66, '#fbf7f0');
+      const keys = Math.max(6, Math.round(W * 7));
+      for (let i = 1; i < keys; i++) {
+        if (i % 7 === 3 || i % 7 === 0) continue; // ミ-ファ と シ-ド の間には黒鍵が無い
+        const u = 0.12 + ((W - 0.24) * i) / keys;
+        painter.box(u - 0.018, D - 0.3, u + 0.018, D - 0.16, H * 0.66, H * 0.69, '#3a2f33');
+      }
+      painter.box(0.08, D - 0.4, W - 0.08, D - 0.34, H * 0.62, H, c); // 譜面台
+      painter.box(0.14, D - 0.38, W - 0.14, D - 0.36, H * 0.78, H - 3, ac); // 楽譜
+      painter.blob(W / 2, D - 0.2, H, 5.6, 4.2, GOLD_LIGHT); // 中央の彫刻
+      break;
+    }
+    case 'fireplace': {
+      // 左右の柱 → 上のマントルピース → 奥の火床 → 炎
+      const pillar = 0.26;
+      painter.box(0, 0.16, pillar, D - 0.12, 0, H - 10, c);
+      painter.box(W - pillar, 0.16, W, D - 0.12, 0, H - 10, c);
+      painter.box(0, 0.16, W, D - 0.12, H - 10, H - 4, c); // 笠木
+      painter.box(-0.05, 0.12, W + 0.05, D - 0.08, H - 4, H, GOLD_LIGHT); // 天板の金縁
+      painter.box(pillar, 0.2, W - pillar, D - 0.2, 0, H - 12, '#4a3b42'); // 火床の奥
+      // まきと炎は火床の**中**に置く。前に出すと床に転がって見える
+      painter.box(pillar + 0.1, 0.36, W - pillar - 0.1, D - 0.34, 0, 6, shade(c, 0.62));
+      painter.blob(W / 2, D / 2, 9, 9.5, 9, ac); // 炎（外）
+      painter.blob(W / 2, D / 2, 13, 5.4, 6.4, '#ffe6a8'); // 炎（内）
+      painter.blob(W / 2, D / 2, 19, 2.4, 4.2, '#fff3cf'); // 炎の先（丸だけだと卵に見えるため）
+      painter.stud(W / 2, 0.3, H, 3.2, GOLD); // 笠木の中央飾り
+      break;
+    }
+    case 'aquarium': {
+      painter.box(0.08, 0.18, W - 0.08, D - 0.14, 0, H * 0.45, c); // 台
+      painter.box(0.05, 0.15, W - 0.05, D - 0.11, H * 0.45, H * 0.5, GOLD); // 台の縁
+      painter.box(0.12, 0.22, W - 0.12, D - 0.18, H * 0.5, H - 4, ac); // 水
+      painter.box(0.12, 0.22, W - 0.12, D - 0.18, H - 4, H - 2, tint(ac, 0.5)); // 水面
+      painter.box(0.14, 0.24, W - 0.14, D - 0.2, H * 0.5, H * 0.56, '#e7d9b8'); // 砂
+      // 水草と魚
+      painter.blob(0.3, D / 2, H * 0.56, 3.4, 5.2, '#5d9e63');
+      painter.blob(W - 0.32, D / 2 - 0.06, H * 0.56, 3, 4.4, '#6fbf63');
+      painter.stud(W * 0.45, D / 2, H * 0.72, 3.4, '#f0a05c');
+      painter.stud(W * 0.62, D / 2 + 0.04, H * 0.64, 2.6, '#f7d98c');
+      painter.box(0.1, 0.2, W - 0.1, D - 0.16, H - 2, H, GOLD_LIGHT); // 上ぶちの金
+      break;
+    }
     case 'tv': {
       painter.box(W / 2 - 0.3, 0.42, W / 2 + 0.3, 0.58, 0, 6, c);
       painter.box(W / 2 - 0.08, 0.46, W / 2 + 0.08, 0.54, 6, 13, c);

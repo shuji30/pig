@@ -270,7 +270,8 @@ export class FurnitureLayer {
     const out: Array<{ x: number; y: number; r: number }> = [];
     for (const item of this.items) {
       const def = getDef(item.defId);
-      if (def.shape !== 'lamp') continue;
+      // 灯りをともすもの。だんろも夜は足元を照らす
+      if (def.shape !== 'lamp' && def.shape !== 'fireplace') continue;
       const f = this.footprint(item);
       const p = gridToScreen(f.gx + f.w / 2, f.gy + f.d / 2);
       out.push({ x: p.x, y: p.y, r: 34 + def.height * 0.34 });

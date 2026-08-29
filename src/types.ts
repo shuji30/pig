@@ -14,6 +14,10 @@ export type FurnitureShape =
   | 'lamp'
   | 'tv'
   | 'table'
+  | 'round' // 丸い天板・丸い座面（箱では出せない曲線のため）
+  | 'piano'
+  | 'fireplace'
+  | 'aquarium'
   | 'rocket'; // 月へ行けるロケット（と、そのミニチュア）
 
 export type FurnitureCategory = 'seat' | 'table' | 'storage' | 'deco' | 'floor' | 'wall';

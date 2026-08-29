@@ -574,6 +574,28 @@ export class Avatar {
         ty = 0.6;
         break;
       }
+      case 'play': {
+        // 両手を前に出して、交互に鍵盤をたたく
+        const b = Math.sin(p * Math.PI * 6);
+        liftL = 0.34 + b * 0.06;
+        liftR = 0.34 - b * 0.06;
+        dxL = dxR = -1.5;
+        handIn = 2.4;
+        handYFix = upper - 4;
+        headDip = 1.6;
+        ty = 0.4;
+        break;
+      }
+      case 'warm': {
+        // 火のほうへ両手をかざして、ゆっくり温まる
+        const b = Math.sin(p * Math.PI * 2);
+        liftL = liftR = 0.5 + b * 0.04;
+        dxL = dxR = -2.5;
+        handIn = 4;
+        handYFix = upper - 12;
+        ty = 0.3 + b * 0.3;
+        break;
+      }
       case 'water': {
         // 前にかがんで、じょうろを傾けるように腕を出す
         const k = Math.abs(Math.sin(p * Math.PI * 2));

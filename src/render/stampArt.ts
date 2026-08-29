@@ -133,9 +133,103 @@ export function drawStamp(g: Phaser.GameObjects.Graphics, def: StampDef, r: numb
       }
       break;
     }
+    case 'sun': {
+      g.fillStyle(color, 1);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const x = Math.cos(a) * r * 0.82;
+        const y = Math.sin(a) * r * 0.82;
+        g.fillTriangle(
+          x + Math.cos(a + 1.2) * r * 0.16,
+          y + Math.sin(a + 1.2) * r * 0.16,
+          x + Math.cos(a - 1.2) * r * 0.16,
+          y + Math.sin(a - 1.2) * r * 0.16,
+          Math.cos(a) * r * 1.05,
+          Math.sin(a) * r * 1.05,
+        );
+      }
+      g.fillCircle(0, 0, r * 0.62);
+      g.fillStyle(accent, 0.9);
+      g.fillCircle(-r * 0.14, -r * 0.16, r * 0.32);
+      break;
+    }
+    case 'moon': {
+      // 三日月。外側の弧と、内側にずらした弧をつないで多角形にする
+      g.fillStyle(color, 1);
+      g.fillPoints(crescent(r * 0.92, r * 0.78, r * 0.42), true, true);
+      g.fillStyle(accent, 0.85);
+      g.fillPoints(crescent(r * 0.6, r * 0.5, r * 0.28), true, true);
+      break;
+    }
+    case 'crown': {
+      g.fillStyle(color, 1);
+      g.fillPoints(
+        [
+          { x: -r * 0.86, y: r * 0.5 },
+          { x: -r * 0.86, y: -r * 0.62 },
+          { x: -r * 0.34, y: -r * 0.1 },
+          { x: 0, y: -r * 0.86 },
+          { x: r * 0.34, y: -r * 0.1 },
+          { x: r * 0.86, y: -r * 0.62 },
+          { x: r * 0.86, y: r * 0.5 },
+        ],
+        true,
+        true,
+      );
+      g.fillStyle(shade(color, 0.86), 1);
+      g.fillRect(-r * 0.86, r * 0.5, r * 1.72, r * 0.26);
+      g.fillStyle(accent, 1);
+      for (const x of [-r * 0.5, 0, r * 0.5]) g.fillCircle(x, r * 0.16, r * 0.14);
+      break;
+    }
+    case 'cup': {
+      g.fillStyle(shade(color, 0.85), 1);
+      g.fillEllipse(0, r * 0.78, r * 1.5, r * 0.4); // ソーサー
+      g.fillStyle(color, 1);
+      g.fillPoints(
+        [
+          { x: -r * 0.6, y: -r * 0.3 },
+          { x: r * 0.6, y: -r * 0.3 },
+          { x: r * 0.42, y: r * 0.62 },
+          { x: -r * 0.42, y: r * 0.62 },
+        ],
+        true,
+        true,
+      );
+      g.lineStyle(r * 0.14, color, 1);
+      g.beginPath();
+      g.arc(r * 0.66, r * 0.08, r * 0.26, Math.PI * 1.5, Math.PI * 0.5, false);
+      g.strokePath();
+      g.fillStyle(accent, 1);
+      g.fillEllipse(0, -r * 0.28, r * 1.16, r * 0.3); // 中のお茶
+      // ゆげ
+      g.fillStyle(accent, 0.8);
+      for (const x of [-r * 0.24, r * 0.24]) g.fillEllipse(x, -r * 0.72, r * 0.12, r * 0.3);
+      break;
+    }
     default:
       break;
   }
+}
+
+/**
+ * 三日月のかたち。外側の円弧をたどり、内側へずらした円弧で戻る。
+ * 塗りの引き算ができないので、輪郭を自分で作っている
+ */
+function crescent(outer: number, inner: number, offset: number): Phaser.Types.Math.Vector2Like[] {
+  const pts: Phaser.Types.Math.Vector2Like[] = [];
+  const from = Math.PI * 0.42;
+  const to = Math.PI * 1.58;
+  const steps = 18;
+  for (let i = 0; i <= steps; i++) {
+    const a = from + ((to - from) * i) / steps;
+    pts.push({ x: Math.cos(a) * outer, y: Math.sin(a) * outer });
+  }
+  for (let i = steps; i >= 0; i--) {
+    const a = from + ((to - from) * i) / steps;
+    pts.push({ x: Math.cos(a) * inner - offset, y: Math.sin(a) * inner });
+  }
+  return pts;
 }
 
 /** 中心 (cx, cy) の星。points 個のとがりを持つ */

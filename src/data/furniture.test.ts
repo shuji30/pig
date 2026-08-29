@@ -56,6 +56,26 @@ describe('カタログの整合性', () => {
     expect(min('uncommon')).toBeLessThan(min('rare'));
   });
 
+  it('形はどれも描き分けているものだけ（描けない形を出さない）', () => {
+    const drawable = [
+      'box',
+      'rug',
+      'chair',
+      'sofa',
+      'bed',
+      'plant',
+      'lamp',
+      'tv',
+      'table',
+      'round',
+      'piano',
+      'fireplace',
+      'aquarium',
+      'rocket',
+    ];
+    for (const f of FURNITURE) expect(drawable, f.id).toContain(f.shape);
+  });
+
   it('壁に掛けるものには wallShape がある', () => {
     for (const f of FURNITURE) {
       if (f.category === 'wall') expect(f.wallShape, f.id).toBeDefined();

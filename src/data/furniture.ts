@@ -14,6 +14,7 @@ export const CATEGORY_ORDER: FurnitureCategory[] = ['seat', 'table', 'storage', 
 
 export const FURNITURE: FurnitureDef[] = [
   // ---- すわる ----
+  { id: 'round-stool', name: 'まるスツール', category: 'seat', shape: 'round', size: [1, 1], height: 24, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 90, rarity: 'common' },
   { id: 'stool', name: 'まるいす', category: 'seat', shape: 'chair', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#a9c4dc', seatHeight: 20, price: 80, rarity: 'common' },
   { id: 'chair', name: 'ロココいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 110, rarity: 'common' },
   { id: 'chair-blue', name: 'ブルーいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#e4edf6', accent: '#a9c4dc', seatHeight: 20, price: 110, rarity: 'common' },
@@ -30,6 +31,8 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'bed-canopy', name: 'てんがいベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#d8c6e4', accent: '#fbf6ff', seatHeight: 18, interactions: ['sit', 'sleep'], price: 640, rarity: 'rare' },
 
   // ---- つくえ ----
+  { id: 'round-table', name: 'まるテーブル', category: 'table', shape: 'round', size: [1, 1], height: 30, color: '#e9d9bd', accent: '#f1ece3', price: 110, rarity: 'common' },
+  { id: 'round-table-big', name: 'おおきいまるテーブル', category: 'table', shape: 'round', size: [2, 2], height: 34, color: '#e5d3b3', accent: '#f1ece3', price: 250, rarity: 'uncommon' },
   { id: 'side-table', name: 'サイドテーブル', category: 'table', shape: 'table', size: [1, 1], height: 26, color: '#dcc7a4', accent: '#efeae1', price: 90, rarity: 'common' },
   { id: 'table-round', name: 'ねこあしテーブル', category: 'table', shape: 'table', size: [1, 1], height: 32, color: '#e9d9bd', accent: '#eae2d4', price: 100, rarity: 'common' },
   { id: 'tea-table', name: 'ティーテーブル', category: 'table', shape: 'table', size: [1, 1], height: 30, color: '#e5d3b3', accent: '#f1ece3', price: 100, rarity: 'common' },
@@ -61,8 +64,11 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'mirror', name: 'かがみ', category: 'deco', shape: 'box', size: [1, 1], height: 70, color: '#f2f2f4', accent: '#cfa855', interactions: ['mirror'], price: 250, rarity: 'uncommon' },
   { id: 'lamp', name: 'キャンドルスタンド', category: 'deco', shape: 'lamp', size: [1, 1], height: 86, color: '#cfa855', accent: '#fdf3d2', price: 260, rarity: 'uncommon' },
   { id: 'topiary', name: 'トピアリー', category: 'deco', shape: 'plant', size: [1, 1], height: 72, color: '#e0cba8', accent: '#5d9e63', interactions: ['water'], price: 280, rarity: 'uncommon' },
+  { id: 'aquarium', name: 'すいそう', category: 'deco', shape: 'aquarium', size: [2, 1], height: 54, color: '#e9d9bd', accent: '#8fc4e0', interactions: ['watch'], price: 390, rarity: 'uncommon' },
   { id: 'tv', name: 'きんぶちテレビ', category: 'deco', shape: 'tv', size: [2, 1], height: 50, color: '#cfa855', accent: '#3a4a6b', interactions: ['watch'], price: 420, rarity: 'rare' },
   { id: 'gramophone', name: 'ちくおんき', category: 'deco', shape: 'box', size: [1, 1], height: 44, color: '#cfa855', accent: '#3a4a6b', interactions: ['music'], price: 430, rarity: 'rare' },
+  { id: 'fireplace', name: 'だんろ', category: 'deco', shape: 'fireplace', size: [2, 1], height: 74, color: '#f2e7d5', accent: '#f0913c', interactions: ['warm'], price: 540, rarity: 'rare' },
+  { id: 'piano', name: 'ロココピアノ', category: 'deco', shape: 'piano', size: [2, 1], height: 78, color: '#f4ead9', accent: '#e6a9bd', interactions: ['play'], price: 660, rarity: 'rare' },
   { id: 'chandelier-stand', name: 'シャンデリアスタンド', category: 'deco', shape: 'lamp', size: [1, 1], height: 96, color: '#cfa855', accent: '#fff3cf', price: 560, rarity: 'rare' },
 
   // ---- ゆか ----

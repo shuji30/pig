@@ -16,7 +16,9 @@ export type MotionKind =
   | 'watch'
   | 'preen'
   | 'read'
-  | 'water';
+  | 'water'
+  | 'play'
+  | 'warm';
 
 export interface MotionDef {
   kind: MotionKind;
@@ -54,6 +56,8 @@ export const FURNITURE_MOTIONS: MotionDef[] = [
   { kind: 'preen', icon: '✨', label: 'うつる', duration: 2600, face: 'love', glyph: '✨', loop: true },
   { kind: 'read', icon: '📖', label: 'よむ', duration: 3400, face: 'normal', glyph: '📖', loop: true },
   { kind: 'water', icon: '💧', label: 'みずやり', duration: 2600, face: 'happy', glyph: '💧', loop: true },
+  { kind: 'play', icon: '🎹', label: 'ひく', duration: 1600, face: 'happy', glyph: '🎵', loop: true },
+  { kind: 'warm', icon: '🔥', label: 'あたたまる', duration: 3200, face: 'happy', glyph: '♨️', loop: true },
 ];
 
 const BY_KIND = new Map([...MOTIONS, ...FURNITURE_MOTIONS].map((m) => [m.kind, m]));

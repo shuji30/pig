@@ -6,7 +6,16 @@ import type { MotionKind } from './motions';
  * この種類の並びだけを持たせ、ふるまい（乗るのか・そばに立つのか、
  * どのモーションを流すのか）はこの表に集める。
  */
-export type InteractionKind = 'sit' | 'sleep' | 'watch' | 'mirror' | 'read' | 'music' | 'water';
+export type InteractionKind =
+  | 'sit'
+  | 'sleep'
+  | 'watch'
+  | 'mirror'
+  | 'read'
+  | 'music'
+  | 'water'
+  | 'play'
+  | 'warm';
 
 export interface InteractionDef {
   kind: InteractionKind;
@@ -39,6 +48,8 @@ export const INTERACTIONS: InteractionDef[] = [
   { kind: 'read', icon: '📖', label: 'よむ', stance: 'beside', motion: 'read', glow: null, toast: '本を ひらいた' },
   { kind: 'music', icon: '🎵', label: 'かける', stance: 'beside', motion: 'dance', glow: 0xffe0a8, toast: '音楽を かけた' },
   { kind: 'water', icon: '💧', label: 'みずやり', stance: 'beside', motion: 'water', glow: 0xc8f0c0, toast: 'みずを あげた' },
+  { kind: 'play', icon: '🎹', label: 'ひく', stance: 'beside', motion: 'play', glow: 0xffe0a8, toast: 'ピアノを ひきはじめた' },
+  { kind: 'warm', icon: '🔥', label: 'あたたまる', stance: 'beside', motion: 'warm', glow: 0xffb27a, toast: 'ひに あたっている' },
 ];
 
 const BY_KIND = new Map(INTERACTIONS.map((i) => [i.kind, i]));

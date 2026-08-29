@@ -13,6 +13,10 @@ const DRAWABLE: StampShape[] = [
   'flower',
   'cake',
   'sleep',
+  'sun',
+  'moon',
+  'crown',
+  'cup',
 ];
 
 describe('スタンプ', () => {
