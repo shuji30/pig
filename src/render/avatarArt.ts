@@ -89,7 +89,10 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
   const iris = toInt(look.eyes);
   const ribbon = shirt;
   const { sitting, back, face, swing, breathe, hairSway: hs, hipY, legLen, upper, headY } = p;
-  const dress = look.outfit === 'dress';
+  const sailor = look.outfit === 'sailor';
+  const hoodie = look.outfit === 'hoodie';
+  // スカートをはくもの（脚は素足＋くつした になる）
+  const dress = look.outfit === 'dress' || sailor;
 
   // ---------------- 後ろに流れる髪 ----------------
   if (look.hairStyle === 3) {
@@ -100,6 +103,30 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
   } else if (look.hairStyle === 5) {
     g.fillStyle(shade(hair, 0.88), 1);
     g.fillRoundedRect(-13.4 + hs, headY - 2, 26.8, 31, 12);
+  } else if (look.hairStyle === 6) {
+    // ポニーテール：結び目から右へ流れる束
+    g.fillStyle(shade(hair, 0.86), 1);
+    g.fillCircle(13 + hs, headY - 2, 6);
+    g.fillEllipse(18 + hs * 2, headY + 10, 13, 30);
+    g.fillEllipse(19 + hs * 2.6, headY + 24, 8, 14);
+  } else if (look.hairStyle === 8) {
+    // ひめカット：まっすぐ長い後ろ髪
+    g.fillStyle(shade(hair, 0.88), 1);
+    g.fillRect(-13.6 + hs, headY - 4, 27.2, 40);
+    g.fillStyle(shade(hair, 0.8), 1);
+    g.fillRect(-13.6 + hs, headY + 32, 27.2, 4);
+  } else if (look.hairStyle === 9) {
+    // くるくる：頭のまわりを丸で埋める
+    g.fillStyle(shade(hair, 0.88), 1);
+    for (const [dx, dy, r] of [
+      [-14, 2, 7],
+      [14, 2, 7],
+      [-11, 14, 6.4],
+      [11, 14, 6.4],
+      [0, 18, 6],
+    ] as Array<[number, number, number]>) {
+      g.fillCircle(dx + hs * 1.2, headY + dy, r);
+    }
   }
 
   // ---------------- 脚と靴 ----------------
@@ -133,7 +160,9 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
   if (dress) {
     const waist = upper - 2;
     const hem = hipY + 1;
-    g.fillStyle(shirt, 1);
+    // セーラーはスカートだけ「ズボン／くつした」の色を使い、上下で色を分ける
+    const skirt = sailor ? pants : shirt;
+    g.fillStyle(skirt, 1);
     g.fillPoints(
       [
         { x: -8.5, y: waist },
@@ -144,7 +173,7 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
       true,
     );
     // スカートのひだ（うすいかげ2本）
-    g.fillStyle(shade(shirt, 0.9), 0.9);
+    g.fillStyle(shade(skirt, 0.9), 0.9);
     g.fillPoints(
       [
         { x: -3.4, y: waist },
@@ -164,7 +193,7 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
       true,
     );
     // すそ
-    g.fillStyle(tint(shirt, 0.4), 1);
+    g.fillStyle(tint(skirt, 0.4), 1);
     g.fillPoints(
       [
         { x: -14.8, y: hem },
@@ -176,11 +205,50 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
     );
   }
 
+  if (hoodie) {
+    // フード（首のうしろ）
+    g.fillStyle(shade(shirt, 0.82), 1);
+    g.fillRoundedRect(-9.6, upper - 19, 19.2, 9, 4.5);
+    g.fillStyle(shade(shirt, 0.7), 1);
+    g.fillRoundedRect(-7.4, upper - 17.4, 14.8, 5.4, 2.7);
+    // 前ポケットと、ひも
+    g.fillStyle(shade(shirt, 0.86), 1);
+    g.fillRoundedRect(-6.4, upper - 7, 12.8, 6, 2);
+    g.fillStyle(tint(shirt, 0.5), 1);
+    g.fillRoundedRect(-2.2, upper - 13.5, 1.4, 5, 0.7);
+    g.fillRoundedRect(0.8, upper - 13.5, 1.4, 5, 0.7);
+    g.fillCircle(-1.5, upper - 8.2, 1.1);
+    g.fillCircle(1.5, upper - 8.2, 1.1);
+  }
+
   // 襟
-  g.fillStyle(tint(shirt, 0.42), 1);
-  g.fillRoundedRect(-6, upper - 15.5, 12, 3.4, 1.7);
-  g.fillStyle(shade(shirt, 0.92), 0.5);
-  g.fillRoundedRect(-6, upper - 12.4, 12, 1.2, 0.6);
+  if (sailor) {
+    // セーラーえり：後ろへ大きく垂れる四角い襟と、胸のリボン
+    g.fillStyle(tint(shirt, 0.55), 1);
+    g.fillPoints(
+      [
+        { x: -9.4, y: upper - 15.5 },
+        { x: 9.4, y: upper - 15.5 },
+        { x: 8, y: upper - 6 },
+        { x: -8, y: upper - 6 },
+      ],
+      true,
+    );
+    g.fillStyle(shade(shirt, 0.9), 1);
+    g.fillTriangle(-4.4, upper - 15.5, 4.4, upper - 15.5, 0, upper - 7.5);
+    g.fillStyle(tint(shirt, 0.2), 1);
+    g.fillRect(-8.4, upper - 8.4, 16.8, 1.4);
+    // リボン
+    g.fillStyle(shade(pants, 1), 1);
+    g.fillTriangle(-4, upper - 10.5, 0, upper - 8.6, -4, upper - 6.6);
+    g.fillTriangle(4, upper - 10.5, 0, upper - 8.6, 4, upper - 6.6);
+    g.fillCircle(0, upper - 8.6, 1.6);
+  } else {
+    g.fillStyle(tint(shirt, 0.42), 1);
+    g.fillRoundedRect(-6, upper - 15.5, 12, 3.4, 1.7);
+    g.fillStyle(shade(shirt, 0.92), 0.5);
+    g.fillRoundedRect(-6, upper - 12.4, 12, 1.2, 0.6);
+  }
 
   // ---------------- 腕と手 ----------------
   const arm = (side: -1 | 1, lift: number, swingOff: number, dx: number) => {
@@ -271,6 +339,42 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
       g.fillCircle(-1.8, headY - HEAD_R - 5.2, 2.8);
       g.fillStyle(hair, 1);
       bow(0, headY - HEAD_R + 3, 3.4);
+      break;
+    case 6: // ポニーテール
+      strand(g, -13.6 + hs, headY - 5.6, 5.2, 14, 2);
+      strand(g, 8.4 + hs, headY - 5.6, 5.2, 11, -1.4);
+      g.fillCircle(12.4, headY - 3.4, 4.2);
+      bow(12.4, headY - 3.4, 3.4);
+      break;
+    case 7: // みつあみ（小さい丸をつないで編み目にする）
+      strand(g, -13.6, headY - 5.6, 5.2, 11, 1.2);
+      strand(g, 8.4, headY - 5.6, 5.2, 11, -1.2);
+      for (const side of [-1, 1] as const) {
+        for (let i = 0; i < 5; i++) {
+          const r = 4.2 - i * 0.45;
+          g.fillStyle(shade(hair, i % 2 === 0 ? 1 : 0.9), 1);
+          g.fillCircle(side * (13.4 + i * 0.5) + hs * (0.4 + i * 0.3), headY + 2 + i * 6.4, r);
+        }
+        g.fillStyle(hair, 1);
+        bow(side * 15 + hs * 1.9, headY + 31, 3);
+        g.fillStyle(hair, 1);
+      }
+      break;
+    case 8: // ひめカット（横は肩で切りそろえ、前髪はぱっつん）
+      strand(g, -14.4 + hs, headY - 6.4, 6.4, 20, 0.6);
+      strand(g, 8.2 + hs, headY - 6.4, 6.4, 20, -0.6);
+      g.fillRoundedRect(-11.5 + hs * 0.4, headY - 12.4, 23, 8.4, 2);
+      break;
+    case 9: // くるくる
+      for (const [dx, dy, r] of [
+        [-12.4, -6, 5.4],
+        [-6, -10.4, 5],
+        [1, -11.4, 5.2],
+        [8, -9, 5],
+        [12.8, -4.4, 5.2],
+      ] as Array<[number, number, number]>) {
+        g.fillCircle(dx + hs * 0.6, headY + dy, r);
+      }
       break;
     default: // ふんわり
       g.fillCircle(-13.4, headY - 4, 5.6);

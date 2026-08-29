@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ROOM_SIZE, FLOOR_STYLES } from '../config';
+import { DEFAULT_ROOM_SIZE, FLOOR_STYLES, HAIR_STYLE_NAMES, OUTFITS } from '../config';
 import { decodeShared, encodeShared, ROOM_NAME_MAX, sharedFromRoom, type SharedRoom } from './share';
 
 const sample: SharedRoom = {
@@ -272,7 +272,8 @@ describe('他人が作った URL の検証', () => {
 
   it('かみがたの番号も範囲に収める', async () => {
     const room = await decodePacked([3, 0, 0, 'x', '', ['な', '', '', 999, '', '', 0, '', ''], [], 12, []]);
-    expect(room?.look.hairStyle).toBeLessThanOrEqual(5);
+    // 上限は「いくつ髪型があるか」から取る。数字を書くと、髪型を足したときに置いていかれる
+    expect(room?.look.hairStyle).toBeLessThanOrEqual(HAIR_STYLE_NAMES.length - 1);
     expect(room?.look.hairStyle).toBeGreaterThanOrEqual(0);
   });
 
@@ -344,5 +345,34 @@ describe('他人が作った URL の検証', () => {
     const items = Array.from({ length: 900 }, () => ['stool', 0, 0, 0]);
     const room = await decodePacked([3, 0, 0, 'x', '', [], items, 12, []]);
     expect(room?.items).toHaveLength(400); // 20×20 マスぶんで打ち切る
+  });
+});
+
+describe('ふくのかたち（番号でやりとりする）', () => {
+  it('並び順の先頭2つは変えない（配った URL の服が変わってしまう）', () => {
+    expect(OUTFITS[0]).toBe('shirt');
+    expect(OUTFITS[1]).toBe('dress');
+  });
+
+  const decodePacked = (packed: unknown) => decodeShared(packedToken(packed));
+  const look = (outfitIdx: unknown) => ['な', '', '', 0, '', '', outfitIdx, '', ''];
+
+  it('番号は増やしても古い URL と食い違わない（0=シャツ / 1=ワンピース）', async () => {
+    expect((await decodePacked([3, 0, 0, 'x', '', look(0), [], 12, []]))?.look.outfit).toBe('shirt');
+    expect((await decodePacked([3, 0, 0, 'x', '', look(1), [], 12, []]))?.look.outfit).toBe('dress');
+  });
+
+  it('あとから足したものも往復する', async () => {
+    for (const outfit of ['hoodie', 'sailor'] as const) {
+      const token = await encodeShared({ ...sample, look: { ...sample.look, outfit } });
+      expect((await decodeShared(token))?.look.outfit, outfit).toBe(outfit);
+    }
+  });
+
+  it('知らない番号・数でない値はシャツに落とす', async () => {
+    for (const bad of [99, -1, 'dress', null, {}]) {
+      const room = await decodePacked([3, 0, 0, 'x', '', look(bad), [], 12, []]);
+      expect(room?.look.outfit, JSON.stringify(bad)).toBe('shirt');
+    }
   });
 });

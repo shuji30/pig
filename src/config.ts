@@ -1,3 +1,4 @@
+import type { Outfit } from './types';
 /** 等角タイル1枚の画面サイズ */
 export const TILE_W = 64;
 export const TILE_H = 32;
@@ -94,8 +95,36 @@ export const CLOTH_COLORS = [
   '#5b5560',
 ];
 export const EYE_COLORS = ['#5b4630', '#7a4a2a', '#3f6ea8', '#3f8f7a', '#6b4f9e', '#a84a5f', '#4a4a58'];
-export const OUTFIT_NAMES = ['シャツ', 'ワンピース'];
-export const HAIR_STYLE_NAMES = ['ショート', 'ボブ', 'ツインテール', 'ロング', 'おだんご', 'ふんわり'];
+/**
+ * ふくのかたち。**並び順を変えないこと。**
+ * 共有 URL には番号で載るので、順番を変えると配ってしまった URL の服が変わる
+ * （0=シャツ / 1=ワンピース は形式1のころから同じ番号）。
+ */
+export const OUTFITS: Outfit[] = ['shirt', 'dress', 'hoodie', 'sailor'];
+export const OUTFIT_NAMES = ['シャツ', 'ワンピース', 'パーカー', 'セーラー'];
+
+/** 番号から服へ。知らない番号はシャツに落とす（他人の URL を読むため） */
+export function outfitAt(index: unknown): Outfit {
+  return typeof index === 'number' && OUTFITS[index] ? OUTFITS[index] : 'shirt';
+}
+
+export function outfitIndex(outfit: Outfit): number {
+  const i = OUTFITS.indexOf(outfit);
+  return i < 0 ? 0 : i;
+}
+
+export const HAIR_STYLE_NAMES = [
+  'ショート',
+  'ボブ',
+  'ツインテール',
+  'ロング',
+  'おだんご',
+  'ふんわり',
+  'ポニーテール',
+  'みつあみ',
+  'ひめカット',
+  'くるくる',
+];
 
 /**
  * 家具のリカラーに使うパレット。

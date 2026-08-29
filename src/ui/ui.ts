@@ -7,6 +7,8 @@ import {
   HAIR_COLORS,
   HAIR_STYLE_NAMES,
   OUTFIT_NAMES,
+  outfitAt,
+  outfitIndex,
   RECOLOR_ACCENT,
   RECOLOR_BASE,
   SKIN_COLORS,
@@ -268,8 +270,8 @@ export class Ui {
     body.appendChild(this.swatchRow('はだ', SKIN_COLORS, () => this.look.skin, (c) => this.patchLook({ skin: c })));
     body.appendChild(this.swatchRow('ひとみ', EYE_COLORS, () => this.look.eyes, (c) => this.patchLook({ eyes: c })));
     body.appendChild(
-      this.chipRow('ふくのかたち', OUTFIT_NAMES, () => (this.look.outfit === 'dress' ? 1 : 0), (i) =>
-        this.patchLook({ outfit: i === 1 ? 'dress' : 'shirt' }),
+      this.chipRow('ふくのかたち', OUTFIT_NAMES, () => outfitIndex(this.look.outfit), (i) =>
+        this.patchLook({ outfit: outfitAt(i) }),
       ),
     );
     body.appendChild(this.swatchRow('ふく', CLOTH_COLORS, () => this.look.shirt, (c) => this.patchLook({ shirt: c })));

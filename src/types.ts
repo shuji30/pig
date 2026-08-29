@@ -107,7 +107,7 @@ export interface PlacedFurniture {
 }
 
 /** ふくのかたち */
-export type Outfit = 'shirt' | 'dress';
+export type Outfit = 'shirt' | 'dress' | 'hoodie' | 'sailor';
 
 export interface AvatarLook {
   name: string;
