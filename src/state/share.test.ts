@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ROOM_SIZE, FLOOR_STYLES, HAIR_STYLE_NAMES, OUTFITS } from '../config';
+import {
+  DEFAULT_ROOM_SIZE,
+  FLOOR_STYLES,
+  HAIR_STYLE_NAMES,
+  MOON_FLOOR,
+  MOON_WALL,
+  OUTFITS,
+  ROOM_THEMES,
+  WALL_STYLES,
+} from '../config';
 import { decodeShared, encodeShared, ROOM_NAME_MAX, sharedFromRoom, type SharedRoom } from './share';
 
 const sample: SharedRoom = {
@@ -345,6 +354,39 @@ describe('他人が作った URL の検証', () => {
     const items = Array.from({ length: 900 }, () => ['stool', 0, 0, 0]);
     const room = await decodePacked([3, 0, 0, 'x', '', [], items, 12, []]);
     expect(room?.items).toHaveLength(400); // 20×20 マスぶんで打ち切る
+  });
+});
+
+describe('ゆか・かべの番号', () => {
+  it('先頭6つの並びは変えない（配った URL の部屋の見た目が変わってしまう）', () => {
+    expect(FLOOR_STYLES.slice(0, 6).map((f) => f.name)).toEqual([
+      'ウッド',
+      'タイル',
+      'カーペット',
+      'くさ',
+      'ダーク',
+      'つきのすな',
+    ]);
+    expect(WALL_STYLES.slice(0, 6).map((w) => w.name)).toEqual([
+      'クリーム',
+      'ミント',
+      'ラベンダー',
+      'そら',
+      'ピンク',
+      'ほしぞら',
+    ]);
+  });
+
+  it('月コロニーの床・壁の番号は、その柄を指したままになっている', () => {
+    expect(FLOOR_STYLES[MOON_FLOOR].name).toBe('つきのすな');
+    expect(WALL_STYLES[MOON_WALL].name).toBe('ほしぞら');
+  });
+
+  it('テーマが指す番号は、すべて実在する柄を指している', () => {
+    for (const t of ROOM_THEMES) {
+      expect(FLOOR_STYLES[t.floor], t.name).toBeDefined();
+      expect(WALL_STYLES[t.wall], t.name).toBeDefined();
+    }
   });
 });
 
