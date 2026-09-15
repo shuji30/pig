@@ -16,7 +16,8 @@ export const FURNITURE: FurnitureDef[] = [
   // ---- すわる ----
   { id: 'round-stool', name: 'まるスツール', category: 'seat', shape: 'round', size: [1, 1], height: 24, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 90, rarity: 'common' },
   { id: 'stool', name: 'まるいす', category: 'seat', shape: 'chair', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#a9c4dc', seatHeight: 20, price: 80, rarity: 'common' },
-  { id: 'chair', name: 'ロココいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 110, rarity: 'common' },
+  // ⚠️ お試し：この1脚だけ 3Dモデルから焼いた絵を使っている（他は手続き生成）
+  { id: 'chair', name: 'ロココいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, sprite: 'chair', price: 110, rarity: 'common' },
   { id: 'chair-blue', name: 'ブルーいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#e4edf6', accent: '#a9c4dc', seatHeight: 20, price: 110, rarity: 'common' },
   { id: 'chair-mint', name: 'ミントいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#e2f0e8', accent: '#b7d4c4', seatHeight: 20, price: 110, rarity: 'common' },
   { id: 'chair-pink', name: 'ローズいす', category: 'seat', shape: 'chair', size: [1, 1], height: 52, color: '#f4e2e6', accent: '#d98aa6', seatHeight: 20, price: 130, rarity: 'common' },
@@ -145,6 +146,11 @@ export function interactionsOf(def: FurnitureDef): readonly InteractionKind[] {
 
 const SIT_ONLY: readonly InteractionKind[] = ['sit'];
 const NONE: readonly InteractionKind[] = [];
+
+/** 先に焼いた絵を持つ家具の一覧（読み込みのため） */
+export function spritedFurniture(): FurnitureDef[] {
+  return FURNITURE.filter((f) => f.sprite !== undefined);
+}
 
 const WALL_ID_ALIAS: Record<string, string> = { clock: 'wall-clock' };
 

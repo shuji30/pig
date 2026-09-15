@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { enableSprites } from './render/furnitureTexture';
 import { RoomScene } from './scenes/RoomScene';
 import { setupPwa } from './pwa/install';
 import { decodeShared, shareTokenInLocation } from './state/share';
@@ -8,6 +9,9 @@ import { decodeShared, shareTokenInLocation } from './state/share';
  * 部屋の中身が決まってからゲームを起動する。
  */
 async function boot() {
+  // お試しの「3Dから焼いた絵」は ?sprites=on のときだけ使う
+  enableSprites(new URLSearchParams(location.search).get('sprites') === 'on');
+
   const token = shareTokenInLocation();
   const shared = token ? await decodeShared(token) : null;
   const broken = token !== null && shared === null;

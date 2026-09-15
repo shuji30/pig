@@ -68,6 +68,11 @@ export interface FurnitureDef {
   wallShape?: WallShape;
   /** 押すと別の部屋へ行ける家具（ロケットなど）。値は行き先の部屋 id */
   travel?: string;
+  /**
+   * 3Dモデルから先に焼いておいた絵を使う家具。値は public/sprites/<名前>-<回転>.png の名前。
+   * 絵は tools/sprite-render で書き出す。無ければ今までどおり手続きで描く
+   */
+  sprite?: string;
   /** ショップでの値段（コイン） */
   price: number;
   rarity: Rarity;

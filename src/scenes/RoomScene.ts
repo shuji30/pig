@@ -15,7 +15,7 @@ import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
-import { getDef, interactionsOf } from '../data/furniture';
+import { getDef, interactionsOf, spritedFurniture } from '../data/furniture';
 import { getInteraction, type InteractionKind } from '../data/interactions';
 import { findPet, getPet } from '../data/pets';
 import { findStamp } from '../data/stamps';
@@ -28,7 +28,7 @@ import { Avatar } from '../entities/Avatar';
 import { Pet } from '../entities/Pet';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { WallLayer } from '../entities/WallLayer';
-import { getFurnitureTexture } from '../render/furnitureTexture';
+import { getFurnitureTexture, spriteKey } from '../render/furnitureTexture';
 import { getWallTexture } from '../render/wallTexture';
 import { RoomView } from '../render/room';
 import { saveRoomPng } from '../render/snapshot';
@@ -130,6 +130,15 @@ export class RoomScene extends Phaser.Scene {
     private readonly shareBroken = false,
   ) {
     super('room');
+  }
+
+  /** 先に焼いた絵を読み込む。無くてもゲームは動く（手続き生成に落ちる） */
+  preload() {
+    for (const def of spritedFurniture()) {
+      for (let rot = 0; rot < 4; rot++) {
+        this.load.image(spriteKey(def.sprite as string, rot as Rotation), `sprites/${def.sprite}-${rot}.png`);
+      }
+    }
   }
 
   create() {

@@ -586,6 +586,24 @@ function recolorKey(recolor?: Recolor): string {
   return c || a ? `:${c}${a}` : '';
 }
 
+/**
+ * 先に焼いた絵を使うかどうか。
+ * いまは**お試し**（いす1脚だけ）なので、既定では使わない。
+ * `?sprites=on` を付けたときだけ有効にして、手続き生成と見比べられるようにしてある。
+ * カタログ全部を焼き終えるまでは、1脚だけ見た目が違う状態を配らない
+ */
+let spritesEnabled = false;
+
+export function enableSprites(on: boolean) {
+  spritesEnabled = on;
+  cache.clear();
+}
+
+/** 先に焼いた絵の texture key。読み込みも同じ名前で行う */
+export function spriteKey(sprite: string, rot: Rotation): string {
+  return `sprite:${sprite}:${rot}`;
+}
+
 export function getFurnitureTexture(
   scene: Phaser.Scene,
   baseDef: FurnitureDef,
@@ -603,6 +621,24 @@ export function getFurnitureTexture(
   const height = (gw + gd) * HH + maxZ + PAD * 2;
   const offX = gd * HW + PAD;
   const offY = maxZ + PAD;
+
+  // 3Dモデルから焼いた絵があればそれを使う。
+  // ⚠️ 色を変えているときは使えない（焼いた絵には陰影が入っているため）。
+  // そのときは今までどおり手続きで描く
+  if (spritesEnabled && baseDef.sprite && !recolor) {
+    const sKey = spriteKey(baseDef.sprite, rot);
+    if (scene.textures.exists(sKey)) {
+      const meta: FurnitureTexture = {
+        key: sKey,
+        width,
+        height,
+        originX: offX / width,
+        originY: offY / height,
+      };
+      cache.set(key, meta);
+      return meta;
+    }
+  }
 
   const g = scene.add.graphics({ x: 0, y: 0 });
   g.setVisible(false);

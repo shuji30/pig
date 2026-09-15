@@ -93,6 +93,19 @@ Artifacts から `github-pages`（`dist/` の中身）をダウンロードで�
 いま何が動いているかは、**「あそびかた」パネルの最下段のビルド時刻**（UTC）で確認できます。
 古いままなら、スーパーリロード（Ctrl/⌘+Shift+R）で最新になります。
 
+## 3Dから焼いた絵（お試し）
+
+`tools/sprite-render/` は、3Dモデルをゲームと同じ等角の射影でレンダリングして
+スプライトにする道具です（オフラインで動かすもので、ゲームには同梱されません）。
+
+```
+node tools/sprite-render/render.mjs   # public/sprites/ に PNG を書き出す
+```
+
+いまは**ロココいす1脚だけ**の試作で、既定では使いません。
+`?sprites=on` を付けて開くと、その1脚だけ3Dから焼いた絵に切り替わります。
+分かったこと（容量・リカラーとの相性・混在の見え方）は `docs/ROADMAP.md` の付録にあります。
+
 ## ホーム画面に追加（PWA）とオフライン
 
 `public/manifest.webmanifest` と、ビルド時に作られる `dist/sw.js`（Service Worker）で
