@@ -146,6 +146,22 @@ try {
     }
     console.log(line);
   }
+
+  // アバター・ペットの立体の部品（グレースケール1枚。色は tint で掛ける）
+  if (only.length === 0 || only.includes('parts')) {
+    const kinds = await page.evaluate(() => window.PART_KINDS);
+    for (const kind of kinds) {
+      const r = await page.evaluate((o) => window.renderPart(o), { kind, size: 128 });
+      const png = Buffer.from(r.url.split(',')[1], 'base64');
+      writeFileSync(resolve(OUT_DIR, `part-${kind}.png`), png);
+      bytes += png.length;
+      files++;
+      console.log(
+        `  part-${kind}`.padEnd(26) +
+          ` ${(png.length / 1024).toFixed(1)}KB  明るさ p20/p60/p95 = ${r.p20}/${r.p60}/${r.p95}`,
+      );
+    }
+  }
 } finally {
   await browser.close();
   server.kill();
@@ -153,6 +169,6 @@ try {
 console.log(
   `\n${files} 枚 / ${(bytes / 1024 / 1024).toFixed(2)}MB` +
     `  焼き飽和 ${((hotTotal / Math.max(1, litTotal)) * 100).toFixed(2)}%（低いほどリカラーがよく効く）` +
-    `  明るさ p95 の中央値 ${p95s.sort((a, b) => a - b)[p95s.length >> 1]}（230前後が狙い）` +
+    (p95s.length ? `  明るさ p95 の中央値 ${p95s.sort((a, b) => a - b)[p95s.length >> 1]}（230前後が狙い）` : '') +
     (clipped ? `\n⚠️ ${clipped} 枚が枠からはみ出している（形の高さか大きさが定義と合っていない）` : ''),
 );

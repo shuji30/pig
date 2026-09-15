@@ -1206,6 +1206,103 @@ export function renderWallSprite(o) {
 }
 
 window.renderWallSprite = renderWallSprite;
+// ---------------------------------------------------------------- 立体の部品（アバター・ペット用）
+//
+// アバターとペットは、歩きの振り・呼吸・まばたき・16種のモーションが
+// **連続した値**で動く。姿勢ごとに焼くと組み合わせが爆発するうえ、
+// モーションの途中の絵が作れない。
+//
+// そこで「形（シルエット）は今までどおり手続きで置き、面の陰影だけを
+// 3Dから焼いた部品で与える」ことにした。部品は真正面からの正射影で焼くので
+// **シルエットは今までの平らな絵とまったく同じ**まま、丸みだけが乗る。
+// 色は Phaser の tint（掛け算）で乗るので、マスクも合成も要らない。
+
+const PARTS = {
+  /** 球。頭・手・しっぽの先・ペットの体 */
+  ball: () => new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), partMat()),
+  /** 角の丸い棒。腕・脚・胴・くつ */
+  pill: () => new THREE.Mesh(roundedBoxGeo(2, 2, 1.5, 0.84), partMat()),
+  /** 角の浅い板。まっすぐな髪・帯 */
+  slab: () => new THREE.Mesh(roundedBoxGeo(2, 2, 1.1, 0.34), partMat()),
+  /** 裾の広がった筒。スカート */
+  frustum: () => new THREE.Mesh(new THREE.CylinderGeometry(0.575, 1, 2, 48, 1, true), partMat()),
+};
+
+function partMat() {
+  return new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.62,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+}
+
+/**
+ * 部品を1枚焼く。返るのは**グレースケール1枚**（マスクは要らない）。
+ * ゲーム側は Phaser の tint で色を掛けるだけでいい。
+ *
+ * 明るいところが 1.0 に近くなるように焼いてある。暗く焼くと、
+ * 色を掛けたときに今までの平らな絵より全体が沈んでしまう
+ */
+export function renderPart(o) {
+  const N = o.size;
+  const renderer = getRenderer();
+  renderer.setSize(N * SS, N * SS, false);
+  renderer.shadowMap.enabled = false;
+
+  const scene = new THREE.Scene();
+  scene.environment = environment(renderer);
+  scene.environmentIntensity = 0.22;
+  const mesh = PARTS[o.kind]();
+  scene.add(mesh);
+
+  // 左上手前からの光。平らな絵の「上が明るく下にかげ」に合わせている
+  scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+  const key = new THREE.DirectionalLight(0xffffff, 1.35);
+  key.position.set(-1.3, 1.7, 2.1);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.34);
+  rim.position.set(1.5, -0.9, 0.5);
+  scene.add(rim);
+
+  // 真正面からの正射影。余白を少しだけ取って縁をなめらかにする
+  const pad = 1 + 2 / N;
+  const camera = new THREE.OrthographicCamera(-pad, pad, pad, -pad, 0.1, 40);
+  camera.position.set(0, 0, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+
+  const out = document.createElement('canvas');
+  out.width = N;
+  out.height = N;
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(renderer.domElement, 0, 0, N, N);
+
+  const px = ctx.getImageData(0, 0, N, N).data;
+  const hist = new Uint32Array(256);
+  let lit = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 200) continue;
+    lit++;
+    hist[px[i]]++;
+  }
+  const at = (q) => {
+    let n = 0;
+    for (let v = 0; v < 256; v++) {
+      n += hist[v];
+      if (n >= lit * q) return v;
+    }
+    return 255;
+  };
+  return { url: out.toDataURL('image/png'), p20: at(0.2), p60: at(0.6), p95: at(0.95) };
+}
+
+window.renderPart = renderPart;
+window.PART_KINDS = Object.keys(PARTS);
+
 window.renderSprite = renderSprite;
 window.HEIGHT_UNIT = HEIGHT_UNIT;
 window.SHAPE_NAMES = Object.keys(SHAPES);

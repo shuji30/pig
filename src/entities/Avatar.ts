@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PartPainter, partsReady, type Painter } from '../render/parts';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
 import { drawAvatarBody } from '../render/avatarArt';
@@ -17,7 +18,13 @@ export class Avatar {
   readonly container: Phaser.GameObjects.Container;
   private readonly bodyWrap: Phaser.GameObjects.Container;
   private readonly shadow: Phaser.GameObjects.Graphics;
-  private readonly gfx: Phaser.GameObjects.Graphics;
+  /**
+   * 体を描く先。3Dから焼いた部品が読めていれば PartPainter、
+   * まだなら Graphics（今までどおりの平らな絵）。形はどちらでも同じ
+   */
+  private art!: Painter;
+  private artGfx: Phaser.GameObjects.Graphics | null = null;
+  private parts: PartPainter | null = null;
   private readonly label: Phaser.GameObjects.Text;
   private bubble: Phaser.GameObjects.Container | null = null;
   private bubbleTimer?: Phaser.Time.TimerEvent;
@@ -69,8 +76,10 @@ export class Avatar {
     this.tile = { gx, gy };
 
     this.shadow = scene.add.graphics();
-    this.gfx = scene.add.graphics();
-    this.bodyWrap = scene.add.container(0, 0, [this.gfx]);
+    this.artGfx = scene.add.graphics();
+    this.art = this.artGfx;
+    this.bodyWrap = scene.add.container(0, 0, [this.artGfx]);
+    this.useParts();
     this.label = scene.add
       .text(0, -66, look.name, {
         fontFamily: '"Hiragino Maru Gothic ProN", "Yu Gothic UI", sans-serif',
@@ -253,6 +262,7 @@ export class Avatar {
   destroy() {
     this.bubbleTimer?.remove();
     this.glyph?.destroy();
+    this.parts?.destroy();
     this.container.destroy();
   }
 
@@ -428,8 +438,26 @@ export class Avatar {
   }
 
   /** アバターを描き直す */
+  /**
+   * 3Dから焼いた部品が読めていれば、描き方をそちらへ切り替える。
+   * 部品は起動後に裏で読み込むので、途中で呼ばれることがある
+   */
+  private useParts(): boolean {
+    if (this.parts || !partsReady(this.scene)) return false;
+    this.artGfx?.destroy();
+    this.artGfx = null;
+    this.parts = new PartPainter(this.scene, this.bodyWrap);
+    this.art = this.parts;
+    return true;
+  }
+
+  /** 部品が届いたので描き直す */
+  refreshArt() {
+    if (this.useParts()) this.redraw();
+  }
+
   private redraw() {
-    const g = this.gfx;
+    const g = this.art;
     const look = this.look;
     const onFurniture = this.sittingOn !== null;
     const lying = this.lying && onFurniture;

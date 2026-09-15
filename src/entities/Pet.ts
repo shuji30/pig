@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PartPainter, partsReady, type Painter } from '../render/parts';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
 import type { PetDef } from '../data/pets';
@@ -37,7 +38,13 @@ export class Pet {
   readonly container: Phaser.GameObjects.Container;
   private readonly bodyWrap: Phaser.GameObjects.Container;
   private readonly shadow: Phaser.GameObjects.Graphics;
-  private readonly gfx: Phaser.GameObjects.Graphics;
+  /**
+   * 体を描く先。3Dから焼いた部品が読めていれば PartPainter、
+   * まだなら Graphics（今までどおりの平らな絵）。形はどちらでも同じ
+   */
+  private art!: Painter;
+  private artGfx: Phaser.GameObjects.Graphics | null = null;
+  private parts: PartPainter | null = null;
   private glyph?: Phaser.GameObjects.Text;
 
   private def: PetDef;
@@ -71,8 +78,10 @@ export class Pet {
     this.def = def;
     this.tile = { gx, gy };
     this.shadow = scene.add.graphics();
-    this.gfx = scene.add.graphics();
-    this.bodyWrap = scene.add.container(0, 0, [this.gfx]);
+    this.artGfx = scene.add.graphics();
+    this.art = this.artGfx;
+    this.bodyWrap = scene.add.container(0, 0, [this.artGfx]);
+    this.useParts();
     const p = tileCenter(gx, gy);
     this.container = scene.add.container(p.x, p.y, [this.shadow, this.bodyWrap]);
     this.updateDepth();
@@ -176,6 +185,7 @@ export class Pet {
 
   destroy() {
     this.glyph?.destroy();
+    this.parts?.destroy();
     this.container.destroy();
   }
 
@@ -295,8 +305,26 @@ export class Pet {
     this.container.setDepth(this.depthResolver ? this.depthResolver(box) : (g.gx + g.gy) * 100 + 40);
   }
 
+  /**
+   * 3Dから焼いた部品が読めていれば、描き方をそちらへ切り替える。
+   * 部品は起動後に裏で読み込むので、途中で呼ばれることがある
+   */
+  private useParts(): boolean {
+    if (this.parts || !partsReady(this.scene)) return false;
+    this.artGfx?.destroy();
+    this.artGfx = null;
+    this.parts = new PartPainter(this.scene, this.bodyWrap);
+    this.art = this.parts;
+    return true;
+  }
+
+  /** 部品が届いたので描き直す */
+  refreshArt() {
+    if (this.useParts()) this.redraw();
+  }
+
   private redraw() {
-    const g = this.gfx;
+    const g = this.art;
     g.clear();
     const walking = this.target !== null;
     const swing = walking ? [0, 1, 0, -1][this.frame] : 0;

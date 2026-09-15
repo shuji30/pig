@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import type { PetDef } from '../data/pets';
 import { shade, tint, toInt } from './color';
+import { CanvasPartPainter, partsReady, type Painter } from './parts';
 
 /**
  * ペットの姿勢。足元が原点、上が負。
@@ -20,7 +21,7 @@ export interface PetPose {
 }
 
 /** ねこ・いぬ・うさぎ・ことり を1つの手続きで描く。違いは耳・しっぽ・くちばし */
-export function drawPet(g: Phaser.GameObjects.Graphics, def: PetDef, pose: PetPose) {
+export function drawPet(g: Painter, def: PetDef, pose: PetPose) {
   const body = toInt(def.body);
   const accent = toInt(def.accent);
   const eye = toInt(def.eye);
@@ -231,23 +232,38 @@ export function drawPet(g: Phaser.GameObjects.Graphics, def: PetDef, pose: PetPo
   }
 }
 
-/** ショップと持ちものに並べる小さな絵 */
+/** ショップと持ちものに並べる小さな絵。部屋の中と同じ立体の部品で描く */
 export function makePetIconCanvas(scene: Phaser.Scene, def: PetDef): HTMLCanvasElement {
   const W = 46;
   const H = 46;
+  const pose: PetPose = { back: false, swing: 0, sitting: true, sleeping: false, breathe: 0 };
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+
+  if (partsReady(scene)) {
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const p = new CanvasPartPainter(scene, ctx);
+      p.save();
+      p.translateCanvas(W / 2, H - 6);
+      p.scaleCanvas(1.25, 1.25);
+      drawPet(p, def, pose);
+      p.restore();
+      return canvas;
+    }
+  }
+
   const key = `peticon:${def.id}`;
   if (!scene.textures.exists(key)) {
     const g = scene.make.graphics({ x: 0, y: 0 }, false);
     g.translateCanvas(W / 2, H - 6);
     g.scaleCanvas(1.25, 1.25);
-    drawPet(g, def, { back: false, swing: 0, sitting: true, sleeping: false, breathe: 0 });
+    drawPet(g, def, pose);
     g.generateTexture(key, W, H);
     g.destroy();
   }
   const src = scene.textures.get(key).getSourceImage() as CanvasImageSource;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
   const ctx = canvas.getContext('2d');
   if (ctx) ctx.drawImage(src, 0, 0);
   return canvas;

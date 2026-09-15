@@ -29,6 +29,7 @@ import { Pet } from '../entities/Pet';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { WallLayer } from '../entities/WallLayer';
 import { clearFurnitureCache, getFurnitureTexture, spriteKey, spritesWanted } from '../render/furnitureTexture';
+import { PART_KINDS, partKey } from '../render/partKinds';
 import { clearWallCache, getWallTexture, wallSpriteKey } from '../render/wallTexture';
 import { RoomView } from '../render/room';
 import { saveRoomPng } from '../render/snapshot';
@@ -156,6 +157,8 @@ export class RoomScene extends Phaser.Scene {
     }
     // 壁に掛けるものは向きぶんは焼いていない（左の壁は反転で作る）
     for (const name of wallSpriteSheets()) want(wallSpriteKey(name), `sprites/${name}.png`);
+    // アバターとペットの立体の部品
+    for (const kind of PART_KINDS) want(partKey(kind), `sprites/part-${kind}.png`);
     if (queued === 0) {
       this.applySprites();
       return;
@@ -170,6 +173,9 @@ export class RoomScene extends Phaser.Scene {
     clearWallCache();
     this.furniture.refreshTextures();
     this.walls.refreshTextures();
+    this.avatar.refreshArt();
+    this.pet?.refreshArt();
+    this.guest?.avatar.refreshArt();
   }
 
   create() {

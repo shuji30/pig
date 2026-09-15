@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { FaceKind } from '../data/motions';
 import type { AvatarLook } from '../types';
 import { shade, tint, toInt } from './color';
+import { fillSkirt, type Painter } from './parts';
 
 /** 頭の半径。体のバランスはここを基準に組んでいる */
 export const HEAD_R = 13.4;
@@ -62,7 +63,12 @@ export function restPose(): AvatarPose {
   };
 }
 
-type G = Phaser.GameObjects.Graphics;
+/**
+ * 描き先。ふだんは 3Dから焼いた部品で描く PartPainter が入るが、
+ * Phaser の Graphics もそのまま通る（部品が読めていないときの受け皿）。
+ * どちらでも**同じ形**が出る。違うのは面に陰影が乗るかどうかだけ
+ */
+type G = Painter;
 const rad = Phaser.Math.DegToRad;
 
 /** 先細りの毛束。tipDx で毛先を内／外へ曲げる */
@@ -163,15 +169,7 @@ export function drawAvatarBody(g: G, look: AvatarLook, p: AvatarPose) {
     // セーラーはスカートだけ「ズボン／くつした」の色を使い、上下で色を分ける
     const skirt = sailor ? pants : shirt;
     g.fillStyle(skirt, 1);
-    g.fillPoints(
-      [
-        { x: -8.5, y: waist },
-        { x: 8.5, y: waist },
-        { x: 14.8, y: hem },
-        { x: -14.8, y: hem },
-      ],
-      true,
-    );
+    fillSkirt(g, 0, waist, 17, hem, 29.6);
     // スカートのひだ（うすいかげ2本）
     g.fillStyle(shade(skirt, 0.9), 0.9);
     g.fillPoints(

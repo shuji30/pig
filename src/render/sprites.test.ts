@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FURNITURE, spriteName, spriteSheets, wallSpriteName, wallSpriteSheets } from '../data/furniture';
+import { PART_KINDS } from './partKinds';
 
 const DIR = resolve(__dirname, '../../public/sprites');
 
@@ -58,10 +59,17 @@ describe('焼いた絵', () => {
     for (const n of wallSpriteSheets()) expect(floor.has(n), n).toBe(false);
   });
 
+  it('アバターとペットの立体の部品が置いてある', () => {
+    for (const kind of PART_KINDS) {
+      expect(existsSync(resolve(DIR, `part-${kind}.png`)), kind).toBe(true);
+    }
+  });
+
   it('使われていない絵が残っていない（焼き直しの取りこぼしを見つける）', () => {
     const want = new Set([
       ...spriteSheets().flatMap((n) => [0, 1, 2, 3].map((r) => `${n}-${r}.png`)),
       ...wallSpriteSheets().map((n) => `${n}.png`),
+      ...PART_KINDS.map((k) => `part-${k}.png`),
     ]);
     for (const file of readdirSync(DIR)) expect(want.has(file), file).toBe(true);
     expect(readdirSync(DIR).length).toBe(want.size);
