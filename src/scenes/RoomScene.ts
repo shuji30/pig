@@ -15,7 +15,7 @@ import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
-import { getDef, interactionsOf, spriteSheets } from '../data/furniture';
+import { getDef, interactionsOf, spriteSheets, wallSpriteSheets } from '../data/furniture';
 import { getInteraction, type InteractionKind } from '../data/interactions';
 import { findPet, getPet } from '../data/pets';
 import { findStamp } from '../data/stamps';
@@ -29,7 +29,7 @@ import { Pet } from '../entities/Pet';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { WallLayer } from '../entities/WallLayer';
 import { clearFurnitureCache, getFurnitureTexture, spriteKey, spritesWanted } from '../render/furnitureTexture';
-import { getWallTexture } from '../render/wallTexture';
+import { clearWallCache, getWallTexture, wallSpriteKey } from '../render/wallTexture';
 import { RoomView } from '../render/room';
 import { saveRoomPng } from '../render/snapshot';
 import {
@@ -142,10 +142,23 @@ export class RoomScene extends Phaser.Scene {
   private loadSprites() {
     if (!spritesWanted()) return;
     const loader = new Phaser.Loader.LoaderPlugin(this);
+    let queued = 0;
+    const want = (key: string, file: string) => {
+      // 部屋を移ると create がやり直されるので、もう持っているものは頼まない
+      if (this.textures.exists(key)) return;
+      loader.image(key, file);
+      queued += 1;
+    };
     for (const name of spriteSheets()) {
       for (let rot = 0; rot < 4; rot++) {
-        loader.image(spriteKey(name, rot as Rotation), `sprites/${name}-${rot}.png`);
+        want(spriteKey(name, rot as Rotation), `sprites/${name}-${rot}.png`);
       }
+    }
+    // 壁に掛けるものは向きぶんは焼いていない（左の壁は反転で作る）
+    for (const name of wallSpriteSheets()) want(wallSpriteKey(name), `sprites/${name}.png`);
+    if (queued === 0) {
+      this.applySprites();
+      return;
     }
     loader.once(Phaser.Loader.Events.COMPLETE, () => this.applySprites());
     loader.start();
@@ -154,7 +167,9 @@ export class RoomScene extends Phaser.Scene {
   /** 焼いた絵が揃ったので、いま出ているものを描き直す */
   private applySprites() {
     clearFurnitureCache();
+    clearWallCache();
     this.furniture.refreshTextures();
+    this.walls.refreshTextures();
   }
 
   create() {

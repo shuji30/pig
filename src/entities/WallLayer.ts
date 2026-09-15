@@ -38,6 +38,11 @@ export class WallLayer {
     for (const it of items) this.add(it);
   }
 
+  /** テクスチャを作り直して置き直す（3Dの絵が届いたときなど） */
+  refreshTextures() {
+    this.setItems([...this.items]);
+  }
+
   add(item: PlacedWall) {
     this.items.push(item);
     this.createSprite(item);

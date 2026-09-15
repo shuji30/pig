@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FURNITURE, spriteName, spriteSheets } from '../data/furniture';
+import { FURNITURE, spriteName, spriteSheets, wallSpriteName, wallSpriteSheets } from '../data/furniture';
 
 const DIR = resolve(__dirname, '../../public/sprites');
 
@@ -46,8 +46,23 @@ describe('焼いた絵', () => {
     }
   });
 
+  it('壁に掛けるものも、ぜんぶ絵が置いてある（左の壁は反転で作るので1枚）', () => {
+    for (const f of FURNITURE.filter((x) => x.category === 'wall')) {
+      const file = `${wallSpriteName(f)}.png`;
+      expect(existsSync(resolve(DIR, file)), `${f.id} → ${file}`).toBe(true);
+    }
+  });
+
+  it('壁の絵の名前は床のものとぶつからない（同じ置き場に置くため）', () => {
+    const floor = new Set(spriteSheets().flatMap((n) => [0, 1, 2, 3].map((r) => `${n}-${r}`)));
+    for (const n of wallSpriteSheets()) expect(floor.has(n), n).toBe(false);
+  });
+
   it('使われていない絵が残っていない（焼き直しの取りこぼしを見つける）', () => {
-    const want = new Set(spriteSheets().flatMap((n) => [0, 1, 2, 3].map((r) => `${n}-${r}.png`)));
+    const want = new Set([
+      ...spriteSheets().flatMap((n) => [0, 1, 2, 3].map((r) => `${n}-${r}.png`)),
+      ...wallSpriteSheets().map((n) => `${n}.png`),
+    ]);
     for (const file of readdirSync(DIR)) expect(want.has(file), file).toBe(true);
     expect(readdirSync(DIR).length).toBe(want.size);
   });

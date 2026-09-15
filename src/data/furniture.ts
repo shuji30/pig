@@ -161,6 +161,23 @@ export function spriteName(def: FurnitureDef): string {
   return `${def.shape}-${def.size[0]}x${def.size[1]}-${def.height}${seat}`;
 }
 
+/**
+ * 壁に掛けるものの焼いた絵の名前。
+ *
+ * 壁は床と射影が別（core/wall.ts）なので、床とは分けて焼く。
+ * 左の壁ぶんは右の壁の左右反転で作れるので、名前に向きは入れない
+ */
+export function wallSpriteName(def: FurnitureDef): string {
+  return `wall-${def.wallShape ?? 'painting'}-${def.size[0]}-${def.height}`;
+}
+
+/** 壁に掛けるものの絵の一覧（重複を除いたもの） */
+export function wallSpriteSheets(): string[] {
+  const out = new Set<string>();
+  for (const f of FURNITURE) if (f.category === 'wall') out.add(wallSpriteName(f));
+  return [...out].sort();
+}
+
 /** 焼いた絵の一覧（重複を除いたもの）。読み込みのために使う */
 export function spriteSheets(): string[] {
   const out = new Set<string>();

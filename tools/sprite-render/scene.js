@@ -637,6 +637,259 @@ const SHAPES = {
   },
 };
 
+// ---------------------------------------------------------------- 壁に掛けるもの
+// 壁の上の座標 (u, hh) は、床とは別の射影で画面へ写る（core/wall.ts）。
+//   右の壁: 画面x = u,  画面y = 高さ - hh + u/2
+// これは「gy = 0 の壁に沿って gx を進む」ことと同じなので、
+//   ワールド x = u / 32、ワールド y = hh / 39.19、ワールド z = 壁からの出っぱり
+// と置けば、床と同じカメラでそのまま焼ける。
+// 左の壁は右の壁の**左右反転**なので、焼くのは右のぶんだけでいい（ゲーム側で反転する）。
+
+/** 壁に沿った px → ワールド単位 */
+const WU = (u) => u / 32;
+/** 壁の上の「丸」の半径。画面での見た目の大きさを合わせるための係数 */
+const WR = (r) => r / 34;
+
+/** 壁の上の箱。u,hh は px、d は壁からの出っぱり（ワールド単位） */
+function wbox(g, u0, h0, u1, h1, d0, d1, material, r = 0.02) {
+  const w = WU(Math.abs(u1 - u0));
+  const hh = PX(Math.abs(h1 - h0));
+  const dd = Math.abs(d1 - d0);
+  const m = new THREE.Mesh(roundedBoxGeo(w, hh, dd, r), material);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  m.position.set(WU((u0 + u1) / 2), PX((h0 + h1) / 2), (d0 + d1) / 2);
+  g.add(m);
+  return m;
+}
+
+/** 壁の上の円盤（壁に垂直な軸の円柱） */
+function wdisc(g, u, hh, rpx, d0, d1, material) {
+  const dd = Math.abs(d1 - d0);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(WR(rpx), WR(rpx), dd, 28), material);
+  m.rotation.x = Math.PI / 2;
+  m.position.set(WU(u), PX(hh), (d0 + d1) / 2);
+  m.castShadow = true;
+  g.add(m);
+  return m;
+}
+
+/** 壁の上の球 */
+function wball(g, u, hh, rpx, d, material, squash = 1) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(WR(rpx), 16, 12), material);
+  m.scale.set(1, 1, squash);
+  m.position.set(WU(u), PX(hh), d);
+  m.castShadow = true;
+  g.add(m);
+  return m;
+}
+
+/**
+ * 金の額縁＋中身、という共通の作り。
+ * 枠は**4本の棒**で組む。1枚の箱にすると中身が隠れてしまう（実際やらかした）
+ */
+function wframed(g, w, h, frameMat, innerMat, thick, depth) {
+  wbox(g, thick * 0.6, thick * 0.6, w - thick * 0.6, h - thick * 0.6, 0, depth * 0.42, innerMat, 0.01);
+  wbox(g, 0, 0, w, thick, 0, depth, frameMat, 0.016);
+  wbox(g, 0, h - thick, w, h, 0, depth, frameMat, 0.016);
+  wbox(g, 0, thick, thick, h - thick, 0, depth, frameMat, 0.016);
+  wbox(g, w - thick, thick, w, h - thick, 0, depth, frameMat, 0.016);
+}
+
+const WALL_SHAPES = {
+  /** まど。枠を深くして、奥に空を置く */
+  window(g, w, h) {
+    wframed(g, w, h, M.base(), M.sky(), 4, 0.18);
+    // 桟
+    wbox(g, w / 2 - 1.6, 4, w / 2 + 1.6, h - 4, 0.06, 0.15, M.base(), 0.008);
+    wbox(g, 4, h / 2 - 1.6, w - 4, h / 2 + 1.6, 0.06, 0.15, M.base(), 0.008);
+    if (w > 60) wbox(g, w * 0.75 - 1.2, 4, w * 0.75 + 1.2, h - 4, 0.06, 0.15, M.base(), 0.008);
+    wbox(g, 4, 4, w - 4, h - 4, 0.15, 0.163, M.glass(), 0.008); // ガラス
+    wbox(g, -2, -4, w + 2, 1, 0, 0.3, M.base(), 0.02); // 窓台
+    wball(g, w / 2, h + 3, 3.2, 0.12, M.gold());
+  },
+
+  /** 絵。額を厚くして、中の絵を奥に置く */
+  painting(g, w, h) {
+    wframed(g, w, h, M.gold(), M.acc(), 5, 0.18);
+    const r = Math.min(w, h);
+    // 中の絵：色面と丸で「何か描いてある」感じ。奥まった面の少し前に置く
+    wbox(g, 6, h * 0.5, w - 6, h - 6, 0.076, 0.082, M.acc(), 0.01);
+    wball(g, w * 0.38, h * 0.62, r * 0.15, 0.082, M.acc(), 0.35);
+    wball(g, w * 0.62, h * 0.5, r * 0.11, 0.082, M.acc(), 0.35);
+    wball(g, w * 0.5, h * 0.72, r * 0.1, 0.082, M.acc(), 0.35);
+    wball(g, w / 2, h + 2, 3.4, 0.12, M.goldLight());
+  },
+
+  /** かがみ。鏡面は環境マップを映すので、3Dにするといちばん差が出る */
+  mirror(g, w, h) {
+    const t = 3.5;
+    const glass = new THREE.Mesh(
+      roundedBoxGeo(WU(w - t), PX(h - t), 0.05, 0.012),
+      mat('silver', { color: 0xeef4fa, roughness: 0.04, metalness: 1 }),
+    );
+    glass.position.set(WU(w / 2), PX(h / 2), 0.05);
+    g.add(glass);
+    wbox(g, 0, 0, w, t, 0, 0.16, M.gold(), 0.016);
+    wbox(g, 0, h - t, w, h, 0, 0.16, M.gold(), 0.016);
+    wbox(g, 0, t, t, h - t, 0, 0.16, M.gold(), 0.016);
+    wbox(g, w - t, t, w, h - t, 0, 0.16, M.gold(), 0.016);
+    wball(g, w / 2, h + 3, 3.6, 0.12, M.goldLight());
+  },
+
+  /** かべどけい */
+  clock(g, w, h) {
+    const r = Math.min(w, h) / 2;
+    wdisc(g, w / 2, h / 2, r, 0, 0.16, M.gold());
+    wdisc(g, w / 2, h / 2, r - 4, 0.14, 0.19, M.base());
+    wdisc(g, w / 2, h / 2, r - 1.4, 0.05, 0.145, M.goldLight());
+    // 針
+    wbox(g, w / 2 - 0.8, h / 2, w / 2 + 0.8, h / 2 + r * 0.6, 0.19, 0.21, M.dark(), 0.004);
+    wbox(g, w / 2, h / 2 - 0.7, w / 2 + r * 0.45, h / 2 + 0.7, 0.19, 0.21, M.dark(), 0.004);
+    wball(g, w / 2, h / 2, 2, 0.21, M.gold());
+  },
+
+  /** かべしょくだい。腕を前へ出す */
+  sconce(g, w, h) {
+    wbox(g, w * 0.3, 0, w * 0.7, h * 0.32, 0, 0.07, M.gold(), 0.02);
+    wbox(g, w * 0.42, h * 0.28, w * 0.58, h * 0.54, 0.05, 0.16, M.gold(), 0.02);
+    wbox(g, w * 0.18, h * 0.5, w * 0.82, h * 0.58, 0.1, 0.26, M.gold(), 0.02);
+    for (const cu of [w * 0.32, w * 0.68]) {
+      const candle = new THREE.Mesh(new THREE.CylinderGeometry(WR(2.4), WR(2.6), PX(h * 0.24), 14), M.ivory());
+      candle.position.set(WU(cu), PX(h * 0.7), 0.18);
+      candle.castShadow = true;
+      g.add(candle);
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(WR(2.6), PX(h * 0.14), 14), M.flame());
+      fl.position.set(WU(cu), PX(h * 0.89), 0.18);
+      g.add(fl);
+    }
+  },
+
+  /** かべだな。板が本当に前へ出るので、3Dにするとよく分かる */
+  shelf(g, w, h) {
+    const d = 0.3;
+    wbox(g, 0, h * 0.3, w, h * 0.4, 0, d, M.base(), 0.02); // 棚板
+    wbox(g, 0, h * 0.4, w, h * 0.43, 0, d * 1.02, M.gold(), 0.012); // 前縁の金
+    // 受け（ブラケット）
+    for (const u of [w * 0.14, w * 0.86]) {
+      wbox(g, u - 3, h * 0.04, u + 3, h * 0.3, 0, d * 0.62, M.base(), 0.02);
+    }
+    // 上の小物
+    wball(g, w * 0.3, h * 0.52, 5.4, d * 0.5, M.acc());
+    const vase = new THREE.Mesh(new THREE.CylinderGeometry(WR(3.4), WR(4.4), PX(h * 0.34), 16), M.acc());
+    vase.position.set(WU(w * 0.55), PX(h * 0.6), d * 0.5);
+    vase.castShadow = true;
+    g.add(vase);
+    wball(g, w * 0.78, h * 0.5, 4.2, d * 0.5, M.goldLight());
+  },
+
+  /** はなづな。たわんだ弧に沿って花をつなぐ */
+  garland(g, w, h) {
+    const n = Math.max(9, Math.round(w / 6));
+    const sag = h * 0.42;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const u = 2 + (w - 4) * t;
+      const hh = h - 4 - sag * 4 * t * (1 - t);
+      pts.push(new THREE.Vector3(WU(u), PX(hh), 0.07));
+    }
+    const rope = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n * 3, WR(2.2), 8, false),
+      M.base(),
+    );
+    rope.castShadow = true;
+    g.add(rope);
+    for (let i = 0; i <= n; i += 2) {
+      const p = pts[i];
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2;
+        const fl = new THREE.Mesh(new THREE.SphereGeometry(WR(2.1), 10, 8), M.acc());
+        fl.position.set(p.x + Math.cos(a) * WR(2.8), p.y + Math.sin(a) * PX(2.8), p.z + 0.03);
+        fl.castShadow = true;
+        g.add(fl);
+      }
+      const c = new THREE.Mesh(new THREE.SphereGeometry(WR(1.7), 10, 8), M.goldLight());
+      c.position.set(p.x, p.y, p.z + 0.06);
+      g.add(c);
+    }
+    for (const u of [2, w - 2]) {
+      wbox(g, u - 2, h - 9, u + 2, h - 2, 0.05, 0.1, M.gold(), 0.012);
+      wball(g, u, h - 2, 2.8, 0.09, M.goldLight());
+    }
+  },
+
+  /** かざりざら。本物の皿の形（浅い回転体）にする */
+  plate(g, w, h, count) {
+    const per = w / count;
+    const r = Math.min(h * 0.9, per) * 0.46;
+    for (let i = 0; i < count; i++) {
+      const u = per * (i + 0.5);
+      const hh = h / 2 + (i % 2 === 1 ? h * 0.12 : 0);
+      const R = WR(r);
+      const profile = [
+        [0, 0.0], [R * 0.5, 0.004], [R * 0.72, 0.016], [R * 0.9, 0.04],
+        [R * 1.0, 0.062], [R * 1.02, 0.05], [R * 0.93, 0.03], [R * 0.7, 0.008], [0, 0.002],
+      ].map(([rr, y]) => new THREE.Vector2(rr, y));
+      const dish = new THREE.Mesh(new THREE.LatheGeometry(profile, 32), M.base());
+      dish.rotation.x = -Math.PI / 2;
+      dish.position.set(WU(u), PX(hh), 0.01);
+      dish.castShadow = true;
+      g.add(dish);
+      wdisc(g, u, hh, r * 1.06, 0.061, 0.068, M.gold());
+      wdisc(g, u, hh, r * 0.46, 0.062, 0.07, M.acc());
+      wball(g, u, hh, r * 0.2, 0.072, M.goldLight());
+    }
+  },
+
+  /** かべのグリーン。上の鉢から葉が垂れる */
+  vine(g, w, h) {
+    const potW = Math.min(w * 0.5, 16);
+    const pot = new THREE.Mesh(
+      new THREE.CylinderGeometry(WR(potW / 2), WR(potW / 2.6), PX(10), 18),
+      M.base(),
+    );
+    pot.position.set(WU(w / 2), PX(h - 6), 0.1);
+    pot.castShadow = true;
+    g.add(pot);
+    wdisc(g, w / 2, h - 2, potW / 2 + 1.5, 0.02, 0.18, M.gold());
+    const strands = w > 40 ? 4 : 3;
+    for (let sIdx = 0; sIdx < strands; sIdx++) {
+      const dir = sIdx % 2 === 0 ? -1 : 1;
+      const spread = (Math.floor(sIdx / 2) + 1) * (w * 0.16);
+      const len = h - 12 - sIdx * 2;
+      for (let i = 1; i <= 7; i++) {
+        const t = i / 7;
+        const u = w / 2 + dir * spread * t;
+        const hh = h - 10 - len * t;
+        wball(g, u, hh, 3.2 - t * 0.8, 0.09 + (i % 2) * 0.03, M.acc());
+        if (i % 2 === 0) wball(g, u + dir * 3.4, hh + 1.6, 2.4, 0.13, M.acc());
+      }
+    }
+  },
+
+  /** タペストリー。布を少したわませる */
+  tapestry(g, w, h) {
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(WR(2.6), WR(2.6), WU(w + 6), 14), M.gold());
+    rod.rotation.z = Math.PI / 2;
+    rod.position.set(WU(w / 2), PX(h - 2), 0.1);
+    rod.castShadow = true;
+    g.add(rod);
+    // 布：横に何枚かに割って、下へ行くほど手前へふくらませる
+    const n = 10;
+    for (let i = 0; i < n; i++) {
+      const u0 = 1 + ((w - 2) * i) / n;
+      const u1 = 1 + ((w - 2) * (i + 1)) / n;
+      const wave = 0.018 * Math.sin((i / n) * Math.PI * 3);
+      wbox(g, u0, 3, u1, h - 4, 0.05 + wave, 0.088 + wave, M.base(), 0.008);
+    }
+    // 中の明るい面（布と同じ色。ここを金にすると全面が金色になってしまう）
+    wbox(g, 4, 6, w - 4, h - 8, 0.09, 0.098, M.base(), 0.01);
+    wball(g, w / 2, h * 0.55, Math.min(w, h) * 0.16, 0.1, M.acc(), 0.3);
+    for (let i = 0; i <= 4; i++) wball(g, (w / 4) * i, 2, 2.6, 0.1, M.acc());
+  },
+};
+
 // ---------------------------------------------------------------- レンダリング
 
 let rendererCache = null;
@@ -862,6 +1115,98 @@ export function renderSprite(o) {
   return { url, lit, hot, clipped, p50: at(0.5), p95: at(0.95), p99: at(0.99) };
 }
 
+/**
+ * 壁に掛けるものを1枚焼く。返る PNG は床のものと同じ「左=陰影 / 右=マスク」。
+ * 左の壁ぶんは焼かない（右の壁の左右反転で作れるので、ゲーム側で反転する）。
+ *
+ * @param {{shape:string, w:number, h:number, count:number,
+ *          width:number, height:number, offX:number, offY:number}} o
+ */
+export function renderWallSprite(o) {
+  const W = o.width;
+  const H = o.height;
+  const renderer = getRenderer();
+  renderer.setSize(W * SS, H * SS, false);
+  renderer.shadowMap.enabled = true;
+
+  const scene = new THREE.Scene();
+  scene.environment = environment(renderer);
+  // 壁のものは正面から見るぶん陰影が付きにくいので、環境光を床より少し強くする
+  scene.environmentIntensity = 0.5;
+  const build = WALL_SHAPES[o.shape];
+  if (!build) throw new Error('unknown wall shape: ' + o.shape);
+  const model = new THREE.Group();
+  build(model, o.w, o.h, o.count);
+  scene.add(model);
+
+  // 影を受けるのは壁（垂直な面）。床のときとは向きが違う
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.ShadowMaterial({ opacity: 0.18 }));
+  wall.position.set(WU(o.w / 2), PX(o.h / 2), -0.004);
+  wall.receiveShadow = true;
+  wall.name = 'shadowFloor';
+  scene.add(wall);
+
+  const center = new THREE.Vector3(WU(o.w / 2), PX(o.h / 2), 0.08);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xbda894, 0.18));
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.65);
+  // 壁のものは正面寄りから当てる。斜めから当てると落ち影が大きくずれて、
+  // 壁から浮いて見えてしまう
+  key.position.copy(center).add(new THREE.Vector3(1.5, 2.1, 3.2));
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  const d = Math.max(WU(o.w), PX(o.h)) * 0.8 + 0.6;
+  key.shadow.camera.left = -d;
+  key.shadow.camera.right = d;
+  key.shadow.camera.top = d;
+  key.shadow.camera.bottom = -d;
+  key.shadow.camera.near = 0.1;
+  key.shadow.camera.far = 24;
+  key.shadow.bias = -0.0009;
+  key.target.position.copy(center);
+  scene.add(key.target);
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xcfe0f5, 0.3);
+  fill.position.copy(center).add(new THREE.Vector3(-2.6, -0.6, 2.2));
+  fill.target.position.copy(center);
+  scene.add(fill.target);
+  scene.add(fill);
+
+  const { camera } = isoCamera(W, H, o.offX, o.offY, WU(o.w));
+
+  const out = document.createElement('canvas');
+  out.width = W * 2;
+  out.height = H;
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  setPass(scene, 'shade');
+  renderer.render(scene, camera);
+  ctx.drawImage(renderer.domElement, 0, 0, W, H);
+
+  setPass(scene, 'mask');
+  renderer.shadowMap.enabled = false;
+  renderer.render(scene, camera);
+  ctx.drawImage(renderer.domElement, W, 0, W, H);
+
+  const px = ctx.getImageData(0, 0, W, H).data;
+  let clipped = 0;
+  const opaque = (x, y) => px[(y * W + x) * 4 + 3] > 60;
+  for (let x = 0; x < W; x++) if (opaque(x, 0) || opaque(x, H - 1)) clipped++;
+  for (let y = 0; y < H; y++) if (opaque(0, y) || opaque(W - 1, y)) clipped++;
+  let lit = 0;
+  let hot = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 200) continue;
+    lit++;
+    if (Math.max(px[i], px[i + 1], px[i + 2]) >= 250) hot++;
+  }
+
+  return { url: out.toDataURL('image/png'), lit, hot, clipped, p95: 224 };
+}
+
+window.renderWallSprite = renderWallSprite;
 window.renderSprite = renderSprite;
 window.HEIGHT_UNIT = HEIGHT_UNIT;
 window.SHAPE_NAMES = Object.keys(SHAPES);
+window.WALL_SHAPE_NAMES = Object.keys(WALL_SHAPES);

@@ -626,12 +626,13 @@ export function spriteKey(sprite: string, rot: Rotation): string {
  * こうしておくと、焼いた1枚から何色でも作れる。
  * リカラー（木地10色×張地10色）を捨てずに 3D へ移せるのはこのため
  */
-function compositeSprite(
+export function compositeSprite(
   scene: Phaser.Scene,
   rawKey: string,
   outKey: string,
   color: number,
   accent: number,
+  flip = false,
 ): { width: number; height: number } | null {
   const src = scene.textures.get(rawKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
   const w = Math.round(src.width / 2);
@@ -643,11 +644,17 @@ function compositeSprite(
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return null;
 
+  // 左の壁は右の壁の左右反転（core/wall.ts の写し方がちょうど鏡になる）
+  if (flip) {
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+  }
   ctx.drawImage(src, 0, 0, w, h, 0, 0, w, h);
   const out = ctx.getImageData(0, 0, w, h);
   ctx.clearRect(0, 0, w, h);
   ctx.drawImage(src, w, 0, w, h, 0, 0, w, h);
   const mask = ctx.getImageData(0, 0, w, h).data;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   const px = out.data;
   const cr = (color >> 16) & 255;

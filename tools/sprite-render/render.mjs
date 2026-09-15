@@ -38,7 +38,7 @@ execFileSync(resolve(ROOT, 'node_modules/.bin/esbuild'), [
   '--bundle', '--format=esm', '--platform=node',
   `--outfile=${tmp}/furniture.mjs`,
 ], { stdio: 'inherit' });
-const { FURNITURE, spriteName } = await import(`${tmp}/furniture.mjs`);
+const { FURNITURE, spriteName, wallSpriteName } = await import(`${tmp}/furniture.mjs`);
 
 const only = process.argv.slice(2);
 // 同じ形・大きさ・高さの家具は1枚を共有する（色はゲーム側で掛けるため）
@@ -50,7 +50,24 @@ for (const d of FURNITURE) {
   if (!seen.has(name)) seen.set(name, d);
 }
 const JOBS = [...seen.entries()].map(([name, def]) => ({ name, def }));
-console.log(`${JOBS.length} 枚ぶんの形を焼く`);
+
+// 壁に掛けるもの。射影が別なので別の関数で焼く（左の壁は反転で作るので焼かない）
+const wallSeen = new Map();
+for (const d of FURNITURE) {
+  if (d.category !== 'wall') continue;
+  if (only.length && !only.includes(d.id) && !only.includes(d.wallShape)) continue;
+  const name = wallSpriteName(d);
+  if (!wallSeen.has(name)) wallSeen.set(name, d);
+}
+const WALL_JOBS = [...wallSeen.entries()].map(([name, def]) => ({ name, def }));
+console.log(`床 ${JOBS.length} 枚 / 壁 ${WALL_JOBS.length} 枚ぶんの形を焼く`);
+
+/** wallTexture.ts と同じ寸法の決め方（WALL_PAD と同じ値でなければならない） */
+const WALL_PAD = 12;
+function wallMetrics(cols, heightPx) {
+  const w = cols * 32;
+  return { w, h: heightPx, width: w + WALL_PAD * 2, height: heightPx + w / 2 + WALL_PAD * 2, offX: WALL_PAD, offY: WALL_PAD + heightPx };
+}
 
 const server = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'], {
   cwd: ROOT,
@@ -104,6 +121,28 @@ try {
         line += '(はみ出し!)';
       }
       line += ` ${(png.length / 1024).toFixed(1)}KB`;
+    }
+    console.log(line);
+  }
+
+  for (const { name, def } of WALL_JOBS) {
+    const m = wallMetrics(def.size[0], def.height);
+    const r = await page.evaluate((o) => window.renderWallSprite(o), {
+      shape: def.wallShape ?? 'painting',
+      count: Math.max(1, def.size[0] * 2 - 1), // かざりざらの枚数（手続き生成と同じ決め方）
+      ...m,
+    });
+    const png = Buffer.from(r.url.split(',')[1], 'base64');
+    writeFileSync(resolve(OUT_DIR, `${name}.png`), png);
+    bytes += png.length;
+    files++;
+    hotTotal += r.hot;
+    litTotal += r.lit;
+    p95s.push(r.p95);
+    let line = `  ${name.padEnd(24)} ${(png.length / 1024).toFixed(1)}KB`;
+    if (r.clipped) {
+      clipped++;
+      line += '(はみ出し!)';
     }
     console.log(line);
   }

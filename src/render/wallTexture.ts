@@ -3,7 +3,25 @@ import { GOLD, GOLD_LIGHT } from '../config';
 import { WALL_COL_W, type WallSide } from '../core/wall';
 import type { FurnitureDef, Recolor, WallShape } from '../types';
 import { shade, toInt } from './color';
-import { recolored } from './furnitureTexture';
+import { wallSpriteName } from '../data/furniture';
+import { compositeSprite, recolored, spritesWanted } from './furnitureTexture';
+
+/**
+ * 壁のテクスチャの余白。3Dから焼いた絵は壁から前へ出るので、
+ * そのぶん（最大 12px = 0.375マス）を見込んである。
+ * 焼く側（tools/sprite-render/render.mjs）と同じ値でなければならない
+ */
+export const WALL_PAD = 12;
+
+/** 焼いた絵が届いたときなど、作り置きを捨てて描き直させる */
+export function clearWallCache() {
+  cache.clear();
+}
+
+/** 焼いた壁の絵の texture key */
+export function wallSpriteKey(name: string): string {
+  return `sprite:${name}`;
+}
 
 /**
  * 壁に掛ける家具のテクスチャを、壁の傾きに合わせた平行四辺形として描く。
@@ -241,8 +259,9 @@ export function getWallTexture(
   const w = def.size[0] * WALL_COL_W;
   const h = def.height;
   // 平行四辺形なので、u が進むほど y が下がる。テクスチャは
-  // (幅 = w + 余白, 高さ = h + w/2 + 余白) の箱に収まる
-  const PAD = 6;
+  // (幅 = w + 余白, 高さ = h + w/2 + 余白) の箱に収まる。
+  // 余白は 3Dから焼いた絵が壁から前へ出るぶん（最大12px）を見込んでいる
+  const PAD = WALL_PAD;
   const texW = w + PAD * 2;
   const texH = h + w / 2 + PAD * 2;
   // テクスチャの中の座標へ写す。u=0, h=0（スロットの下端）が
@@ -252,14 +271,39 @@ export function getWallTexture(
       ? (u, hh) => ({ x: PAD + u, y: PAD + h - hh + u / 2 })
       : (u, hh) => ({ x: PAD + w - u, y: PAD + h - hh + u / 2 });
 
+  const anchor0 = at(0, 0);
+  // 3Dモデルから焼いた絵が読めていればそれに色を掛けて使う。
+  // 左の壁は右の壁の左右反転（写し方がちょうど鏡になる）
+  if (spritesWanted()) {
+    const sKey = wallSpriteKey(wallSpriteName(def));
+    if (scene.textures.exists(sKey)) {
+      const size = compositeSprite(
+        scene,
+        sKey,
+        key,
+        toInt(String(def.color)),
+        toInt(String(def.accent ?? '#ffffff')),
+        side === 'left',
+      );
+      if (size) {
+        const meta: WallTexture = {
+          key,
+          originX: anchor0.x / size.width,
+          originY: anchor0.y / size.height,
+        };
+        cache.set(key, meta);
+        return meta;
+      }
+    }
+  }
+
   const g = scene.add.graphics();
   drawShape(new WallPainter(g, at), def.wallShape ?? 'painting', def, w, h);
   g.generateTexture(key, texW, texH);
   g.destroy();
 
   // スプライトを置くときは「スロットの u=0, h=0 の点」を基準にしたい
-  const anchor = at(0, 0);
-  const tex: WallTexture = { key, originX: anchor.x / texW, originY: anchor.y / texH };
+  const tex: WallTexture = { key, originX: anchor0.x / texW, originY: anchor0.y / texH };
   cache.set(key, tex);
   return tex;
 }
