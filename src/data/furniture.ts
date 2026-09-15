@@ -16,8 +16,7 @@ export const FURNITURE: FurnitureDef[] = [
   // ---- すわる ----
   { id: 'round-stool', name: 'まるスツール', category: 'seat', shape: 'round', size: [1, 1], height: 24, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 90, rarity: 'common' },
   { id: 'stool', name: 'まるいす', category: 'seat', shape: 'chair', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#a9c4dc', seatHeight: 20, price: 80, rarity: 'common' },
-  // ⚠️ お試し：この1脚だけ 3Dモデルから焼いた絵を使っている（他は手続き生成）
-  { id: 'chair', name: 'ロココいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, sprite: 'chair', price: 110, rarity: 'common' },
+  { id: 'chair', name: 'ロココいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 110, rarity: 'common' },
   { id: 'chair-blue', name: 'ブルーいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#e4edf6', accent: '#a9c4dc', seatHeight: 20, price: 110, rarity: 'common' },
   { id: 'chair-mint', name: 'ミントいす', category: 'seat', shape: 'chair', size: [1, 1], height: 50, color: '#e2f0e8', accent: '#b7d4c4', seatHeight: 20, price: 110, rarity: 'common' },
   { id: 'chair-pink', name: 'ローズいす', category: 'seat', shape: 'chair', size: [1, 1], height: 52, color: '#f4e2e6', accent: '#d98aa6', seatHeight: 20, price: 130, rarity: 'common' },
@@ -147,9 +146,26 @@ export function interactionsOf(def: FurnitureDef): readonly InteractionKind[] {
 const SIT_ONLY: readonly InteractionKind[] = ['sit'];
 const NONE: readonly InteractionKind[] = [];
 
-/** 先に焼いた絵を持つ家具の一覧（読み込みのため） */
-export function spritedFurniture(): FurnitureDef[] {
-  return FURNITURE.filter((f) => f.sprite !== undefined);
+/**
+ * 3Dモデルから焼いた絵の名前。
+ *
+ * 焼いた絵には**色が入っていない**（陰影とマスクだけ）ので、形・大きさ・高さが
+ * 同じ家具は1枚を共有できる。たとえば ロココいす / ブルーいす / ミントいす は
+ * 同じ絵で、色だけゲーム側で掛ける。ここが色ごとに別ファイルだと枚数が跳ね上がる。
+ *
+ * tools/sprite-render/render.mjs もこの関数を使って書き出すので、
+ * 名前の付け方を変えると焼き直しが要る（data/furniture.test.ts で固定してある）
+ */
+export function spriteName(def: FurnitureDef): string {
+  const seat = def.seatHeight !== undefined ? `-s${def.seatHeight}` : '';
+  return `${def.shape}-${def.size[0]}x${def.size[1]}-${def.height}${seat}`;
+}
+
+/** 焼いた絵の一覧（重複を除いたもの）。読み込みのために使う */
+export function spriteSheets(): string[] {
+  const out = new Set<string>();
+  for (const f of FURNITURE) if (f.category !== 'wall') out.add(spriteName(f));
+  return [...out].sort();
 }
 
 const WALL_ID_ALIAS: Record<string, string> = { clock: 'wall-clock' };

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GOLD, GOLD_LIGHT, TILE_H, TILE_W } from '../config';
 import { rotatedSize } from '../core/iso';
+import { spriteName } from '../data/furniture';
 import type { FurnitureDef, Recolor, Rotation } from '../types';
 import { shade, tint, toInt } from './color';
 
@@ -587,21 +588,89 @@ function recolorKey(recolor?: Recolor): string {
 }
 
 /**
- * 先に焼いた絵を使うかどうか。
- * いまは**お試し**（いす1脚だけ）なので、既定では使わない。
- * `?sprites=on` を付けたときだけ有効にして、手続き生成と見比べられるようにしてある。
- * カタログ全部を焼き終えるまでは、1脚だけ見た目が違う状態を配らない
+ * 3Dモデルから焼いた絵を使うかどうか。
+ *
+ * 焼いた絵は起動をおくらせないよう**あとから**読み込む（RoomScene.loadSprites）。
+ * 読めるまでは今までどおり手続きで描き、読めたら差し替える。
+ * `?sprites=off` を付けると手続き生成のままにでき、見比べられる
  */
-let spritesEnabled = false;
+let spritesEnabled = true;
 
 export function enableSprites(on: boolean) {
+  if (spritesEnabled === on) return;
   spritesEnabled = on;
   cache.clear();
 }
 
-/** 先に焼いた絵の texture key。読み込みも同じ名前で行う */
+/** 焼いた絵を読み込むべきか（`?sprites=off` のときは読み込みごと省く） */
+export function spritesWanted(): boolean {
+  return spritesEnabled;
+}
+
+/** 焼いた絵が届いたときなど、作り置きを捨てて描き直させる */
+export function clearFurnitureCache() {
+  cache.clear();
+}
+
+/** 焼いた絵の texture key。読み込みも同じ名前で行う */
 export function spriteKey(sprite: string, rot: Rotation): string {
   return `sprite:${sprite}:${rot}`;
+}
+
+/**
+ * 焼いた絵に色を掛けて、1枚のテクスチャに合成する。
+ *
+ * 焼いた PNG は横に2枚ぶん入っている。左が陰影（本体色・張地色は白で焼いてある）、
+ * 右がマスク（R=本体色の割合 / G=張地色の割合 / A=0 は色を変えないところ）。
+ *   out = 陰影 × ( 白×(1-R-G) + 本体色×R + 張地色×G )
+ * こうしておくと、焼いた1枚から何色でも作れる。
+ * リカラー（木地10色×張地10色）を捨てずに 3D へ移せるのはこのため
+ */
+function compositeSprite(
+  scene: Phaser.Scene,
+  rawKey: string,
+  outKey: string,
+  color: number,
+  accent: number,
+): { width: number; height: number } | null {
+  const src = scene.textures.get(rawKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+  const w = Math.round(src.width / 2);
+  const h = src.height;
+  if (w <= 0 || h <= 0) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.drawImage(src, 0, 0, w, h, 0, 0, w, h);
+  const out = ctx.getImageData(0, 0, w, h);
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(src, w, 0, w, h, 0, 0, w, h);
+  const mask = ctx.getImageData(0, 0, w, h).data;
+
+  const px = out.data;
+  const cr = (color >> 16) & 255;
+  const cg = (color >> 8) & 255;
+  const cb = color & 255;
+  const ar = (accent >> 16) & 255;
+  const ag = (accent >> 8) & 255;
+  const ab = accent & 255;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] === 0) continue;
+    const a = mask[i + 3] / 255;
+    const wc = (mask[i] / 255) * a;
+    const wa = (mask[i + 1] / 255) * a;
+    const rest = Math.max(0, 1 - wc - wa);
+    px[i] = Math.min(255, px[i] * (rest + (wc * cr + wa * ar) / 255));
+    px[i + 1] = Math.min(255, px[i + 1] * (rest + (wc * cg + wa * ag) / 255));
+    px[i + 2] = Math.min(255, px[i + 2] * (rest + (wc * cb + wa * ab) / 255));
+  }
+  ctx.putImageData(out, 0, 0);
+
+  if (scene.textures.exists(outKey)) scene.textures.remove(outKey);
+  scene.textures.addCanvas(outKey, canvas);
+  return { width: w, height: h };
 }
 
 export function getFurnitureTexture(
@@ -622,21 +691,23 @@ export function getFurnitureTexture(
   const offX = gd * HW + PAD;
   const offY = maxZ + PAD;
 
-  // 3Dモデルから焼いた絵があればそれを使う。
-  // ⚠️ 色を変えているときは使えない（焼いた絵には陰影が入っているため）。
-  // そのときは今までどおり手続きで描く
-  if (spritesEnabled && baseDef.sprite && !recolor) {
-    const sKey = spriteKey(baseDef.sprite, rot);
+  // 3Dモデルから焼いた絵が読めていればそれに色を掛けて使う。
+  // 焼いた絵には色が入っていないので、リカラーしていても同じ1枚から作れる
+  if (spritesEnabled && def.category !== 'wall') {
+    const sKey = spriteKey(spriteName(def), rot);
     if (scene.textures.exists(sKey)) {
-      const meta: FurnitureTexture = {
-        key: sKey,
-        width,
-        height,
-        originX: offX / width,
-        originY: offY / height,
-      };
-      cache.set(key, meta);
-      return meta;
+      const size = compositeSprite(scene, sKey, key, toInt(String(def.color)), toInt(String(def.accent ?? tint(def.color, 0.45))));
+      if (size) {
+        const meta: FurnitureTexture = {
+          key,
+          width: size.width,
+          height: size.height,
+          originX: offX / size.width,
+          originY: offY / size.height,
+        };
+        cache.set(key, meta);
+        return meta;
+      }
     }
   }
 

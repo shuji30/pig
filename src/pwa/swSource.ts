@@ -156,7 +156,12 @@ self.addEventListener('fetch', (e) => {
       const hit = await cache.match(req, { ignoreSearch: true });
       if (hit) return hit;
       try {
-        return await fetch(req);
+        const res = await fetch(req);
+        // 3Dから焼いた絵は 200枚あるので、まとめ取り（PRECACHE）には入れず、
+        // 使われたものだけをこの版の保存領域へ足していく。
+        // 版が変われば保存領域ごと入れかわるので、古い絵は残らない
+        if (res.ok && url.pathname.includes('/sprites/')) await cache.put(req, res.clone());
+        return res;
       } catch {
         return new Response('', { status: 504 });
       }

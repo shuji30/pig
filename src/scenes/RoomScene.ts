@@ -15,7 +15,7 @@ import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
 import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
-import { getDef, interactionsOf, spritedFurniture } from '../data/furniture';
+import { getDef, interactionsOf, spriteSheets } from '../data/furniture';
 import { getInteraction, type InteractionKind } from '../data/interactions';
 import { findPet, getPet } from '../data/pets';
 import { findStamp } from '../data/stamps';
@@ -28,7 +28,7 @@ import { Avatar } from '../entities/Avatar';
 import { Pet } from '../entities/Pet';
 import { FurnitureLayer } from '../entities/FurnitureLayer';
 import { WallLayer } from '../entities/WallLayer';
-import { getFurnitureTexture, spriteKey } from '../render/furnitureTexture';
+import { clearFurnitureCache, getFurnitureTexture, spriteKey, spritesWanted } from '../render/furnitureTexture';
 import { getWallTexture } from '../render/wallTexture';
 import { RoomView } from '../render/room';
 import { saveRoomPng } from '../render/snapshot';
@@ -132,13 +132,29 @@ export class RoomScene extends Phaser.Scene {
     super('room');
   }
 
-  /** 先に焼いた絵を読み込む。無くてもゲームは動く（手続き生成に落ちる） */
-  preload() {
-    for (const def of spritedFurniture()) {
+  /**
+   * 3Dモデルから焼いた絵を**あとから**読み込む。
+   *
+   * preload に入れると 200枚ぶんの待ちが起動にそのまま乗るので、
+   * 部屋を出してから裏で読み、読み終わったら差し替える。
+   * 読めなくてもゲームは動く（今までどおり手続き生成で描かれる）
+   */
+  private loadSprites() {
+    if (!spritesWanted()) return;
+    const loader = new Phaser.Loader.LoaderPlugin(this);
+    for (const name of spriteSheets()) {
       for (let rot = 0; rot < 4; rot++) {
-        this.load.image(spriteKey(def.sprite as string, rot as Rotation), `sprites/${def.sprite}-${rot}.png`);
+        loader.image(spriteKey(name, rot as Rotation), `sprites/${name}-${rot}.png`);
       }
     }
+    loader.once(Phaser.Loader.Events.COMPLETE, () => this.applySprites());
+    loader.start();
+  }
+
+  /** 焼いた絵が揃ったので、いま出ているものを描き直す */
+  private applySprites() {
+    clearFurnitureCache();
+    this.furniture.refreshTextures();
   }
 
   create() {
@@ -415,6 +431,8 @@ export class RoomScene extends Phaser.Scene {
     this.ensureAvatarStandable();
     this.setupCamera();
     this.setupInput();
+    // 部屋を出しきってから、3Dの絵を裏で読みにいく
+    this.loadSprites();
   }
 
   /** いま映している部屋 */

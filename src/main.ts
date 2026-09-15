@@ -10,7 +10,8 @@ import { decodeShared, shareTokenInLocation } from './state/share';
  */
 async function boot() {
   // お試しの「3Dから焼いた絵」は ?sprites=on のときだけ使う
-  enableSprites(new URLSearchParams(location.search).get('sprites') === 'on');
+  // 3Dモデルから焼いた絵を使う。`?sprites=off` で手続き生成に戻せる（見比べ用）
+  enableSprites(new URLSearchParams(location.search).get('sprites') !== 'off');
 
   const token = shareTokenInLocation();
   const shared = token ? await decodeShared(token) : null;
