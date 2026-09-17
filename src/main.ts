@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { enableSprites } from './render/furnitureTexture';
 import { RoomScene } from './scenes/RoomScene';
 import { setupPwa } from './pwa/install';
-import { decodeShared, shareTokenInLocation } from './state/share';
+import { findFriend } from './data/friends';
+import { decodeShared, friendIdInLocation, sharedFromFriend, shareTokenInLocation } from './state/share';
 
 /**
  * 共有 URL の読み取りは非同期（deflate の展開があるため）なので、
@@ -13,9 +14,13 @@ async function boot() {
   // 3Dモデルから焼いた絵を使う。`?sprites=off` で手続き生成に戻せる（見比べ用）
   enableSprites(new URLSearchParams(location.search).get('sprites') !== 'off');
 
-  const token = shareTokenInLocation();
-  const shared = token ? await decodeShared(token) : null;
-  const broken = token !== null && shared === null;
+  // ともだち（NPC）の部屋は `#g=<id>`、人からもらった共有 URL は `#r=<データ>`。
+  // どちらも同じ「訪問モード」で開くが、とりこめるかどうかだけが違う
+  const friendId = friendIdInLocation();
+  const friend = friendId ? findFriend(friendId) : null;
+  const token = friendId ? null : shareTokenInLocation();
+  const shared = friend ? sharedFromFriend(friend) : token ? await decodeShared(token) : null;
+  const broken = (token !== null || friendId !== null) && shared === null;
 
   const game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -35,7 +40,7 @@ async function boot() {
       antialias: true,
       roundPixels: false,
     },
-    scene: [new RoomScene(shared, broken)],
+    scene: [new RoomScene(shared, broken, friend?.id ?? null)],
   });
 
   // 中を触れる口を1つだけ開けておく。動作確認と、遊ぶ人からの

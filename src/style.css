@@ -994,3 +994,18 @@ button.danger {
   font-size: 12px;
   color: var(--ink);
 }
+
+/* ともだちの一覧。アバターは縦長なので、家具より幅を取る */
+.grid.friends {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+
+.grid.friends .item canvas {
+  width: 52px;
+  height: 66px;
+}
+
+.grid.friends .item .room {
+  color: var(--pink-dark);
+  font-size: 10px;
+}

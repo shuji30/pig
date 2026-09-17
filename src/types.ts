@@ -191,5 +191,10 @@ export interface SaveData {
   pets: string[];
   /** いま連れているペット（連れていなければ null）。部屋を移ってもついてくる */
   pet: string | null;
+  /**
+   * あそびに来てくれた人（NPC）の id。来た順に増える。
+   * ここに入っている人の部屋へは、いつでも見に行ける
+   */
+  friends: string[];
   avatar: { look: AvatarLook };
 }

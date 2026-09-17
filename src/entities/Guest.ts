@@ -28,6 +28,10 @@ export interface GuestHost {
   trySit(guest: Guest): boolean;
   /** 帰りきったときに呼ばれる */
   onLeave(guest: Guest): void;
+  /** その部屋の主なら true。帰らずに ずっと居る */
+  stay?: boolean;
+  /** 最初のひとこと。省略すると おきゃくさんのあいさつになる */
+  greeting?: string;
 }
 
 /**
@@ -52,7 +56,7 @@ export class Guest {
     private readonly host: GuestHost,
   ) {
     this.avatar = new Avatar(scene, look, door.gx, door.gy);
-    this.avatar.say(GUEST_HELLO[Phaser.Math.Between(0, GUEST_HELLO.length - 1)]);
+    this.avatar.say(host.greeting ?? GUEST_HELLO[Phaser.Math.Between(0, GUEST_HELLO.length - 1)]);
     this.walkSomewhere();
   }
 
@@ -79,7 +83,7 @@ export class Guest {
   update(deltaMs: number) {
     this.avatar.update(deltaMs);
     const before = this.state.phase;
-    this.state = advanceGuest(this.state, deltaMs, this.arrived, this.leftRoom);
+    this.state = advanceGuest(this.state, deltaMs, this.arrived, this.leftRoom, this.host.stay);
 
     if (this.state.phase !== before && this.state.phase === 'leaving') this.startLeaving();
     if (this.state.phase === 'gone') {

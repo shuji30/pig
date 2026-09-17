@@ -23,6 +23,7 @@ import {
   resolveWallId,
   STARTER_INVENTORY,
 } from '../data/furniture';
+import { findFriend } from '../data/friends';
 import { findPet } from '../data/pets';
 import type { DailyCounters, PlacedFurniture, PlacedWall, Recolor, RoomData, SaveData } from '../types';
 import { ROOM_NAME_MAX, ROOM_NOTE_MAX } from './share';
@@ -136,6 +137,7 @@ export function defaultSave(): SaveData {
     inventory,
     pets: [],
     pet: null,
+    friends: [],
     avatar: {
       look: {
         name: 'ピグ',
@@ -342,8 +344,19 @@ function migrate(raw: unknown): SaveData | null {
     currentRoom,
     inventory,
     ...cleanPets(old.pets, old.pet),
+    friends: cleanFriends(old.friends),
     avatar: { look: { ...base.avatar.look, ...old.avatar?.look } },
   };
+}
+
+/** あそびに来てくれた人。いなくなった id は捨てる */
+function cleanFriends(raw: unknown): string[] {
+  const out: string[] = [];
+  if (!Array.isArray(raw)) return out;
+  for (const id of raw) {
+    if (typeof id === 'string' && findFriend(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
 }
 
 /**

@@ -19,7 +19,7 @@ import { getDef, interactionsOf, spriteSheets, wallSpriteSheets } from '../data/
 import { getInteraction, type InteractionKind } from '../data/interactions';
 import { findPet, getPet } from '../data/pets';
 import { findStamp } from '../data/stamps';
-import { makeGuestLook } from '../data/guests';
+import { pickFriend } from '../data/friends';
 import { Guest } from '../entities/Guest';
 import type { MissionCtx } from '../data/missions';
 import type { MotionKind } from '../data/motions';
@@ -59,7 +59,9 @@ import {
 } from '../state/save';
 import {
   encodeShared,
+  canImportRoom,
   leaveShare,
+  visitFriend,
   placedFromShared,
   ROOM_NAME_MAX,
   ROOM_NOTE_MAX,
@@ -126,9 +128,15 @@ export class RoomScene extends Phaser.Scene {
    * @param shared 共有 URL から読めた部屋。null なら自分の部屋を開く
    * @param shareBroken 共有 URL は付いていたが読めなかった
    */
+  /**
+   * @param shared 共有 URL / ともだちの部屋から読めた部屋。null なら自分の部屋を開く
+   * @param shareBroken 共有 URL は付いていたが読めなかった
+   * @param visitFriendId ともだちの部屋を見ているときの その人の id
+   */
   constructor(
     private readonly shared: SharedRoom | null = null,
     private readonly shareBroken = false,
+    private readonly visitFriendId: string | null = null,
   ) {
     super('room');
   }
@@ -176,6 +184,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.refreshArt();
     this.pet?.refreshArt();
     this.guest?.avatar.refreshArt();
+    this.roomOwner?.avatar.refreshArt();
   }
 
   create() {
@@ -354,6 +363,7 @@ export class RoomScene extends Phaser.Scene {
       onSaveShot: () => void this.saveShot(),
       onLike: () => this.like(),
       onImportRoom: () => this.importVisitedRoom(),
+      onVisitFriend: (id) => visitFriend(id),
       onExpandRoom: () => this.expand(),
       onThemeChange: (i) => {
         const theme = ROOM_THEMES[i];
@@ -410,6 +420,7 @@ export class RoomScene extends Phaser.Scene {
     this.syncRoomSize();
     this.ui.setInventory(this.save.inventory);
     this.ui.setPets(this.save.pets, this.save.pet);
+    this.ui.setFriends(this.save.friends);
     this.syncPet();
     this.resetGuestSchedule();
     this.ui.setCoins(this.save.coins);
@@ -437,6 +448,8 @@ export class RoomScene extends Phaser.Scene {
     this.refreshMetricsLine();
     if (this.shared) {
       this.ui.setVisiting({
+        canImport: canImportRoom(this.visitFriendId),
+        nextFriendId: this.nextFriendId(),
         roomName: this.shared.roomName,
         roomNote: this.shared.roomNote,
         ownerName: this.shared.look.name,
@@ -449,6 +462,7 @@ export class RoomScene extends Phaser.Scene {
       }
     }
 
+    this.spawnRoomOwner();
     this.ensureAvatarStandable();
     this.setupCamera();
     this.setupInput();
@@ -540,6 +554,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
     this.guest?.refreshDepth();
+    this.roomOwner?.refreshDepth();
     this.userZoomed = false;
     this.applyFitZoom();
     this.centerOnRoom();
@@ -630,8 +645,18 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /** 見ている部屋を自分の部屋として保存する（共有 URL のバックアップ復元も同じ道） */
+  /** ともだちの部屋を回っているとき、つぎに行く先 */
+  private nextFriendId(): string | null {
+    if (this.visitFriendId === null) return null;
+    const list = this.save.friends;
+    if (list.length < 2) return null;
+    const i = list.indexOf(this.visitFriendId);
+    return list[(i + 1) % list.length] ?? null;
+  }
+
   private importVisitedRoom() {
-    if (!this.shared) return;
+    // ボタンも隠しているが、ここでも止める
+    if (!this.shared || !canImportRoom(this.visitFriendId)) return;
     const own = load();
     own.rooms[HOME_ROOM] = {
       name: this.shared.roomName,
@@ -661,6 +686,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.update(delta);
     this.pet?.update(delta);
     this.updateGuest(delta);
+    this.roomOwner?.update(delta);
     this.auto.update(delta);
     this.syncUse();
     // 繰り返し再生の開始・終了に合わせてボタンとヒントを切り替える
@@ -974,6 +1000,8 @@ export class RoomScene extends Phaser.Scene {
   // ---------------- おきゃくさん ----------------
 
   private guest: Guest | null = null;
+  /** ともだちの部屋を訪ねているときの、その部屋の主 */
+  private roomOwner: Guest | null = null;
   /** 次のおきゃくさんが来るまでの残り時間(ms)。null は「来ない部屋」 */
   private guestIn: number | null = null;
 
@@ -1016,9 +1044,37 @@ export class RoomScene extends Phaser.Scene {
     return edge[Phaser.Math.Between(0, edge.length - 1)];
   }
 
+  /** 直前に来た人。続けて同じ人が来ると偶然に見えないので避ける */
+  private lastGuestId: string | null = null;
+
+  /**
+   * ともだちの部屋には、その人が居る。
+   * 主のいない部屋を見せると「会いに行った」感じにならない。
+   * おきゃくさんの仕組み（Guest）をそのまま使い、帰らないようにしてある
+   */
+  private spawnRoomOwner() {
+    if (!this.shared || this.visitFriendId === null) return;
+    const mid = Math.floor(this.size / 2);
+    const spot = this.furniture.isBlocked(mid, mid)
+      ? (this.freeTileNear({ gx: mid, gy: mid }, 3) ?? { gx: 0, gy: 0 })
+      : { gx: mid, gy: mid };
+    this.roomOwner = new Guest(this, this.shared.look, spot, {
+      pathTo: (from, to) => findPath(from, to, this.size, this.size, this.blockedFn),
+      lookSpots: () => this.guestLookSpots(),
+      doorTile: () => this.doorTile(),
+      trySit: (g) => this.guestSit(g),
+      onLeave: () => {},
+      stay: true,
+      greeting: 'いらっしゃい！',
+    });
+    this.roomOwner.setDepthResolver((box) => this.furniture.depthAt(box));
+  }
+
   private spawnGuest() {
     const door = this.doorTile();
-    this.guest = new Guest(this, makeGuestLook(), door, {
+    const friend = pickFriend(this.lastGuestId);
+    this.lastGuestId = friend.id;
+    this.guest = new Guest(this, friend.look, door, {
       pathTo: (from, to) => findPath(from, to, this.size, this.size, this.blockedFn),
       lookSpots: () => this.guestLookSpots(),
       doorTile: () => this.doorTile(),
@@ -1027,7 +1083,17 @@ export class RoomScene extends Phaser.Scene {
     });
     this.guest.setDepthResolver((box) => this.furniture.depthAt(box));
     this.save.daily.guested += 1;
-    this.ui.toast(`${this.guest.name}さんが あそびに きたよ`);
+    // 来てくれた人は「ともだち」に残る。以後いつでも その人の部屋を見に行ける
+    const isNew = !this.save.friends.includes(friend.id);
+    if (isNew) {
+      this.save.friends.push(friend.id);
+      this.ui.setFriends(this.save.friends);
+    }
+    this.ui.toast(
+      isNew
+        ? `${friend.look.name}さんと ともだちに なった！`
+        : `${friend.look.name}さんが あそびに きたよ`,
+    );
     this.persist();
   }
 
@@ -1624,6 +1690,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
     this.guest?.refreshDepth();
+    this.roomOwner?.refreshDepth();
     this.persist();
   }
 
@@ -1634,6 +1701,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
     this.guest?.refreshDepth();
+    this.roomOwner?.refreshDepth();
     this.drawGlow();
     this.save.inventory[removed.defId] = (this.save.inventory[removed.defId] ?? 0) + 1;
     this.save.daily.stored += 1;
@@ -1800,6 +1868,7 @@ export class RoomScene extends Phaser.Scene {
       this.avatar.refreshDepth();
       this.pet?.refreshDepth();
       this.guest?.refreshDepth();
+    this.roomOwner?.refreshDepth();
     } else {
       return;
     }
@@ -1924,6 +1993,7 @@ export class RoomScene extends Phaser.Scene {
       this.avatar.refreshDepth();
       this.pet?.refreshDepth();
       this.guest?.refreshDepth();
+    this.roomOwner?.refreshDepth();
       this.cancelPlacing();
       this.select(uid);
       this.persist();
@@ -1946,6 +2016,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.refreshDepth();
     this.pet?.refreshDepth();
     this.guest?.refreshDepth();
+    this.roomOwner?.refreshDepth();
 
     if ((this.save.inventory[defId] ?? 0) <= 0) {
       this.cancelPlacing();

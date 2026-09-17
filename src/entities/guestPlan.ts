@@ -22,15 +22,23 @@ export interface GuestState {
  * 時間を進めて、次の段階を返す。
  * @param arrived 入口から部屋の中まで歩き終わったか
  * @param leftRoom 出口まで歩き終わったか
+ * @param stay その部屋の主なら true。帰らずに ずっと居る
  */
-export function advanceGuest(state: GuestState, deltaMs: number, arrived: boolean, leftRoom: boolean): GuestState {
+export function advanceGuest(
+  state: GuestState,
+  deltaMs: number,
+  arrived: boolean,
+  leftRoom: boolean,
+  stay = false,
+): GuestState {
   const elapsed = state.elapsed + deltaMs;
   switch (state.phase) {
     case 'arriving':
       return { phase: arrived ? 'looking' : 'arriving', elapsed };
     case 'looking':
-      // 居すぎないこと。**必ず帰る**のが約束
-      return { phase: elapsed >= STAY_MS ? 'leaving' : 'looking', elapsed };
+      // 居すぎないこと。**必ず帰る**のが約束。
+      // ただし その部屋の主（ともだちの部屋を訪ねたときの相手）は帰らない
+      return { phase: !stay && elapsed >= STAY_MS ? 'leaving' : 'looking', elapsed };
     case 'leaving':
       return { phase: leftRoom ? 'gone' : 'leaving', elapsed };
     default:

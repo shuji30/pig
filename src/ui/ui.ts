@@ -24,14 +24,29 @@ import { sellPrice } from '../state/economy';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { PETS } from '../data/pets';
 import { makeIconCanvas } from '../render/furnitureTexture';
+import { findFriend } from '../data/friends';
+import { makeAvatarIconCanvas } from '../render/avatarPreview';
 import { makePetIconCanvas } from '../render/petArt';
 import { makeWallIconCanvas } from '../render/wallTexture';
 import type { AvatarLook, FurnitureCategory, Recolor } from '../types';
 
-export type PanelName = 'furniture' | 'emote' | 'wardrobe' | 'room' | 'share' | 'missions' | 'help' | 'recolor';
+export type PanelName =
+  | 'furniture'
+  | 'emote'
+  | 'wardrobe'
+  | 'room'
+  | 'share'
+  | 'friends'
+  | 'missions'
+  | 'help'
+  | 'recolor';
 
 /** 訪問中に上部へ出す、その部屋の情報 */
 export interface VisitInfo {
+  /** この部屋をとりこめるか（人からもらった共有 URL のときだけ true） */
+  canImport: boolean;
+  /** 「つぎのおへや」で行く先。ともだちの部屋を回っているときだけ入る */
+  nextFriendId: string | null;
   roomName: string;
   roomNote: string;
   ownerName: string;
@@ -71,6 +86,8 @@ export interface UiHandlers {
   onSaveShot(): void;
   onLike(): void;
   onImportRoom(): void;
+  /** ともだちの部屋へ行く */
+  onVisitFriend(id: string): void;
   onLeaveVisit(): void;
   onExpandRoom(): void;
   /** テーマ（床と壁の組み合わせ）を選んだ */
@@ -107,6 +124,7 @@ export class Ui {
   private coins = 0;
   private toastTimer?: number;
   private visiting = false;
+  private nextFriendId: string | null = null;
   /** リカラーパネルでいま選ばれている色 */
   private recolor: Recolor = {};
 
@@ -150,6 +168,9 @@ export class Ui {
       this.handlers.onChat(text);
     });
 
+    $('btn-next-friend').addEventListener('click', () => {
+      if (this.nextFriendId) this.handlers.onVisitFriend(this.nextFriendId);
+    });
     $('btn-expand').addEventListener('click', () => this.handlers.onExpandRoom());
     $('btn-paint').addEventListener('click', () => this.handlers.onTogglePaint());
     $('btn-earth').addEventListener('click', () => this.handlers.onGoHome());
@@ -487,6 +508,42 @@ export class Ui {
     if (this.tab === 'pet') this.renderCatalog();
   }
 
+  /** あそびに来てくれた人の一覧。ここから その人の部屋へ行ける */
+  setFriends(ids: string[]) {
+    this.friends = [...ids];
+    this.renderFriends();
+  }
+
+  private friends: string[] = [];
+
+  private renderFriends() {
+    const grid = $('friend-grid');
+    grid.innerHTML = '';
+    const note = $('friend-note');
+    if (this.friends.length === 0) {
+      note.textContent =
+        'まだ だれも来ていないよ。しばらく部屋にいると、だれかが あそびに来てくれる。';
+      return;
+    }
+    note.textContent = '押すと その人のおへやへ行けます。人のおへやは さわれません。';
+    for (const id of this.friends) {
+      const def = findFriend(id);
+      if (!def) continue;
+      const item = document.createElement('button');
+      item.className = 'item';
+      item.dataset.id = id;
+      item.appendChild(makeAvatarIconCanvas(this.scene, def.look));
+      const name = document.createElement('span');
+      name.textContent = def.look.name;
+      const room = document.createElement('span');
+      room.className = 'room';
+      room.textContent = def.roomName;
+      item.append(name, room);
+      item.addEventListener('click', () => this.handlers.onVisitFriend(id));
+      grid.appendChild(item);
+    }
+  }
+
   setInventory(inv: Record<string, number>) {
     this.inventory = inv;
     this.renderCatalog();
@@ -707,6 +764,12 @@ export class Ui {
     $('coins').hidden = this.visiting;
     $('btn-missions').hidden = this.visiting;
     $('visitbar').hidden = !this.visiting;
+    // ともだちの部屋では「とりこむ」を出さない。
+    // ゲーム内のボタンで何度でも行ける先でとりこめると、
+    // しまう→うる でコインが無限に湧いてしまう
+    $('btn-import').hidden = !info?.canImport;
+    $('btn-next-friend').hidden = !info?.nextFriendId;
+    this.nextFriendId = info?.nextFriendId ?? null;
     if (!info) return;
     $('visit-name').textContent = info.roomName;
     $('visit-note').textContent = info.roomNote || `${info.ownerName} のおへや`;

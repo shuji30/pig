@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FRIENDS } from '../data/friends';
 import {
   DEFAULT_ROOM_SIZE,
   FLOOR_STYLES,
@@ -9,7 +10,9 @@ import {
   ROOM_THEMES,
   WALL_STYLES,
 } from '../config';
-import { decodeShared, encodeShared, ROOM_NAME_MAX, sharedFromRoom, type SharedRoom } from './share';
+import { decodeShared, encodeShared, ROOM_NAME_MAX, sharedFromRoom, type SharedRoom,
+  canImportRoom,
+} from './share';
 
 const sample: SharedRoom = {
   floor: 2,
@@ -416,5 +419,17 @@ describe('ふくのかたち（番号でやりとりする）', () => {
       const room = await decodePacked([3, 0, 0, 'x', '', look(bad), [], 12, []]);
       expect(room?.look.outfit, JSON.stringify(bad)).toBe('shirt');
     }
+  });
+});
+
+describe('とりこめる部屋', () => {
+  it('人からもらった共有 URL の部屋はとりこめる', () => {
+    expect(canImportRoom(null)).toBe(true);
+  });
+
+  it('ともだち（NPC）の部屋はとりこめない', () => {
+    // ゲーム内のボタンで何度でも行けるので、とりこめると
+    // しまう→うる でコインが無限に湧いてしまう
+    for (const f of FRIENDS) expect(canImportRoom(f.id), f.id).toBe(false);
   });
 });

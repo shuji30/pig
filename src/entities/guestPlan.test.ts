@@ -64,3 +64,18 @@ describe('pickGuestAction', () => {
     expect(pickGuestAction(0.5, true)).toBe(pickGuestAction(0.5, true));
   });
 });
+
+describe('その部屋の主（帰らない人）', () => {
+  it('stay を立てると、どれだけ経っても帰らない', () => {
+    let state: GuestState = { phase: 'looking', elapsed: 0 };
+    for (let i = 0; i < 100; i++) state = advanceGuest(state, 5_000, true, false, true);
+    expect(state.phase).toBe('looking');
+    expect(state.elapsed).toBeGreaterThan(STAY_MS * 5);
+  });
+
+  it('stay を立てなければ、今までどおり必ず帰る', () => {
+    let state: GuestState = { phase: 'looking', elapsed: 0 };
+    for (let i = 0; i < 100; i++) state = advanceGuest(state, 5_000, true, true);
+    expect(state.phase).toBe('gone');
+  });
+});

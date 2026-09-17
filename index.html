@@ -50,6 +50,7 @@
         <button class="tool" data-panel="emote"><span>😊</span>きもち</button>
         <button class="tool" data-panel="wardrobe"><span>👕</span>きせかえ</button>
         <button class="tool" data-panel="room"><span>🎨</span>もようがえ</button>
+        <button class="tool" data-panel="friends"><span>👭</span>ともだち</button>
         <button class="tool" data-panel="share"><span>🔗</span>みせる</button>
       </nav>
 
@@ -63,6 +64,7 @@
           <button id="btn-like" class="like">❤️ いいね <b id="like-count">0</b></button>
           <button id="btn-visit-shot">📷 画像</button>
           <button id="btn-import">この部屋をとりこむ</button>
+          <button id="btn-next-friend">つぎのおへや</button>
           <button id="btn-home" class="primary">じぶんの部屋へ</button>
         </div>
       </div>
@@ -170,6 +172,16 @@
         </p>
       </section>
 
+      <!-- ともだち -->
+      <section class="panel" id="panel-friends" hidden>
+        <div class="panel-head">
+          <h2>ともだち</h2>
+          <button class="close" data-close>✕</button>
+        </div>
+        <div id="friend-grid" class="grid friends"></div>
+        <p class="note" id="friend-note"></p>
+      </section>
+
       <!-- あそびかた -->
       <section class="panel" id="panel-help" hidden>
         <div class="panel-head">
@@ -197,7 +209,11 @@
           <li>「きもち」の<b>おまかせ</b>を ON にしておくと、放置中にアバターが自分で動きます。</li>
           <li>「かぐ」の<b>ショップ</b>タブでコインを使って家具を買えます。いらない家具は売れます。</li>
           <li>👋 しばらく遊んでいると<b>おきゃくさん</b>が来ます。部屋を見てまわってスタンプを出し、
-            1分ほどで帰ります。<b>その日の最初の人はおみやげをくれます</b>。</li>
+            1分ほどで帰ります。<b>その日の最初の人はおみやげをくれます</b>。
+            来てくれた人は<b>ともだち</b>に残ります。</li>
+          <li>👭 「ともだち」から、来てくれた人の<b>おへやへ行けます</b>。
+            その人も部屋にいます。人のおへやは見るだけで、さわれません。
+            <b>つぎのおへや</b>で次の人の部屋へ移れます。</li>
           <li>🐾 「かぐ」の<b>ペット</b>タブから、ねこ・いぬ・うさぎ・ことりを<b>むかえられます</b>。
             部屋を移ってもついてきて、<b>押すとなでられます</b>。ペットは売れません。</li>
           <li>右上の<b>📋</b>から「きょうの やること」。達成するとコインがもらえます。</li>

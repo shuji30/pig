@@ -12,6 +12,7 @@ import {
   SKIN_COLORS,
   WALL_STYLES,
 } from '../config';
+import type { FriendDef } from '../data/friends';
 import { findDef, resolveWallId } from '../data/furniture';
 import { findPet } from '../data/pets';
 import { rotatedSize } from '../core/iso';
@@ -20,6 +21,8 @@ import type { AvatarLook, PlacedFurniture, PlacedWall, Recolor, RoomData, Rotati
 
 /** URL のハッシュに使う名前。`#r=...` の形で載る */
 const HASH_KEY = 'r';
+/** NPC の部屋へ行くときのハッシュ。`#g=<id>` の形で載る */
+const FRIEND_KEY = 'g';
 /**
  * いまの形式。古いものも読めるようにしておく。
  *   1: 部屋の広さを持たない（12×12 固定）
@@ -352,13 +355,67 @@ export function shareUrlFor(token: string): string {
 }
 
 export function shareTokenInLocation(): string | null {
+  return hashValue(HASH_KEY);
+}
+
+/** あそびに来る人（NPC）の部屋を見に行くときの id */
+export function friendIdInLocation(): string | null {
+  return hashValue(FRIEND_KEY);
+}
+
+function hashValue(key: string): string | null {
   const hash = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash;
   if (!hash) return null;
   for (const part of hash.split('&')) {
     const eq = part.indexOf('=');
-    if (eq > 0 && part.slice(0, eq) === HASH_KEY) return part.slice(eq + 1);
+    if (eq > 0 && part.slice(0, eq) === key) return part.slice(eq + 1);
   }
   return null;
+}
+
+/**
+ * NPC の部屋を、共有された部屋と同じ形に組む。
+ *
+ * こうしておくと、訪問中のしくみ（読み取り専用・訪問バー・じぶんの部屋へ）を
+ * そのまま使える。部屋の中身を URL に載せないのは意図で、載せると
+ * 「人からもらった共有 URL」と見分けが付かなくなり、とりこみを止められない
+ */
+export function sharedFromFriend(def: FriendDef): SharedRoom {
+  return {
+    floor: def.floor,
+    wall: def.wall,
+    size: def.size,
+    roomName: def.roomName,
+    roomNote: def.roomNote,
+    look: def.look,
+    items: def.items.map((i) => ({ ...i })),
+    wallItems: def.wallItems.map((w) => ({ ...w })),
+    floorPatch: {},
+    pet: def.pet,
+  };
+}
+
+/**
+ * その部屋をとりこめるか。
+ *
+ * とりこむと置いてある家具が持ちものに増える（引かれない）。人からもらった
+ * 共有 URL なら自分をだます行為で済むが、**ゲーム内のボタンで何度でも行ける
+ * ともだちの部屋**でそれを許すと、しまう→うる でコインが無限に湧く。
+ * この約束は state/share.test.ts で固定してある
+ */
+export function canImportRoom(visitFriendId: string | null): boolean {
+  return visitFriendId === null;
+}
+
+/**
+ * NPC の部屋へ行く。
+ *
+ * ハッシュだけを書き換えても**ページは読み込み直されない**（同一文書内の移動に
+ * なるため）。部屋の中身は起動時に決めているので、明示的に読み込み直す
+ */
+export function visitFriend(id: string) {
+  location.hash = `${FRIEND_KEY}=${encodeURIComponent(id)}`;
+  location.reload();
 }
 
 /** URL に共有データが載っていれば読み出す。載っていない・壊れていれば null */
@@ -368,7 +425,11 @@ export async function readSharedFromLocation(): Promise<SharedRoom | null> {
   return decodeShared(token);
 }
 
-/** 共有 URL から自分の部屋へ戻る */
+/**
+ * 共有 URL / ともだちの部屋から自分の部屋へ戻る。
+ * ハッシュを外すだけでは読み込み直されないので、消してから明示的に読み込み直す
+ */
 export function leaveShare() {
-  location.href = `${location.origin}${location.pathname}${location.search}`;
+  history.replaceState(null, '', `${location.pathname}${location.search}`);
+  location.reload();
 }
