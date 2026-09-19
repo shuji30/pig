@@ -1034,11 +1034,45 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setVrOn(false);
   }
 
-  /** VR に、いまの部屋とアバターの目線を渡す */
+  /** アバターを VR に渡せる形にする（自分・おきゃくさん・部屋の主 で共通） */
+  private vrPersonFrom(id: string, avatar: Avatar): import('../vr/vr').VrPerson {
+    const pos = avatar.groundPos;
+    const dir = avatar.facingDir;
+    return {
+      id,
+      gx: pos.gx,
+      gy: pos.gy,
+      baseHeightPx: avatar.baseHeightPx,
+      dgx: dir.dgx,
+      dgy: dir.dgy,
+      look: avatar.currentLook,
+      pose: avatar.currentPose,
+    };
+  }
+
+  /** VR に、いまの部屋とアバターの目線、いっしょに居る人とペットを渡す */
   private syncVr(): void {
     const vr = this.vr;
     if (!vr) return;
     vr.setRoom(this.cur, this.tod);
+
+    // おきゃくさんと、ともだちの部屋の主。中身はアバターなので同じ形で渡せる
+    const people: Array<import('../vr/vr').VrPerson> = [];
+    if (this.guest) people.push(this.vrPersonFrom('guest', this.guest.avatar));
+    if (this.roomOwner) people.push(this.vrPersonFrom('owner', this.roomOwner.avatar));
+    vr.setPeople(people);
+
+    const pet = this.pet;
+    if (pet) {
+      const pos = pet.groundPos;
+      const dir = pet.facingDir;
+      vr.setPets([
+        { id: 'pet', gx: pos.gx, gy: pos.gy, dgx: dir.dgx, dgy: dir.dgy, def: pet.petDef, pose: pet.currentPose },
+      ]);
+    } else {
+      vr.setPets([]);
+    }
+
     const pos = this.avatar.groundPos;
     const dir = this.avatar.facingDir;
     vr.setEye({

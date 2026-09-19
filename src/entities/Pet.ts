@@ -3,7 +3,7 @@ import { PartPainter, partsReady, type Painter } from '../render/parts';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
 import type { PetDef } from '../data/pets';
-import { drawPet } from '../render/petArt';
+import { drawPet, type PetPose } from '../render/petArt';
 import { decidePetAction, tileDistance, type PetAction } from './petBrain';
 
 type Tile = { gx: number; gy: number };
@@ -53,6 +53,10 @@ export class Pet {
 
   private facingBack = false;
   private flip = false;
+  /** いま向いている方向（マス座標の差）。VR の立体ペットに渡す */
+  private facing: { dgx: number; dgy: number } = { dgx: 1, dgy: 0 };
+  /** いま絵に使った姿勢。アバターと同じ理由で持っておく（Avatar.pose 参照） */
+  private pose: PetPose = { back: false, swing: 0, sitting: false, sleeping: false, breathe: 0 };
   private frame = 0;
   private animTime = 0;
   private dirty = true;
@@ -90,6 +94,21 @@ export class Pet {
 
   get isWalking(): boolean {
     return this.target !== null || this.path.length > 0;
+  }
+
+  /** いま向いている方向（マス座標の差） */
+  get facingDir(): { dgx: number; dgy: number } {
+    return this.facing;
+  }
+
+  /** 床の上での連続グリッド座標 */
+  get groundPos(): { gx: number; gy: number } {
+    return screenToGrid(this.container.x, this.container.y);
+  }
+
+  /** いま絵に使っている姿勢。VR の立体ペットがこれに合わせる */
+  get currentPose(): PetPose {
+    return this.pose;
   }
 
   get petDef(): PetDef {
@@ -283,6 +302,7 @@ export class Pet {
   }
 
   private setFacing(dgx: number, dgy: number) {
+    if (dgx !== 0 || dgy !== 0) this.facing = { dgx, dgy };
     if (dgx > 0) {
       this.facingBack = false;
       this.flip = false;
@@ -337,12 +357,13 @@ export class Pet {
     this.shadow.fillStyle(0x000000, Math.max(0.05, 0.13 - air * 0.008));
     this.shadow.fillEllipse(0, 0, 22 - air * 0.8, 9 - air * 0.3);
 
-    drawPet(g, this.def, {
+    this.pose = {
       back: this.facingBack,
       swing,
       sitting: this.sitting,
       sleeping: this.sleeping,
       breathe: walking ? 0 : [0, -1][this.breathFrame],
-    });
+    };
+    drawPet(g, this.def, this.pose);
   }
 }

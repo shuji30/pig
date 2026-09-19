@@ -204,7 +204,11 @@ export class Avatar3d {
   private parts: Parts | null = null;
   private lookKey = '';
 
-  constructor(look: AvatarLook) {
+  /**
+   * @param showHead 頭を出すか。自分は false（一人称で目玉が顔の前に浮くため）、
+   *   おきゃくさんや部屋の主は true
+   */
+  constructor(look: AvatarLook, private readonly showHead = false) {
     this.root.name = 'avatar3d';
     this.setLook(look);
   }
@@ -251,7 +255,7 @@ export class Avatar3d {
 
     // ---- 頭 ----
     const head = new THREE.Group();
-    head.visible = false;
+    head.visible = this.showHead;
     this.head = head;
     const skull = ball(HEAD_R, skin);
     head.add(skull);
@@ -261,9 +265,9 @@ export class Avatar3d {
     skull.position.y = up(1.6);
     head.add(buildFace(look, this.palette));
     head.add(buildHair(look, this.palette));
-    // ふだんは出さないので、影も落とさない（落とすと首なしの影になる）
+    // 自分の頭はふだん出さないので、影も落とさない（落とすと首なしの影になる）
     head.traverse((o) => {
-      (o as THREE.Mesh).castShadow = false;
+      (o as THREE.Mesh).castShadow = this.showHead;
     });
 
     // ---- 脚・くつ ----（絵では hipY から legLen(12) ぶん下へ）

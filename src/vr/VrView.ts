@@ -3,8 +3,11 @@ import type { Reflector } from 'three/addons/objects/Reflector.js';
 import type { TimeOfDay } from '../core/timeOfDay';
 import type { AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
+import type { PetDef } from '../data/pets';
+import type { PetPose } from '../render/petArt';
 import type { AvatarLook, RoomData } from '../types';
 import { Avatar3d } from './avatar3d';
+import { Pet3d } from './pet3d';
 import { scopeMirrorRender, updateMirrors } from './mirrors';
 import { buildRoom3d, disposeRoom3d } from './room3d';
 import { roomSignature } from './roomSignature';
@@ -26,6 +29,33 @@ export interface VrEye {
   dgy: number;
   /** 歩いているか（酔いどめのふちどりに使う） */
   moving: boolean;
+}
+
+/**
+ * 自分以外の人（おきゃくさん・部屋の主）。
+ * 中身はアバターと同じなので、立体も同じものを使い回す。
+ */
+export interface VrPerson {
+  /** 作り直さずに使い回すための目印。'guest' / 'owner' など */
+  id: string;
+  gx: number;
+  gy: number;
+  baseHeightPx: number;
+  dgx: number;
+  dgy: number;
+  look: AvatarLook;
+  pose: AvatarPose;
+}
+
+/** 連れているペット */
+export interface VrPet {
+  id: string;
+  gx: number;
+  gy: number;
+  dgx: number;
+  dgy: number;
+  def: PetDef;
+  pose: PetPose;
 }
 
 export interface VrViewOptions {
@@ -74,8 +104,11 @@ export class VrView {
 
   private room3d: THREE.Group | null = null;
   private mirrors: Reflector[] = [];
-  /** 自分のすがた。一人称では頭の中にカメラが入るので、頭は裏面になって消える */
+  /** 自分のすがた。一人称では頭の中にカメラが入るので、頭は鏡のときだけ出す */
   private readonly avatar3d: Avatar3d;
+  /** 自分以外の人とペット。id で使い回し、居なくなったら片付ける */
+  private readonly others = new Map<string, Avatar3d>();
+  private readonly pets = new Map<string, Pet3d>();
   private signature = '';
   private roomData: RoomData | null = null;
 
@@ -241,6 +274,61 @@ export class VrView {
     this.avatar3d.setPose(eye.pose);
   }
 
+  /**
+   * 自分以外の人を置く。毎フレーム「いま居る人」を渡すだけでよく、
+   * 増減の面倒はこちらで見る。
+   */
+  setPeople(people: VrPerson[]): void {
+    this.syncPool(this.others, people, (p) => {
+      const a = new Avatar3d(p.look, true); // 人の頭はふだんから見える
+      this.scene.add(a.root);
+      return a;
+    });
+    for (const p of people) {
+      const a = this.others.get(p.id);
+      if (!a) continue;
+      a.setLook(p.look);
+      a.setPose(p.pose);
+      a.root.position.set(p.gx, PX(p.baseHeightPx), p.gy);
+      a.root.rotation.y = Math.atan2(-p.dgx, -p.dgy) + Math.PI;
+    }
+  }
+
+  /** 連れているペットを置く */
+  setPets(pets: VrPet[]): void {
+    this.syncPool(this.pets, pets, (p) => {
+      const o = new Pet3d(p.def);
+      this.scene.add(o.root);
+      return o;
+    });
+    for (const p of pets) {
+      const o = this.pets.get(p.id);
+      if (!o) continue;
+      o.setDef(p.def);
+      o.setPose(p.def, p.pose);
+      o.root.position.set(p.gx, 0, p.gy);
+      o.root.rotation.y = Math.atan2(-p.dgx, -p.dgy) + Math.PI;
+    }
+  }
+
+  /** 居る人／居なくなった人に合わせて、立体を作ったり片付けたりする */
+  private syncPool<W extends { id: string }, T extends { root: THREE.Object3D; dispose(): void }>(
+    pool: Map<string, T>,
+    wanted: W[],
+    make: (item: W) => T,
+  ): void {
+    const ids = new Set(wanted.map((w) => w.id));
+    for (const [id, o] of pool) {
+      if (ids.has(id)) continue;
+      this.scene.remove(o.root);
+      o.dispose();
+      pool.delete(id);
+    }
+    for (const w of wanted) {
+      if (!pool.has(w.id)) pool.set(w.id, make(w));
+    }
+  }
+
   resize(width: number, height: number): void {
     this.renderer.setSize(width, height);
     this.camera.aspect = width / Math.max(1, height);
@@ -285,6 +373,10 @@ export class VrView {
     void this.renderer.xr.getSession()?.end();
     if (this.room3d) disposeRoom3d(this.room3d);
     this.avatar3d.dispose();
+    for (const o of this.others.values()) o.dispose();
+    for (const o of this.pets.values()) o.dispose();
+    this.others.clear();
+    this.pets.clear();
     this.renderer.dispose();
     this.canvas.remove();
   }

@@ -6,5 +6,5 @@
  * `assets/vr.js` として1本に切り出せるよう、VR に関わるものは
  * まとめてここから出す（`RoomScene.toggleVr()` 参照）。
  */
-export { VrView, type VrEye, type VrViewOptions } from './VrView';
+export { VrView, type VrEye, type VrPerson, type VrPet, type VrViewOptions } from './VrView';
 export { createVrOverlay, type VrOverlay } from './overlay';
