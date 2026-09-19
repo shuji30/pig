@@ -119,6 +119,14 @@ export class RoomScene extends Phaser.Scene {
 
   /** 訪問モード（共有 URL で開かれた）かどうか */
   private visiting = false;
+
+  /**
+   * VR モード。three.js ごと動的 import するので、使うまで読み込まれない
+   * （`src/vr/index.ts` のコメント参照）。読み込み中は 'loading'。
+   */
+  private vr: import('../vr/vr').VrView | null = null;
+  private vrOverlay: import('../vr/vr').VrOverlay | null = null;
+  private vrLoading = false;
   /** 訪問中に押された ❤️ の数。端末のなかだけの記録 */
   private likes = 0;
   /** 床を塗るときの柄。部屋の基本の柄を選ぶと「もとに戻す」になる */
@@ -384,6 +392,7 @@ export class RoomScene extends Phaser.Scene {
       },
       onTogglePaint: () => this.togglePaint(),
       onGoHome: () => this.travelTo(HOME_ROOM),
+      onToggleVr: () => void this.toggleVr(),
       onPaintAction: (act) => {
         if (act === 'clear') this.clearFloorPatch();
         else this.togglePaint(false);
@@ -689,6 +698,7 @@ export class RoomScene extends Phaser.Scene {
     this.roomOwner?.update(delta);
     this.auto.update(delta);
     this.syncUse();
+    this.syncVr();
     // 繰り返し再生の開始・終了に合わせてボタンとヒントを切り替える
     const loop = this.avatar.loopingMotion;
     if (loop !== this.lastLoopEmote) {
@@ -964,17 +974,96 @@ export class RoomScene extends Phaser.Scene {
 
   private blockedFn = (gx: number, gy: number) => this.furniture.isBlocked(gx, gy);
 
-  private walkTo(tile: Tile, onArrive?: () => void) {
+  // ---------------- VR（アバターの目線） ----------------
+
+  /**
+   * VR モードの出入り。
+   *
+   * three.js は Phaser とは別の大きなライブラリなので、ここではじめて読む。
+   * ゲームは裏で動かしたままにして、アバターの位置と向きを毎フレーム渡す。
+   * 「アバターを動かすのはゲーム、映すのが VR」という分担にしておくと、
+   * おまかせ・おきゃくさん・すわる が VR でもそのまま起きる。
+   */
+  private async toggleVr(): Promise<void> {
+    if (this.vr) {
+      this.closeVr();
+      return;
+    }
+    if (this.vrLoading) return;
+    this.vrLoading = true;
+    this.ui.setHint('VR を読みこみ中…');
+
+    try {
+      const { VrView, createVrOverlay } = await import('../vr/vr');
+      const view = new VrView({
+        onWalkTo: (gx, gy) => this.walkTo({ gx, gy }),
+        onBlocked: () => this.vrOverlay?.setNote('そこには行けないみたい…', 2200),
+        onExit: () => this.vrOverlay?.setNote('ヘッドセットから出ました', 2600),
+      });
+      this.vr = view;
+      this.vrOverlay = createVrOverlay(view.canvas, {
+        onExit: () => this.closeVr(),
+        onEnterVr: () => {
+          void view.enterVr().then((ok) => {
+            if (!ok) this.vrOverlay?.setNote('このブラウザからは VR に入れませんでした', 3200);
+          });
+        },
+      });
+      this.vrOverlay.setEnterVisible(false);
+      void VrView.isSupported().then((ok) => {
+        this.vrOverlay?.setEnterVisible(ok);
+        this.vrOverlay?.setNote(
+          ok ? '' : 'ヘッドセットが見つからないので、画面で見ています（ドラッグで見まわし）',
+        );
+      });
+      this.syncVr();
+      this.ui.setVrOn(true);
+      this.setHint();
+    } catch {
+      this.ui.toast('VR を読みこめなかったよ');
+    } finally {
+      this.vrLoading = false;
+    }
+  }
+
+  private closeVr(): void {
+    this.vr?.dispose();
+    this.vr = null;
+    this.vrOverlay?.remove();
+    this.vrOverlay = null;
+    this.ui.setVrOn(false);
+  }
+
+  /** VR に、いまの部屋とアバターの目線を渡す */
+  private syncVr(): void {
+    const vr = this.vr;
+    if (!vr) return;
+    vr.setRoom(this.cur, this.tod);
+    const pos = this.avatar.groundPos;
+    const dir = this.avatar.facingDir;
+    vr.setEye({
+      gx: pos.gx,
+      gy: pos.gy,
+      heightPx: this.avatar.eyeHeightPx,
+      dgx: dir.dgx,
+      dgy: dir.dgy,
+      moving: this.avatar.isWalking,
+    });
+  }
+
+  /** @returns そこへ行けたか（VR は画面のトーストが見えないので、戻り値で知らせる） */
+  private walkTo(tile: Tile, onArrive?: () => void): boolean {
     if (this.avatar.sittingOn) this.avatar.standUp();
     const path = findPath(this.avatar.tile, tile, this.size, this.size, this.blockedFn);
     if (!path) {
       this.ui.toast('そこには行けないみたい…');
-      return;
+      return false;
     }
     this.avatar.walk(path, () => {
       this.persist();
       onArrive?.();
     });
+    return true;
   }
 
   private onFurnitureClick(item: PlacedFurniture) {

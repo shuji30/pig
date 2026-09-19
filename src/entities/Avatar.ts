@@ -63,6 +63,10 @@ export class Avatar {
   /** 座っている家具の uid（立っているときは null） */
   sittingOn: string | null = null;
   private sitDepth = 0;
+  /** 座って持ち上がっているぶん(px)。立っていれば 0 */
+  private liftPx = 0;
+  /** いま向いている方向（マス座標の差）。VR のカメラの向きに使う */
+  private facing: { dgx: number; dgy: number } = { dgx: 1, dgy: 0 };
 
   tile: Tile;
 
@@ -147,8 +151,11 @@ export class Avatar {
     this.sittingOn = uid;
     this.sitDepth = depth;
     this.container.setPosition(pos.x, pos.y - lift);
+    this.liftPx = lift;
     this.facingBack = faceBack;
     this.flip = flip;
+    // sit() は facingBack/flip を直に入れるので、向きの記録もここで合わせる
+    this.facing = faceBack ? (flip ? { dgx: -1, dgy: 0 } : { dgx: 0, dgy: -1 }) : flip ? { dgx: 0, dgy: 1 } : { dgx: 1, dgy: 0 };
     this.dirty = true;
     this.updateDepth();
   }
@@ -170,6 +177,7 @@ export class Avatar {
     if (!this.sittingOn) return;
     this.lying = false;
     this.sittingOn = null;
+    this.liftPx = 0;
     const p = tileCenter(this.tile.gx, this.tile.gy);
     this.container.setPosition(p.x, p.y);
     this.dirty = true;
@@ -179,6 +187,7 @@ export class Avatar {
   /** 座った状態から立ち上がって位置を再設定 */
   placeAt(gx: number, gy: number) {
     this.tile = { gx, gy };
+    this.liftPx = 0;
     const p = tileCenter(gx, gy);
     this.container.setPosition(p.x, p.y);
     this.updateDepth();
@@ -396,6 +405,7 @@ export class Avatar {
   }
 
   private setFacing(dgx: number, dgy: number) {
+    if (dgx !== 0 || dgy !== 0) this.facing = { dgx, dgy };
     if (dgx > 0) {
       this.facingBack = false;
       this.flip = false;
@@ -415,6 +425,32 @@ export class Avatar {
   /** 家具の方を向かせる（マス座標の差を渡す） */
   faceToward(dgx: number, dgy: number) {
     this.setFacing(dgx, dgy);
+  }
+
+  /** いま向いている方向（マス座標の差）。4方向のどれか */
+  get facingDir(): { dgx: number; dgy: number } {
+    return this.facing;
+  }
+
+  /**
+   * 床の上での連続グリッド座標。
+   * 座っているときは持ち上げたぶんを戻してから逆変換する
+   * （画面 y には座面の高さが入っているので、そのままだと位置がずれる）。
+   */
+  get groundPos(): { gx: number; gy: number } {
+    return screenToGrid(this.container.x, this.container.y + this.liftPx);
+  }
+
+  /**
+   * 足もとからの目の高さ(px)。VR のカメラの高さに使う。
+   *
+   * 絵のほうは `hipY`（立ち -14 / 座り -1）を起点に `headY = hipY - 28`、
+   * 目は `headY + 2.4`（`render/avatarArt.ts`）。座っているぶんは
+   * 座面の高さをそのまま足す。
+   */
+  get eyeHeightPx(): number {
+    const hipY = this.sittingOn !== null ? -1 : -14;
+    return this.liftPx - (hipY - 28 + 2.4);
   }
 
   setDepthResolver(fn: (box: { gx0: number; gx1: number; gy0: number; gy1: number }) => number) {

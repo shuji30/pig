@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <title>sprite render</title>
+    <!--
+      この道具は素の静的サーバー（python3 -m http.server）で開くので、
+      'three' というむき出しの名前をブラウザが解決できない。
+      ゲーム側（Vite）と同じ名前で書けるように、ここで対応表を置いている。
+    -->
+    <script type="importmap">
+      { "imports": { "three": "/node_modules/three/build/three.module.js" } }
+    </script>
     <style>
       body { margin: 0; background: #2b2430; }
     </style>

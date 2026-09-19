@@ -99,6 +99,8 @@ export interface UiHandlers {
   onPaintAction(act: 'clear' | 'done'): void;
   /** 🌍 でちきゅうへ戻る */
   onGoHome(): void;
+  /** 🥽 でアバターの目線（VR）の出入り */
+  onToggleVr(): void;
 }
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -154,6 +156,7 @@ export class Ui {
     $('btn-zoom-in').addEventListener('click', () => this.handlers.onZoom(1.15));
     $('btn-zoom-out').addEventListener('click', () => this.handlers.onZoom(1 / 1.15));
     $('btn-center').addEventListener('click', () => this.handlers.onCenter());
+    $('btn-vr').addEventListener('click', () => this.handlers.onToggleVr());
     document.querySelectorAll<HTMLButtonElement>('[data-close]').forEach((btn) => {
       btn.addEventListener('click', () => this.closePanels());
     });
@@ -878,6 +881,13 @@ export class Ui {
 
   setHint(text: string) {
     $('hint').textContent = text;
+  }
+
+  /** VR モードに入っているか。ボタンの見た目と説明を切り替える */
+  setVrOn(on: boolean) {
+    const btn = $('btn-vr');
+    btn.classList.toggle('active', on);
+    btn.title = on ? 'VR をとじる' : 'アバターの目線で見る';
   }
 
   toast(text: string) {
