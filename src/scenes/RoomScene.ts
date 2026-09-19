@@ -13,6 +13,7 @@ import {
 } from '../config';
 import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
+import { makeStampIconCanvas } from '../render/stampArt';
 import { currentTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { screenToWallSlot, type WallSlot } from '../core/wall';
 import { getDef, interactionsOf, spriteSheets, wallSpriteSheets } from '../data/furniture';
@@ -1034,6 +1035,25 @@ export class RoomScene extends Phaser.Scene {
     this.ui.setVrOn(false);
   }
 
+  /** VR の吹き出しに貼るスタンプの絵。焼き直さないよう id で覚えておく */
+  private stampIcons = new Map<string, HTMLCanvasElement>();
+
+  /**
+   * 頭の上に出ているものを VR に渡せる形にする。
+   * スタンプの絵は Phaser のシーンが要るので、ここで作って渡す。
+   */
+  private vrBubbleFrom(avatar: Avatar): import('../vr/vr').VrBubble | null {
+    const bubble = avatar.currentBubble;
+    if (!bubble) return null;
+    if (bubble.kind === 'text') return { kind: 'text', text: bubble.text };
+
+    const id = bubble.stamp.id;
+    const cached = this.stampIcons.get(id);
+    const icon = cached ?? makeStampIconCanvas(this, bubble.stamp, 160);
+    if (!cached) this.stampIcons.set(id, icon);
+    return { kind: 'stamp', id, icon };
+  }
+
   /** アバターを VR に渡せる形にする（自分・おきゃくさん・部屋の主 で共通） */
   private vrPersonFrom(id: string, avatar: Avatar): import('../vr/vr').VrPerson {
     const pos = avatar.groundPos;
@@ -1047,6 +1067,7 @@ export class RoomScene extends Phaser.Scene {
       dgy: dir.dgy,
       look: avatar.currentLook,
       pose: avatar.currentPose,
+      bubble: this.vrBubbleFrom(avatar),
     };
   }
 
@@ -1082,6 +1103,7 @@ export class RoomScene extends Phaser.Scene {
       baseHeightPx: this.avatar.baseHeightPx,
       look: this.avatar.currentLook,
       pose: this.avatar.currentPose,
+      bubble: this.vrBubbleFrom(this.avatar),
       dgx: dir.dgx,
       dgy: dir.dgy,
       moving: this.avatar.isWalking,
