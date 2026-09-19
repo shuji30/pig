@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { PartPainter, partsReady, type Painter } from '../render/parts';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
-import { drawAvatarBody } from '../render/avatarArt';
+import { drawAvatarBody, restPose, type AvatarPose } from '../render/avatarArt';
 import { drawStamp } from '../render/stampArt';
 import type { StampDef } from '../data/stamps';
 import { getMotion, type FaceKind, type MotionDef, type MotionKind } from '../data/motions';
@@ -67,6 +67,11 @@ export class Avatar {
   private liftPx = 0;
   /** いま向いている方向（マス座標の差）。VR のカメラの向きに使う */
   private facing: { dgx: number; dgy: number } = { dgx: 1, dgy: 0 };
+  /**
+   * いま絵に使った姿勢。VR の立体アバターが同じ姿勢をとるために持っておく
+   * （歩きの振り・呼吸・モーションが連続した値なので、状態から作り直せない）。
+   */
+  private pose: AvatarPose = restPose();
 
   tile: Tile;
 
@@ -432,6 +437,21 @@ export class Avatar {
     return this.facing;
   }
 
+  /** いま絵に使っている姿勢。VR の立体アバターがこれに合わせる */
+  get currentPose(): AvatarPose {
+    return this.pose;
+  }
+
+  /** いまの見た目（きせかえ） */
+  get currentLook(): AvatarLook {
+    return this.look;
+  }
+
+  /** 足もとの高さ(px)。座っていれば座面のぶん持ち上がる */
+  get baseHeightPx(): number {
+    return this.liftPx;
+  }
+
   /**
    * 床の上での連続グリッド座標。
    * 座っているときは持ち上げたぶんを戻してから逆変換する
@@ -708,7 +728,7 @@ export class Avatar {
       this.shadow.fillEllipse(tx * 0.4, 1, 30 - air * 0.9, 12 - air * 0.36);
     }
 
-    drawAvatarBody(g, look, {
+    this.pose = {
       sitting,
       back,
       face,
@@ -726,6 +746,7 @@ export class Avatar {
       handYFix,
       dxL,
       dxR,
-    });
+    };
+    drawAvatarBody(g, look, this.pose);
   }
 }

@@ -7,7 +7,9 @@ import { findDef, isWallDef } from '../data/furniture';
 import { recolored } from '../render/furnitureTexture';
 import { PX, SHAPES, WALL_SHAPES } from '../render/models3d.js';
 import type { FurnitureDef, PlacedFurniture, PlacedWall, RoomData } from '../types';
+import { floorMirrorFor, isMirror, stripKnobs, wallMirrorFor } from './mirrors';
 import { floorTexture, toned, WALL_HEIGHT, wallTexture3d } from './surfaces';
+import type { Reflector } from 'three/addons/objects/Reflector.js';
 
 /**
  * 部屋を立体で組み立てる。
@@ -101,6 +103,14 @@ function placeFurniture(item: PlacedFurniture, cache: PaintCache): THREE.Object3
   pivot.position.set(item.gx + gw / 2, 0, item.gy + gd / 2);
 
   paint(pivot, def, cache);
+  // 鏡は塗り終わったあとで足す（反射面は塗る対象ではないし、影も落とさない）
+  if (isMirror(def)) {
+    const reflector = floorMirrorFor(def);
+    if (reflector) {
+      stripKnobs(model); // 引き出しのつまみが鏡面に乗ってしまう
+      model.add(reflector);
+    }
+  }
   return pivot;
 }
 
@@ -134,6 +144,10 @@ function placeWallItem(item: PlacedWall, cache: PaintCache): THREE.Object3D | nu
   }
 
   paint(pivot, def, cache);
+  if (isMirror(def)) {
+    const reflector = wallMirrorFor(def);
+    if (reflector) model.add(reflector);
+  }
   return pivot;
 }
 
@@ -267,11 +281,17 @@ function lighting(room: RoomData, tod: TimeOfDay | null): THREE.Group {
   return g;
 }
 
+export interface Room3d {
+  group: THREE.Group;
+  /** 部屋にある鏡。いちばん近いものだけを生かすために持っておく */
+  mirrors: Reflector[];
+}
+
 /**
  * 部屋まるごとの立体。呼ぶたびに作り直す（模様替えのたびに差し替える）。
  * 使い終わったら `disposeRoom3d()` を呼ぶこと。
  */
-export function buildRoom3d(room: RoomData, tod: TimeOfDay | null): THREE.Group {
+export function buildRoom3d(room: RoomData, tod: TimeOfDay | null): Room3d {
   const g = new THREE.Group();
   g.name = 'room3d';
   g.add(shell(room, tod));
@@ -286,7 +306,12 @@ export function buildRoom3d(room: RoomData, tod: TimeOfDay | null): THREE.Group 
     const o = placeWallItem(item, cache);
     if (o) g.add(o);
   }
-  return g;
+
+  const mirrors: Reflector[] = [];
+  g.traverse((o) => {
+    if (o.name === 'mirror') mirrors.push(o as Reflector);
+  });
+  return { group: g, mirrors };
 }
 
 /**
@@ -299,6 +324,11 @@ export function buildRoom3d(room: RoomData, tod: TimeOfDay | null): THREE.Group 
 export function disposeRoom3d(root: THREE.Object3D): void {
   const seen = new Set<THREE.Material | THREE.Texture>();
   root.traverse((o) => {
+    // 鏡はレンダーターゲットを持っているので、自前の後始末に任せる
+    if (o.name === 'mirror') {
+      (o as Reflector).dispose();
+      return;
+    }
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     mesh.geometry?.dispose();

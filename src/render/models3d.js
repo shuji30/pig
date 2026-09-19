@@ -151,6 +151,8 @@ function blob(g, u, v, z, rx, ry, material) {
 function stud(g, u, v, z, rpx, material) {
   const R = rpx / PX_PER_UNIT;
   const m = new THREE.Mesh(new THREE.SphereGeometry(R, 14, 10), material);
+  // 名前だけ付けておく。VR で鏡にするときに外すため（焼いた絵は変わらない）
+  m.name = 'stud';
   m.position.set(u, PX(z), v);
   m.castShadow = true;
   g.add(m);

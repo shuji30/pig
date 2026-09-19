@@ -1,7 +1,11 @@
 import * as THREE from 'three';
+import type { Reflector } from 'three/addons/objects/Reflector.js';
 import type { TimeOfDay } from '../core/timeOfDay';
+import type { AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
-import type { RoomData } from '../types';
+import type { AvatarLook, RoomData } from '../types';
+import { Avatar3d } from './avatar3d';
+import { scopeMirrorRender, updateMirrors } from './mirrors';
 import { buildRoom3d, disposeRoom3d } from './room3d';
 import { roomSignature } from './roomSignature';
 
@@ -10,8 +14,13 @@ export interface VrEye {
   /** 連続グリッド座標（マスの中心なら 3.5 のような値） */
   gx: number;
   gy: number;
-  /** 足もとからの目の高さ(px) */
+  /** 床からの目の高さ(px)。座っていれば座面のぶんも入っている */
   heightPx: number;
+  /** 足もとの高さ(px)。立っていれば 0、座っていれば座面の高さ */
+  baseHeightPx: number;
+  /** いまの見た目と姿勢。立体アバターがこれに合わせる */
+  look: AvatarLook;
+  pose: AvatarPose;
   /** 向いている方向（マス座標の差。4方向のどれか） */
   dgx: number;
   dgy: number;
@@ -64,10 +73,13 @@ export class VrView {
   private readonly controllers: THREE.Group[] = [];
 
   private room3d: THREE.Group | null = null;
+  private mirrors: Reflector[] = [];
+  /** 自分のすがた。一人称では頭の中にカメラが入るので、頭は裏面になって消える */
+  private readonly avatar3d: Avatar3d;
   private signature = '';
   private roomData: RoomData | null = null;
 
-  private eye: VrEye = { gx: 0.5, gy: 0.5, heightPx: 39.6, dgx: 1, dgy: 0, moving: false };
+  private eye: VrEye | null = null;
   /** セッションの最初に測った、遊んでいる人の目の高さ(m) */
   private baselineEyeY = 1.6;
   private measured = false;
@@ -84,9 +96,10 @@ export class VrView {
   private marker: THREE.Mesh;
 
   private readonly raycaster = new THREE.Raycaster();
+  private readonly eyeWorld = new THREE.Vector3();
   private readonly floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-  constructor(private readonly options: VrViewOptions = {}) {
+  constructor(look: AvatarLook, private readonly options: VrViewOptions = {}) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
@@ -107,6 +120,9 @@ export class VrView {
 
     this.marker = this.buildMarker();
     this.scene.add(this.marker);
+
+    this.avatar3d = new Avatar3d(look);
+    this.scene.add(this.avatar3d.root);
 
     for (let i = 0; i < 2; i++) {
       const controller = this.renderer.xr.getController(i);
@@ -201,7 +217,13 @@ export class VrView {
       this.scene.remove(this.room3d);
       disposeRoom3d(this.room3d);
     }
-    this.room3d = buildRoom3d(room, tod);
+    const built = buildRoom3d(room, tod);
+    this.room3d = built.group;
+    this.mirrors = built.mirrors;
+    // 自分の頭は鏡のときだけ出す。ふちどりとねらい先はカメラの子なので鏡には出さない
+    for (const m of this.mirrors) {
+      scopeMirrorRender(m, { show: [this.avatar3d.head], hide: [this.vignette, this.marker] });
+    }
     // 左右の目が内向きに傾いたヘッドセット（Pimax など）では、three.js が
     // 左右をまとめて作るカリング用の視錐台が実際より狭くなり、視界の外縁で
     // ものが消える。置くのは部屋ひとつぶんなので、視錐台カリングは切ってしまう
@@ -212,9 +234,11 @@ export class VrView {
     this.scene.background = new THREE.Color(tod === 'night' ? 0x0d1430 : 0xd9e6f2);
   }
 
-  /** アバターの目の位置。毎フレーム渡す */
+  /** アバターの目の位置と姿勢。毎フレーム渡す */
   setEye(eye: VrEye): void {
     this.eye = eye;
+    this.avatar3d.setLook(eye.look);
+    this.avatar3d.setPose(eye.pose);
   }
 
   resize(width: number, height: number): void {
@@ -260,6 +284,7 @@ export class VrView {
     this.renderer.setAnimationLoop(null);
     void this.renderer.xr.getSession()?.end();
     if (this.room3d) disposeRoom3d(this.room3d);
+    this.avatar3d.dispose();
     this.renderer.dispose();
     this.canvas.remove();
   }
@@ -308,11 +333,20 @@ export class VrView {
    * 合わせると θ = atan2(-dgx, -dgy) になる。
    */
   private facingYaw(): number {
-    return Math.atan2(-this.eye.dgx, -this.eye.dgy);
+    const eye = this.eye;
+    return eye ? Math.atan2(-eye.dgx, -eye.dgy) : 0;
   }
 
   private frame(): void {
-    const eyeY = PX(this.eye.heightPx);
+    const eye = this.eye;
+    if (!eye) return; // ゲームから最初の位置が来るまでは描かない
+
+    const eyeY = PX(eye.heightPx);
+
+    // 自分のすがた。床の上（座っていれば座面の上）に、向いている方へ立たせる。
+    // facingYaw() は「-z を向くカメラ」用の角度なので、顔が +z の体は半回転ぶんずらす
+    this.avatar3d.root.position.set(eye.gx, PX(eye.baseHeightPx), eye.gy);
+    this.avatar3d.root.rotation.y = this.facingYaw() + Math.PI;
 
     if (this.presenting) {
       // 遊んでいる人の実際の目の高さを最初に測って、その差だけリグを沈める。
@@ -327,10 +361,10 @@ export class VrView {
           this.measured = true;
         }
       }
-      this.rig.position.set(this.eye.gx, eyeY - this.baselineEyeY, this.eye.gy);
+      this.rig.position.set(eye.gx, eyeY - this.baselineEyeY, eye.gy);
       this.rig.rotation.y = this.facingYaw();
     } else {
-      this.rig.position.set(this.eye.gx, 0, this.eye.gy);
+      this.rig.position.set(eye.gx, 0, eye.gy);
       this.rig.rotation.y = 0;
       this.camera.position.set(0, eyeY, 0);
       this.camera.rotation.set(this.pitch, this.facingYaw() + this.yaw, 0, 'YXZ');
@@ -339,8 +373,12 @@ export class VrView {
     this.updateMarker();
     this.fitVignette();
 
+    // 鏡はいちばん近い1枚だけを生かす（1枚ごとにシーンをもう1回描くため）
+    this.camera.getWorldPosition(this.eyeWorld);
+    updateMirrors(this.mirrors, this.eyeWorld);
+
     // 歩いているあいだだけ、ふちを暗くする（外から動かされる移動は酔いやすい）
-    const target = this.eye.moving ? VIGNETTE_MAX : 0;
+    const target = eye.moving ? VIGNETTE_MAX : 0;
     this.vignetteAmount += (target - this.vignetteAmount) * 0.12;
     (this.vignette.material as THREE.MeshBasicMaterial).opacity = this.vignetteAmount;
 
