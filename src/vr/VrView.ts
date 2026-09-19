@@ -1,0 +1,412 @@
+import * as THREE from 'three';
+import type { TimeOfDay } from '../core/timeOfDay';
+import { PX } from '../render/models3d.js';
+import type { RoomData } from '../types';
+import { buildRoom3d, disposeRoom3d } from './room3d';
+import { roomSignature } from './roomSignature';
+
+/** アバターの目。ゲーム側から毎フレーム渡してもらう */
+export interface VrEye {
+  /** 連続グリッド座標（マスの中心なら 3.5 のような値） */
+  gx: number;
+  gy: number;
+  /** 足もとからの目の高さ(px) */
+  heightPx: number;
+  /** 向いている方向（マス座標の差。4方向のどれか） */
+  dgx: number;
+  dgy: number;
+  /** 歩いているか（酔いどめのふちどりに使う） */
+  moving: boolean;
+}
+
+export interface VrViewOptions {
+  /**
+   * 床をねらってトリガーを引いたとき。ゲーム側の歩行につなぐ。
+   * 行けなかったら false を返すと、VR の中に知らせを出す
+   */
+  onWalkTo?(gx: number, gy: number): boolean;
+  /** VR から抜けたとき（ヘッドセットのメニューから抜けた場合も呼ばれる） */
+  onExit?(): void;
+  /** 行けないところをねらったとき。ゲームのトーストは VR の中では見えない */
+  onBlocked?(): void;
+}
+
+/**
+ * 歩いているときにふちを暗くする強さ。
+ *
+ * このゲームの歩きは 110px/秒 ＝ だいたい 3m/秒 で、走っているのに近い。
+ * 自分で動かしていない移動でこの速さは酔いやすいので、視界のまわりを
+ * 暗くして「動いて見える範囲」を減らす。おまかせ（自動で歩く）を切ると
+ * ほとんど出なくなる。
+ */
+const VIGNETTE_MAX = 0.5;
+/** ふちどりを置くカメラからの距離(m) */
+const VIGNETTE_DISTANCE = 0.3;
+
+/**
+ * 部屋をアバターの目の高さから立体で見せる。
+ *
+ * ゲーム（Phaser）はそのまま動かしたまま、その上に WebGL の画面をかぶせる。
+ * アバターを動かすのはあくまでゲームのほうで、ここは**位置をもらって映すだけ**。
+ * そうしておくと、おまかせ・おきゃくさん・すわる が VR でもそのまま起きる。
+ *
+ * カメラの高さはアバターの目に合わせる（立ちで 39.6px ≒ 1.0m）。
+ * WebXR の local-floor は「遊んでいる人の実際の身長」で返ってくるので、
+ * セッションの最初に測って、その差だけリグを沈めている。
+ */
+export class VrView {
+  readonly canvas: HTMLCanvasElement;
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly scene = new THREE.Scene();
+  private readonly camera: THREE.PerspectiveCamera;
+  /** カメラとコントローラーをまとめた入れもの。これを動かして「目線」を作る */
+  private readonly rig = new THREE.Group();
+  private readonly controllers: THREE.Group[] = [];
+
+  private room3d: THREE.Group | null = null;
+  private signature = '';
+  private roomData: RoomData | null = null;
+
+  private eye: VrEye = { gx: 0.5, gy: 0.5, heightPx: 39.6, dgx: 1, dgy: 0, moving: false };
+  /** セッションの最初に測った、遊んでいる人の目の高さ(m) */
+  private baselineEyeY = 1.6;
+  private measured = false;
+
+  /** ヘッドセットが無いときの見まわし */
+  private yaw = 0;
+  private pitch = 0;
+  private dragging = false;
+  private lastPointer = { x: 0, y: 0 };
+
+  private vignette: THREE.Mesh;
+  private vignetteAmount = 0;
+  /** コントローラーでねらっている床のマスを示す輪 */
+  private marker: THREE.Mesh;
+
+  private readonly raycaster = new THREE.Raycaster();
+  private readonly floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+  constructor(private readonly options: VrViewOptions = {}) {
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.xr.enabled = true;
+    this.renderer.xr.setReferenceSpaceType('local-floor');
+    this.canvas = this.renderer.domElement;
+
+    this.camera = new THREE.PerspectiveCamera(72, 1, 0.05, 120);
+    this.rig.add(this.camera);
+    this.scene.add(this.rig);
+    this.scene.background = new THREE.Color(0xd9e6f2);
+
+    this.vignette = this.buildVignette();
+    this.camera.add(this.vignette);
+
+    this.marker = this.buildMarker();
+    this.scene.add(this.marker);
+
+    for (let i = 0; i < 2; i++) {
+      const controller = this.renderer.xr.getController(i);
+      controller.addEventListener('selectstart', () => this.onSelect(controller));
+      controller.addEventListener('connected', () => {
+        if (!controller.getObjectByName('ray')) controller.add(this.buildRay());
+      });
+      this.rig.add(controller);
+      this.controllers.push(controller);
+    }
+
+    this.renderer.xr.addEventListener('sessionstart', () => {
+      this.measured = false;
+      this.yaw = 0;
+      this.pitch = 0;
+    });
+    this.renderer.xr.addEventListener('sessionend', () => this.options.onExit?.());
+
+    this.bindPointer();
+    window.addEventListener('resize', this.onResize);
+    this.onResize();
+    this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  private readonly onResize = (): void => {
+    this.resize(window.innerWidth, window.innerHeight);
+  };
+
+  // ---------------- 組み立て ----------------
+
+  /** 歩いているあいだ、視界のふちを暗くする輪。カメラの子にして常に正面に置く */
+  private buildVignette(): THREE.Mesh {
+    const size = 256;
+    const el = document.createElement('canvas');
+    el.width = size;
+    el.height = size;
+    const ctx = el.getContext('2d');
+    if (ctx) {
+      const grad = ctx.createRadialGradient(size / 2, size / 2, size * 0.2, size / 2, size / 2, size * 0.52);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(0.72, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+    }
+    const texture = new THREE.CanvasTexture(el);
+    // 大きさは毎フレーム視錐台に合わせる（ヘッドセットごとに視野が違うため）
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0, depthTest: false, depthWrite: false }),
+    );
+    mesh.position.z = -VIGNETTE_DISTANCE;
+    mesh.renderOrder = 10_000;
+    mesh.frustumCulled = false;
+    return mesh;
+  }
+
+  /** 床のねらい先。コントローラーの光線だけでは、どこに当たるか分からない */
+  private buildMarker(): THREE.Mesh {
+    const mesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 0.44, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff9ec4, transparent: true, opacity: 0.85, depthTest: false }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.renderOrder = 9000;
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    return mesh;
+  }
+
+  private buildRay(): THREE.Line {
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, -6),
+    ]);
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xffc7dd, transparent: true, opacity: 0.85 }));
+    line.name = 'ray';
+    line.frustumCulled = false;
+    return line;
+  }
+
+  // ---------------- ゲームからの入力 ----------------
+
+  /** 部屋を差し替える。中身が同じなら何もしない */
+  setRoom(room: RoomData, tod: TimeOfDay | null): void {
+    const sig = roomSignature(room) + '|' + (tod ?? '-');
+    if (sig === this.signature && this.room3d) return;
+    this.signature = sig;
+    this.roomData = room;
+
+    if (this.room3d) {
+      this.scene.remove(this.room3d);
+      disposeRoom3d(this.room3d);
+    }
+    this.room3d = buildRoom3d(room, tod);
+    // 左右の目が内向きに傾いたヘッドセット（Pimax など）では、three.js が
+    // 左右をまとめて作るカリング用の視錐台が実際より狭くなり、視界の外縁で
+    // ものが消える。置くのは部屋ひとつぶんなので、視錐台カリングは切ってしまう
+    this.room3d.traverse((o) => {
+      o.frustumCulled = false;
+    });
+    this.scene.add(this.room3d);
+    this.scene.background = new THREE.Color(tod === 'night' ? 0x0d1430 : 0xd9e6f2);
+  }
+
+  /** アバターの目の位置。毎フレーム渡す */
+  setEye(eye: VrEye): void {
+    this.eye = eye;
+  }
+
+  resize(width: number, height: number): void {
+    this.renderer.setSize(width, height);
+    this.camera.aspect = width / Math.max(1, height);
+    this.camera.updateProjectionMatrix();
+  }
+
+  // ---------------- VR の出入り ----------------
+
+  static async isSupported(): Promise<boolean> {
+    try {
+      return (await navigator.xr?.isSessionSupported('immersive-vr')) ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  get presenting(): boolean {
+    return this.renderer.xr.isPresenting;
+  }
+
+  /** ヘッドセットに入る。対応していなければ false（画面のプレビューはそのまま使える） */
+  async enterVr(): Promise<boolean> {
+    if (!navigator.xr) return false;
+    try {
+      const session = await navigator.xr.requestSession('immersive-vr', {
+        optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'],
+      });
+      await this.renderer.xr.setSession(session);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async exitVr(): Promise<void> {
+    await this.renderer.xr.getSession()?.end();
+  }
+
+  dispose(): void {
+    window.removeEventListener('resize', this.onResize);
+    this.renderer.setAnimationLoop(null);
+    void this.renderer.xr.getSession()?.end();
+    if (this.room3d) disposeRoom3d(this.room3d);
+    this.renderer.dispose();
+    this.canvas.remove();
+  }
+
+  // ---------------- 見まわし（ヘッドセットが無いとき） ----------------
+
+  private bindPointer(): void {
+    const el = this.canvas;
+    el.addEventListener('pointerdown', (e) => {
+      if (this.presenting) return;
+      this.dragging = true;
+      this.lastPointer = { x: e.clientX, y: e.clientY };
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!this.dragging || this.presenting) return;
+      this.yaw -= (e.clientX - this.lastPointer.x) * 0.005;
+      this.pitch -= (e.clientY - this.lastPointer.y) * 0.005;
+      this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch));
+      this.lastPointer = { x: e.clientX, y: e.clientY };
+    });
+    const stop = () => {
+      this.dragging = false;
+    };
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('pointercancel', stop);
+    el.addEventListener('click', (e) => {
+      if (this.presenting || !this.options.onWalkTo) return;
+      const rect = el.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      this.raycaster.setFromCamera(ndc, this.camera);
+      this.walkAtRay();
+    });
+  }
+
+  // ---------------- 毎フレーム ----------------
+
+  /**
+   * アバターが向いている方へカメラを向けるための y 回転（ラジアン）。
+   *
+   * ワールドは +x が gx、+z が gy。カメラは自分の -z を向くので、
+   * y まわりに θ 回すと前は (-sinθ, 0, -cosθ)。これを (dgx, dgy) に
+   * 合わせると θ = atan2(-dgx, -dgy) になる。
+   */
+  private facingYaw(): number {
+    return Math.atan2(-this.eye.dgx, -this.eye.dgy);
+  }
+
+  private frame(): void {
+    const eyeY = PX(this.eye.heightPx);
+
+    if (this.presenting) {
+      // 遊んでいる人の実際の目の高さを最初に測って、その差だけリグを沈める。
+      // こうするとキャラクターの背の高さで部屋が見える
+      const xrCam = this.renderer.xr.getCamera();
+      if (!this.measured && xrCam.cameras.length > 0) {
+        const p = new THREE.Vector3();
+        xrCam.getWorldPosition(p);
+        const local = p.y - this.rig.position.y;
+        if (local > 0.5) {
+          this.baselineEyeY = local;
+          this.measured = true;
+        }
+      }
+      this.rig.position.set(this.eye.gx, eyeY - this.baselineEyeY, this.eye.gy);
+      this.rig.rotation.y = this.facingYaw();
+    } else {
+      this.rig.position.set(this.eye.gx, 0, this.eye.gy);
+      this.rig.rotation.y = 0;
+      this.camera.position.set(0, eyeY, 0);
+      this.camera.rotation.set(this.pitch, this.facingYaw() + this.yaw, 0, 'YXZ');
+    }
+
+    this.updateMarker();
+    this.fitVignette();
+
+    // 歩いているあいだだけ、ふちを暗くする（外から動かされる移動は酔いやすい）
+    const target = this.eye.moving ? VIGNETTE_MAX : 0;
+    this.vignetteAmount += (target - this.vignetteAmount) * 0.12;
+    (this.vignette.material as THREE.MeshBasicMaterial).opacity = this.vignetteAmount;
+
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * ふちどりを、いま使っているカメラの視錐台いっぱいに広げる。
+   *
+   * ヘッドセットによって視野角がまるで違う（Pimax は 100度を超える）ので、
+   * 決め打ちの大きさだと「画面に届かない」か「真ん中まで暗い」のどちらかになる。
+   * 射影行列から、その距離での見えている範囲を求めて合わせる。
+   */
+  private fitVignette(): void {
+    const cam = this.presenting ? this.renderer.xr.getCamera() : this.camera;
+    const e = cam.projectionMatrix.elements;
+    if (!e[0] || !e[5]) return;
+    const halfW = VIGNETTE_DISTANCE / e[0];
+    const halfH = VIGNETTE_DISTANCE / e[5];
+    this.vignette.scale.set(halfW * 2.1, halfH * 2.1, 1);
+  }
+
+  // ---------------- 床をねらって歩く ----------------
+
+  /** コントローラーの光線を raycaster に入れる */
+  private aimFrom(controller: THREE.Object3D): void {
+    const m = new THREE.Matrix4().extractRotation(controller.matrixWorld);
+    this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+    this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(m);
+  }
+
+  private onSelect(controller: THREE.Group): void {
+    if (!this.options.onWalkTo) return;
+    this.aimFrom(controller);
+    this.walkAtRay();
+  }
+
+  /** ねらっているマス。床の外・部屋の外なら null */
+  private aimedTile(): { gx: number; gy: number } | null {
+    const hit = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(this.floorPlane, hit)) return null;
+    const size = this.roomData?.size ?? 12;
+    const gx = Math.floor(hit.x);
+    const gy = Math.floor(hit.z);
+    if (gx < 0 || gy < 0 || gx >= size || gy >= size) return null;
+    return { gx, gy };
+  }
+
+  /** いまの ray が床のどこに当たるかを見て、そのマスへ歩かせる */
+  private walkAtRay(): void {
+    const tile = this.aimedTile();
+    if (!tile) return;
+    const ok = this.options.onWalkTo?.(tile.gx, tile.gy);
+    if (ok === false) this.options.onBlocked?.();
+  }
+
+  /** ヘッドセットのときだけ、コントローラーがねらっている床に輪を出す */
+  private updateMarker(): void {
+    const controller = this.controllers.find((c) => c.visible && c.getObjectByName('ray'));
+    if (!this.presenting || !controller || !this.options.onWalkTo) {
+      this.marker.visible = false;
+      return;
+    }
+    this.aimFrom(controller);
+    const tile = this.aimedTile();
+    this.marker.visible = tile !== null;
+    if (tile) this.marker.position.set(tile.gx + 0.5, 0.01, tile.gy + 0.5);
+  }
+}
