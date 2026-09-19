@@ -3,9 +3,14 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      # 既定ブランチが変わった場合はここに追記する
+      # 既定ブランチを変えたときは、ここの名前も直すこと。
+      # あわせて Settings > Pages で Source を「GitHub Actions」に選び直す。
+      # github-pages 環境の「このブランチからだけデプロイできる」規則は
+      # 設定した当時の名前で焼き付いていて、リネームには追随しない。
+      # 直さないと deploy が
+      #   Branch "..." is not allowed to deploy to github-pages
+      # で即座に落ちる（build は通るので気づきにくい）。
       - main
-      - claude/piglike-sandbox-game-supj1g
   workflow_dispatch:
 
 permissions:
