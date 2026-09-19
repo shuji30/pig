@@ -995,8 +995,8 @@ export class RoomScene extends Phaser.Scene {
 
     try {
       const { VrView, createVrOverlay } = await import('../vr/vr');
-      const view = new VrView({
-        onWalkTo: (gx, gy) => this.walkTo({ gx, gy }),
+      const view = new VrView(this.save.avatar.look, {
+        onWalkTo: (gx: number, gy: number) => this.walkTo({ gx, gy }),
         onBlocked: () => this.vrOverlay?.setNote('そこには行けないみたい…', 2200),
         onExit: () => this.vrOverlay?.setNote('ヘッドセットから出ました', 2600),
       });
@@ -1045,6 +1045,9 @@ export class RoomScene extends Phaser.Scene {
       gx: pos.gx,
       gy: pos.gy,
       heightPx: this.avatar.eyeHeightPx,
+      baseHeightPx: this.avatar.baseHeightPx,
+      look: this.avatar.currentLook,
+      pose: this.avatar.currentPose,
       dgx: dir.dgx,
       dgy: dir.dgy,
       moving: this.avatar.isWalking,
