@@ -16,9 +16,15 @@ const look: AvatarLook = {
 };
 
 describe('Avatar3d', () => {
-  it('頭はふだん出さない（一人称で目玉が顔の前に浮くため）', () => {
+  it('自分の頭はふだん出さない（一人称で目玉が顔の前に浮くため）', () => {
     const a = new Avatar3d(look);
     expect(a.head.visible).toBe(false);
+    a.dispose();
+  });
+
+  it('おきゃくさんや部屋の主の頭は出す', () => {
+    const a = new Avatar3d(look, true);
+    expect(a.head.visible).toBe(true);
     a.dispose();
   });
 
