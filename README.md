@@ -253,6 +253,12 @@ VR 側と node のテストからは Phaser を読まずに使いたいためで
 - スタンプの絵は `render/stampArt.ts` の `makeStampIconCanvas()` に焼かせます。
   あちらは Phaser のシーンが要るので、canvas は `RoomScene` が作って VR へ渡します
 
+### もっと作り込んだアバターにするなら
+
+`tools/blender/avatar_blockout.py` が、**寸法の合った当たりとボーン**を Blender の中に
+作ります。この上からモデリングして `.glb` を書き出せば、いまのプリミティブの組み立てと
+差し替えられます。単位・向き・ボーン名の約束は `tools/blender/README.md` にあります。
+
 ### かがみに自分が映る
 
 「かがみ」「ドレッサー」「かべかがみ」は、VR では**本物に映ります**
