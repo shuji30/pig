@@ -269,10 +269,13 @@ function fillFourPoint(g: Phaser.GameObjects.Graphics, cx: number, cy: number, l
   );
 }
 
-/** 「きもち」パネルに並べる小さな絵 */
-export function makeStampIconCanvas(scene: Phaser.Scene, def: StampDef): HTMLCanvasElement {
-  const S = 34;
-  const key = `stampicon:${def.id}`;
+/**
+ * スタンプの絵を canvas に焼く。
+ * 「きもち」パネルの小さな絵（既定 34px）と、VR の吹き出し（大きめ）で使う。
+ */
+export function makeStampIconCanvas(scene: Phaser.Scene, def: StampDef, size = 34): HTMLCanvasElement {
+  const S = size;
+  const key = `stampicon:${def.id}:${S}`;
   if (!scene.textures.exists(key)) {
     const g = scene.make.graphics({ x: 0, y: 0 }, false);
     g.translateCanvas(S / 2, S / 2);

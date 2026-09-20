@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { Reflector } from 'three/addons/objects/Reflector.js';
 import type { TimeOfDay } from '../core/timeOfDay';
-import type { AvatarPose } from '../render/avatarPose';
+import { HEAD_R, type AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
 import type { PetDef } from '../data/pets';
 import type { PetPose } from '../render/petArt';
 import type { AvatarLook, RoomData } from '../types';
 import { Avatar3d } from './avatar3d';
+import { Bubble3d, type VrBubble } from './bubble3d';
 import { Pet3d } from './pet3d';
 import { scopeMirrorRender, updateMirrors } from './mirrors';
 import { buildRoom3d, disposeRoom3d } from './room3d';
@@ -24,6 +25,8 @@ export interface VrEye {
   /** いまの見た目と姿勢。立体アバターがこれに合わせる */
   look: AvatarLook;
   pose: AvatarPose;
+  /** 自分が言ったこと。頭の上に出るので、見上げたときと鏡に映る */
+  bubble?: VrBubble | null;
   /** 向いている方向（マス座標の差。4方向のどれか） */
   dgx: number;
   dgy: number;
@@ -45,6 +48,8 @@ export interface VrPerson {
   dgy: number;
   look: AvatarLook;
   pose: AvatarPose;
+  /** いま頭の上に出ているもの（何も出ていなければ省く） */
+  bubble?: VrBubble | null;
 }
 
 /** 連れているペット */
@@ -82,6 +87,53 @@ const VIGNETTE_MAX = 0.5;
 /** ふちどりを置くカメラからの距離(m) */
 const VIGNETTE_DISTANCE = 0.3;
 
+/** 吹き出しを顔のすこし上・すこし前に置く(px) */
+const BUBBLE_UP = 5;
+const BUBBLE_FRONT = 9;
+
+/**
+ * 吹き出しの置き場所。頭の上の**すこし前**に出す。
+ *
+ * 真上に置くと、自分のぶんを見上げたときに「板からカメラへの向き」が
+ * 真上になり、左右の向きが決まらなくなる（文字が横倒しになる）。
+ * 前へずらしておけば、その場合が起きない。
+ */
+function placeBubble(bubble: Bubble3d, avatar: Avatar3d): void {
+  bubble.root.position.set(0, avatar.head.position.y + PX(HEAD_R + BUBBLE_UP), PX(BUBBLE_FRONT));
+}
+
+/**
+ * 自分以外のひとり。すがたと、頭の上の吹き出しをひとまとめにする。
+ *
+ * `Avatar3d.setLook()` はきせかえが変わると中身を組み直す（root を空にする）ので、
+ * 吹き出しは毎回つなぎ直す。
+ */
+class Person3d {
+  readonly avatar: Avatar3d;
+  readonly bubble = new Bubble3d();
+
+  constructor(look: AvatarLook) {
+    this.avatar = new Avatar3d(look, true); // 人の頭はふだんから見える
+  }
+
+  get root(): THREE.Group {
+    return this.avatar.root;
+  }
+
+  update(p: VrPerson): void {
+    this.avatar.setLook(p.look);
+    this.avatar.setPose(p.pose);
+    if (this.bubble.root.parent !== this.avatar.root) this.avatar.root.add(this.bubble.root);
+    this.bubble.set(p.bubble ?? null);
+    placeBubble(this.bubble, this.avatar);
+  }
+
+  dispose(): void {
+    this.bubble.dispose();
+    this.avatar.dispose();
+  }
+}
+
 /**
  * 部屋をアバターの目の高さから立体で見せる。
  *
@@ -107,7 +159,9 @@ export class VrView {
   /** 自分のすがた。一人称では頭の中にカメラが入るので、頭は鏡のときだけ出す */
   private readonly avatar3d: Avatar3d;
   /** 自分以外の人とペット。id で使い回し、居なくなったら片付ける */
-  private readonly others = new Map<string, Avatar3d>();
+  private readonly others = new Map<string, Person3d>();
+  /** 自分の吹き出し。頭の上に出るので、ふだんは見上げたときと鏡に映る */
+  private readonly selfBubble = new Bubble3d();
   private readonly pets = new Map<string, Pet3d>();
   private signature = '';
   private roomData: RoomData | null = null;
@@ -155,6 +209,7 @@ export class VrView {
     this.scene.add(this.marker);
 
     this.avatar3d = new Avatar3d(look);
+    this.avatar3d.root.add(this.selfBubble.root);
     this.scene.add(this.avatar3d.root);
 
     for (let i = 0; i < 2; i++) {
@@ -280,17 +335,16 @@ export class VrView {
    */
   setPeople(people: VrPerson[]): void {
     this.syncPool(this.others, people, (p) => {
-      const a = new Avatar3d(p.look, true); // 人の頭はふだんから見える
-      this.scene.add(a.root);
-      return a;
+      const o = new Person3d(p.look);
+      this.scene.add(o.root);
+      return o;
     });
     for (const p of people) {
-      const a = this.others.get(p.id);
-      if (!a) continue;
-      a.setLook(p.look);
-      a.setPose(p.pose);
-      a.root.position.set(p.gx, PX(p.baseHeightPx), p.gy);
-      a.root.rotation.y = Math.atan2(-p.dgx, -p.dgy) + Math.PI;
+      const o = this.others.get(p.id);
+      if (!o) continue;
+      o.update(p);
+      o.root.position.set(p.gx, PX(p.baseHeightPx), p.gy);
+      o.root.rotation.y = Math.atan2(-p.dgx, -p.dgy) + Math.PI;
     }
   }
 
@@ -373,6 +427,7 @@ export class VrView {
     void this.renderer.xr.getSession()?.end();
     if (this.room3d) disposeRoom3d(this.room3d);
     this.avatar3d.dispose();
+    this.selfBubble.dispose();
     for (const o of this.others.values()) o.dispose();
     for (const o of this.pets.values()) o.dispose();
     this.others.clear();
@@ -462,11 +517,18 @@ export class VrView {
       this.camera.rotation.set(this.pitch, this.facingYaw() + this.yaw, 0, 'YXZ');
     }
 
+    this.selfBubble.set(eye.bubble ?? null);
+    placeBubble(this.selfBubble, this.avatar3d);
+
+    // 吹き出しはいつもカメラの方を向かせる
+    this.camera.getWorldPosition(this.eyeWorld);
+    this.selfBubble.faceCamera(this.eyeWorld);
+    for (const o of this.others.values()) o.bubble.faceCamera(this.eyeWorld);
+
     this.updateMarker();
     this.fitVignette();
 
     // 鏡はいちばん近い1枚だけを生かす（1枚ごとにシーンをもう1回描くため）
-    this.camera.getWorldPosition(this.eyeWorld);
     updateMirrors(this.mirrors, this.eyeWorld);
 
     // 歩いているあいだだけ、ふちを暗くする（外から動かされる移動は酔いやすい）

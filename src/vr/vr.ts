@@ -7,4 +7,5 @@
  * まとめてここから出す（`RoomScene.toggleVr()` 参照）。
  */
 export { VrView, type VrEye, type VrPerson, type VrPet, type VrViewOptions } from './VrView';
+export { type VrBubble } from './bubble3d';
 export { createVrOverlay, type VrOverlay } from './overlay';

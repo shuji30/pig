@@ -5,6 +5,9 @@ import { screenToGrid, tileCenter } from '../core/iso';
 import { drawAvatarBody, restPose, type AvatarPose } from '../render/avatarArt';
 import { drawStamp } from '../render/stampArt';
 import type { StampDef } from '../data/stamps';
+
+/** いま頭の上に出ているもの。VR でも同じものを出すために持っておく */
+export type AvatarBubble = { kind: 'text'; text: string } | { kind: 'stamp'; stamp: StampDef };
 import { getMotion, type FaceKind, type MotionDef, type MotionKind } from '../data/motions';
 import type { AvatarLook } from '../types';
 
@@ -27,6 +30,8 @@ export class Avatar {
   private parts: PartPainter | null = null;
   private readonly label: Phaser.GameObjects.Text;
   private bubble: Phaser.GameObjects.Container | null = null;
+  /** 吹き出しの中身。絵とは別に持っておき、VR の板にも同じものを出す */
+  private bubbleContent: AvatarBubble | null = null;
   private bubbleTimer?: Phaser.Time.TimerEvent;
   private bubbleHeight = 0;
 
@@ -216,6 +221,7 @@ export class Avatar {
     const art = this.scene.add.graphics();
     drawStamp(art, def, R);
 
+    this.bubbleContent = { kind: 'stamp', stamp: def };
     this.setBubble(this.scene.add.container(0, 0, [g, art]), h, 3600);
     // ぽんと出す
     this.bubble?.setScale(0.6);
@@ -239,6 +245,7 @@ export class Avatar {
       this.bubble?.destroy();
       this.bubble = null;
       this.bubbleHeight = 0;
+      this.bubbleContent = null;
     });
   }
 
@@ -264,6 +271,7 @@ export class Avatar {
     g.strokeRoundedRect(-w / 2, -h / 2, w, h, 9);
     g.fillTriangle(-5, h / 2 - 1, 5, h / 2 - 1, 0, h / 2 + 7);
 
+    this.bubbleContent = { kind: 'text', text };
     this.setBubble(this.scene.add.container(0, 0, [g, txt]), h, 4200);
   }
 
@@ -435,6 +443,11 @@ export class Avatar {
   /** いま向いている方向（マス座標の差）。4方向のどれか */
   get facingDir(): { dgx: number; dgy: number } {
     return this.facing;
+  }
+
+  /** いま頭の上に出ているもの（何も出ていなければ null） */
+  get currentBubble(): AvatarBubble | null {
+    return this.bubbleContent;
   }
 
   /** いま絵に使っている姿勢。VR の立体アバターがこれに合わせる */
