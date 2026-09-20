@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.local
 .vite/
+
+# Blender の書き出し（スクリプトから作り直せるので置かない）
+tools/blender/out/
