@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "^3.5.5",
     "phaser": "^3.90.0",
     "three": "^0.186.0"
   },
