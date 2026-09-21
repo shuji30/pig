@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { HEAD_R, type AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
 import type { AvatarLook } from '../types';
+import { REST_EYE } from './vrmPose';
 import { loadAvatarModel } from './vrmSource';
 import { VrmAvatar } from './vrmAvatar';
 
@@ -257,6 +258,16 @@ export class Avatar3d {
   get headTopY(): number {
     if (this.vrm) return this.vrm.headTopY;
     return this.head.position.y + PX(HEAD_R);
+  }
+
+  /**
+   * 立っているときの目の高さ(m)。VR のカメラをここに置く。
+   *
+   * 基本形は2頭身なので目が低い。人の形のモデルはずっと高いところにある。
+   * 背の高さは同じにそろえてあるので、違うのは目の位置だけ。
+   */
+  get eyeY(): number {
+    return this.vrm ? this.vrm.eyeY : PX(REST_EYE);
   }
 
   /** きせかえが変わっていたら組み直す */

@@ -11,23 +11,32 @@
  * - 一人称のとき、頭を隠す（鏡のあいだだけ出す）
  *
  * ## 頭を隠すしくみ
- * VRM は「一人称では出さない部分」を自分で持っている（VRoid は頭と髪が
- * それ。カメラが頭の中に入ったとき、顔の裏が見えるのを防ぐため）。
- * `VRMFirstPerson.setup()` を呼ぶとメッシュがその区分で分かれるので、
- * 三人称ぶんのオブジェクトを集めておいて、鏡を描くあいだだけ出す。
- * レイヤーではなく `visible` で切りかえるのは、鏡（`Reflector`）が
- * カメラを複製して描くため、レイヤーの指定が効かないから。
+ * 一人称ではカメラが頭の中に入るので、顔の裏が見えないよう頭を消す。
+ * ただし体は残さないといけない（下を向いたときに自分の体が見えてほしい）。
  *
- * VRM でないモデルはその区分を持っていないので、**頭のボーンから先**を
- * 三人称ぶんとして扱う。
+ * VRM はこのための区分を自分で持っている。ところが VRoid の区分はほとんどが
+ * `auto`（＝頭のボーンに付いた頂点だけを分ける）で、メッシュ単位では
+ * 「顔だけ」と分けられない。**体のメッシュも `auto`** なので、丸ごと
+ * 隠すと体まで消える。
+ *
+ * そこで `VRMFirstPerson.setup()` に頂点で分けてもらう。分かれたものは
+ * レイヤー 9（一人称）と 10（三人称）へ移るので、
+ *
+ * - 自分：`setup()` を呼ぶ。カメラはレイヤー 9 を足す（`vr.ts`）。
+ *   鏡のカメラは全レイヤーを見るので、鏡には頭も映る
+ * - おきゃくさん：`setup()` を**呼ばない**。レイヤー0のままなので、
+ *   どのカメラからもふつうに見える
+ *
+ * VRM でないモデルはこの区分を持っていないので、**頭のボーンから先**を
+ * `thirdPerson` に入れて、`visible` の出し入れで隠す。
  */
 import * as THREE from 'three';
-import { VRMExpressionPresetName, VRMFirstPerson, VRMUtils, type VRM } from '@pixiv/three-vrm';
+import { VRMExpressionPresetName, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import type { AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
 import type { AvatarLook } from '../types';
 import { RiggedHumanoid, VrmHumanoid, type Humanoid } from './humanoid';
-import { EXPRESSION_OF, poseToRig, REST_EYE, type RigBone } from './vrmPose';
+import { EXPRESSION_OF, poseToRig, REST_CROWN, REST_EYE, type RigBone } from './vrmPose';
 import type { Loaded } from './vrmSource';
 
 /**
@@ -38,15 +47,26 @@ import type { Loaded } from './vrmSource';
  * 当てはまらないマテリアル（目・口など）はさわらない。
  */
 const TINT_OF: ReadonlyArray<[RegExp, keyof AvatarLook]> = [
-  [/skin|body|face/i, 'skin'],
   [/hair/i, 'hair'],
-  [/tops|shirt|onepiece|dress|cloth(?!es_bottom)/i, 'shirt'],
-  [/bottoms|pants|skirt/i, 'pants'],
   [/shoes|boots/i, 'shoes'],
+  [/bottoms|pants|skirt|trouser/i, 'pants'],
+  // `cloth` は最後。VRoid は `..._Bottoms_01_CLOTH` のように用途と種類を
+  // 両方入れるので、先に見るとズボンもシャツの色になる
+  [/tops|shirt|onepiece|dress|accessory|cloth/i, 'shirt'],
+  [/skin|body|face/i, 'skin'],
 ];
+
+/**
+ * さわらないマテリアル。
+ * - 目（ひとみ・白目・ハイライト）は色を変えない
+ * - まつ毛・眉・口は顔の絵なので、肌色を掛けると ぼやける
+ * - 輪郭線（MToon のアウトライン）は黒のままにする
+ */
+const KEEP = /outline|_eye\b|eyeiris|eyewhite|eyehighlight|facemouth|facebrow|faceeyeline/i;
 
 /** きせかえの色は「元の絵に掛ける」。掛け算なので、白い服ほどよく乗る */
 function tintOf(name: string): keyof AvatarLook | null {
+  if (KEEP.test(name)) return null;
   for (const [re, key] of TINT_OF) if (re.test(name)) return key;
   return null;
 }
@@ -59,6 +79,8 @@ export class VrmAvatar {
   readonly thirdPerson: THREE.Object3D[] = [];
   /** 頭のてっぺんの高さ(m)。吹き出しの置き場所に使う */
   headTopY = 0;
+  /** 立っているときの目の高さ(m)。VR のカメラをここに置く */
+  eyeY = PX(REST_EYE);
 
   private readonly body = new THREE.Group();
   private readonly tinted: Array<[Tintable, keyof AvatarLook, THREE.Color]> = [];
@@ -108,34 +130,35 @@ export class VrmAvatar {
   }
 
   /**
-   * ゲームの背丈に合わせる。
+   * ゲームの背丈に合わせて、目の高さを測る。
    *
-   * VR のカメラは 2D のアバターの目の高さ（`REST_EYE` px）に置かれ、部屋も
-   * 家具もその背丈で作ってある。VRM 側の背丈はファイルごとに違うので、
-   * **目の高さがそろうように**まるごと拡大縮小する。ここをしないと
-   * カメラが胸の中に入って、自分の顔の裏側が見える。
+   * 部屋も家具も「背 `REST_CROWN` px」で作ってあるので、**背の高さ**を
+   * そこへそろえる。目でそろえてはいけない: 平らな絵は2頭身で目が身長の
+   * 71% にあるが、人の形のモデルは 89% ほどなので、体が children サイズまで
+   * 縮んで家具と釣り合わなくなる。
    *
-   * 目の位置は VRM が持っている（頭のボーンからの ずれ）。持っていない
-   * ファイルのために、だいたいの値も用意しておく。
+   * カメラのほうは `eyeY`（モデル自身の目の高さ）へ動かす。ここをそろえないと
+   * カメラが口のあたりに入って、自分の顔の裏側が見える。
    */
   private fitHeight(): void {
     const scene = this.scene;
     scene.updateWorldMatrix(true, true);
-    let eyeY = 0;
+    const box = new THREE.Box3().setFromObject(scene);
+    const height = box.max.y - box.min.y;
+    if (height > 0.3) scene.scale.setScalar(PX(REST_CROWN) / height);
+    scene.updateWorldMatrix(true, true);
 
+    // 目の高さ。VRM は「頭のボーンからの ずれ」で持っている
     const head = this.vrm?.humanoid?.getRawBoneNode('head');
     if (head) {
       const p = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
-      scene.worldToLocal(p);
-      eyeY = p.y + (this.vrm?.lookAt?.offsetFromHeadBone.y ?? 0.06);
+      this.root.worldToLocal(p);
+      this.eyeY = p.y + (this.vrm?.lookAt?.offsetFromHeadBone.y ?? 0.06) * scene.scale.y;
     } else {
-      // VRM でないモデルは目の位置を持っていない。背の高さから見当をつける
-      // （人のかたちなら、目はだいたい てっぺんの 0.93 あたり）
-      const box = new THREE.Box3().setFromObject(scene);
-      if (Number.isFinite(box.max.y)) eyeY = box.max.y * 0.93;
+      // 持っていないモデルは、背の高さから見当をつける
+      const fitted = new THREE.Box3().setFromObject(scene);
+      this.eyeY = Number.isFinite(fitted.max.y) ? fitted.max.y * 0.93 : PX(REST_EYE);
     }
-    if (!(eyeY > 0.2)) return; // 測れないファイルはそのままにする
-    scene.scale.setScalar(PX(REST_EYE) / eyeY);
   }
 
   /**
@@ -155,16 +178,10 @@ export class VrmAvatar {
       }
       return;
     }
+    // おきゃくさんは頭も見せるので、分けない（レイヤー0のままにしておく）
+    if (this.showHead) return;
+    // 自分ぶん。頂点の単位で 一人称／三人称 に分けてもらう
     fp.setup();
-    // 三人称ぶんのレイヤーが立っているものを拾う。**親は変えない**
-    // （付けかえると位置がずれる）。出し入れは `visible` でする
-    const mask = new THREE.Layers();
-    mask.set(VRMFirstPerson.DEFAULT_THIRDPERSON_ONLY_LAYER);
-    this.scene.traverse((o) => {
-      if (!o.layers.test(mask)) return;
-      o.visible = this.showHead;
-      this.thirdPerson.push(o);
-    });
   }
 
   /** 頭のてっぺんの高さを測る。モデルの背丈はファイルごとに違う */

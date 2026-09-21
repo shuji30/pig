@@ -53,7 +53,31 @@ if (!loaded) {
     a.root.position.x = (i - (POSES.length - 1) / 2) * 0.5;
     scene.add(a.root);
     if (i === 0) {
-      lines.push(`目の高さに合わせた背 : ${a.headTopY.toFixed(3)} m`);
+      const box = new THREE.Box3().setFromObject(a.root);
+      lines.push(`はこ y ${box.min.y.toFixed(3)}..${box.max.y.toFixed(3)} m`);
+      lines.push(`吹き出しの高さ       : ${a.headTopY.toFixed(3)} m`);
+      const hv = one.vrm?.humanoid?.getRawBoneNode('head');
+      if (hv) {
+        one.scene.updateWorldMatrix(true, true);
+        const hp = new THREE.Vector3().setFromMatrixPosition(hv.matrixWorld);
+        lines.push(`拡大率 ${one.scene.scale.x.toFixed(4)} / 頭ボーン(world) y=${hp.y.toFixed(3)}` +
+          ` / lookAt ずれ ${one.vrm?.lookAt?.offsetFromHeadBone.y.toFixed(3)}`);
+      }
+      const mats = new Set<string>();
+      a.root.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        for (const x of Array.isArray(m) ? m : m ? [m] : []) mats.add(x.name);
+      });
+      // 名前を見て きせかえ の色をどこへ掛けるか決めているので、一覧を出す
+      const fp = one.vrm?.firstPerson;
+      if (fp) {
+        lines.push('一人称の区分:');
+        for (const an of fp.meshAnnotations) {
+          lines.push(`   ${an.type}: ${an.meshes.map((m) => m.name).join(', ')}`);
+        }
+      }
+      lines.push('マテリアル:');
+      for (const n of [...mats].sort()) lines.push(`   ${n.replace(' (Instance)', '')}`);
       lines.push(`姿勢を当てられるか   : ${a.posable ? 'はい' : 'いいえ（ボーンが足りない）'}`);
     }
     lines.push(`${i + 1}. ${label}`);

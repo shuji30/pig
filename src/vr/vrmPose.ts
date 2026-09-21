@@ -23,12 +23,18 @@ export const REST_HIP = -14;
 export const REST_LEG = 12;
 /**
  * 立っているときの目の高さ(px)。`Avatar.eyeHeightPx` と同じ値。
- *
- * VR のカメラはここに置かれる（部屋も家具もこの背丈に合わせて作ってある）ので、
- * 読みこんだ VRM は**この高さに目が来るよう拡大縮小する**。
- * VRoid の既定はおとなの背丈なので、そのままだとカメラが胸のあたりに入る。
+ * 基本形のアバターの目はここにある。
  */
 export const REST_EYE = 39.6;
+/**
+ * 背の高さ(px)。`avatarPose` の `CROWN` と同じ（≒1.414m、タイル1枚半ぶん）。
+ *
+ * 読みこんだモデルは、**目の高さではなく背の高さ**をここに合わせる。
+ * 平らな絵は2頭身なので目が身長の 71% にあるが、人の形のモデルは 89% ほど。
+ * 目でそろえると、体が children サイズまで縮んで家具と釣り合わなくなる。
+ * 背でそろえて、カメラのほうをモデルの目の高さへ動かす（`VrmAvatar.eyeY`）。
+ */
+export const REST_CROWN = 55.4;
 /** 下ろした腕が体の横につくまでの角度(rad) */
 const ARM_DOWN = 1.42;
 
@@ -70,11 +76,13 @@ export function poseToRig(pose: AvatarPose): RigPose {
   let dropPx = hipY - REST_HIP;
 
   if (sitting) {
-    // すわり。ももを前へ、すねを下へ。腰も座面まで落とす
-    b.leftUpperLeg = [-1.45, 0, 0.06];
-    b.rightUpperLeg = [-1.45, 0, -0.06];
-    b.leftLowerLeg = [1.35, 0, 0];
-    b.rightLowerLeg = [1.35, 0, 0];
+    // すわり。ももを前へ、すねを下へ。腰も座面まで落とす。
+    // ももを上げすぎると、スカートが持ち上がって下着が見える（布の計算は
+    // していないので、めくれたぶんは戻らない）。ひざは深く曲げて高さを稼ぐ
+    b.leftUpperLeg = [-1.15, 0, 0.06];
+    b.rightUpperLeg = [-1.15, 0, -0.06];
+    b.leftLowerLeg = [1.50, 0, 0];
+    b.rightLowerLeg = [1.50, 0, 0];
     b.leftFoot = [0.20, 0, 0];
     b.rightFoot = [0.20, 0, 0];
     b.spine = [0.06, 0, 0];

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { Reflector } from 'three/addons/objects/Reflector.js';
 import type { TimeOfDay } from '../core/timeOfDay';
 import type { AvatarPose } from '../render/avatarPose';
+import { REST_EYE } from './vrmPose';
+import { FIRST_PERSON_LAYER } from './vrmSource';
 import { PX } from '../render/models3d.js';
 import type { PetDef } from '../data/pets';
 import type { PetPose } from '../render/petArt';
@@ -199,6 +201,9 @@ export class VrView {
     this.canvas = this.renderer.domElement;
 
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.05, 120);
+    // VRM の一人称のぶん。頭は レイヤー10 に移るので、ここでは足さない
+    // （＝自分の顔の裏が見えない）。鏡のカメラは全部見る（`mirrors.ts`）
+    this.camera.layers.enable(FIRST_PERSON_LAYER);
     this.rig.add(this.camera);
     this.scene.add(this.rig);
     this.scene.background = new THREE.Color(0xd9e6f2);
@@ -489,7 +494,10 @@ export class VrView {
     const eye = this.eye;
     if (!eye) return; // ゲームから最初の位置が来るまでは描かない
 
-    const eyeY = PX(eye.heightPx);
+    // 目の高さ。平らな絵の値をそのまま使わず、**アバターの目の高さ**を基準に、
+    // 絵のぶんの上下（しゃがみ・すわり）だけを足す。人の形のモデルは
+    // 目が高いところにあるので、絵の値をそのまま使うと口のあたりにカメラが入る
+    const eyeY = this.avatar3d.eyeY + PX(eye.heightPx - REST_EYE);
 
     // 自分のすがた。床の上（座っていれば座面の上）に、向いている方へ立たせる。
     // facingYaw() は「-z を向くカメラ」用の角度なので、顔が +z の体は半回転ぶんずらす

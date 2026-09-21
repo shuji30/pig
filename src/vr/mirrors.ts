@@ -137,6 +137,12 @@ export function scopeMirrorRender(
   const original = reflector.onBeforeRender;
 
   reflector.onBeforeRender = function (...args) {
+    // 鏡は**全レイヤーを見る**。VRM の一人称のしくみは、頭に付いた頂点を
+    // 別のレイヤーへ移す（`vrmAvatar.ts`）。鏡のカメラは画面のカメラの
+    // 複製なので、絞ったままだと鏡に自分の頭が映らない
+    const camera = args[2];
+    if (camera) this.getReflectionCamera(camera).layers.enableAll();
+
     const wasShown = show.map((o) => o.visible);
     const wasHidden = hide.map((o) => o.visible);
     for (const o of show) o.visible = true;

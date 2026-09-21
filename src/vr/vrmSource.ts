@@ -59,6 +59,16 @@ async function findOnce(urls: readonly string[]): Promise<{ url: string; buf: Ar
   return null;
 }
 
+/**
+ * カメラが足すレイヤー。
+ *
+ * `VRMFirstPerson.setup()` は、頭に付いた頂点を レイヤー10（三人称）へ、
+ * 残りを レイヤー9（一人称）へ分ける。自分のカメラは 9 を足して
+ * 「頭以外の自分の体」を見る。鏡のカメラは全部見るので頭も映る。
+ */
+export const FIRST_PERSON_LAYER = 9;
+export const THIRD_PERSON_LAYER = 10;
+
 /** テストや作り直しのため、取っておいたものを捨てる */
 export function forgetVrm(): void {
   raw = null;
