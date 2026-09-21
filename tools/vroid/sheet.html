@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>アバター資料（VRoid 用）</title>
+<!--
+  VRoid Studio でモデルを作るときの みほん。
+  きせかえの色や髪型を変えたら、ここを見て合わせる。
+
+    npm run dev  →  http://localhost:5173/tools/vroid/sheet.html
+
+  ゲーム本体の中身（src/render/avatarPreview.ts）でそのまま描いているので、
+  絵を直せばこの資料も自動でついてくる。
+-->
+<style>
+  body { margin:0; background:#f4f1ec; font:13px/1.5 system-ui, sans-serif; color:#3a3330; }
+  h1 { font-size:18px; margin:18px 20px 4px; }
+  p  { margin:0 20px 14px; color:#6b615c; }
+  .grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px 4px; padding:0 16px 20px; }
+  figure { margin:0; text-align:center; }
+  figcaption { font-size:11px; color:#6b615c; margin-top:2px; }
+  canvas { image-rendering: pixelated; }
+</style>
+<div id="out"></div>
+<script type="module" src="./sheet.ts"></script>

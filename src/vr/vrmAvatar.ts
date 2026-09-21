@@ -1,0 +1,235 @@
+/**
+ * 読みこんだモデルのアバター1体。`Avatar3d` の中身として使う。
+ *
+ * VRM（VRoid）でも、ふつうのリグ付き glTF（Tripo の自動リグ・Mixamo・Blender）でも
+ * 同じように扱う。骨組みの作りの違いは `humanoid.ts` が吸収する。
+ *
+ * やること:
+ * - 紙人形の姿勢（`AvatarPose`）を人型ボーンの角度に流しこむ（`vrmPose.ts`）
+ * - きせかえの色を、マテリアルの名前で見分けて掛ける
+ * - 表情を VRM の表情に読みかえる。まばたきもここ
+ * - 一人称のとき、頭を隠す（鏡のあいだだけ出す）
+ *
+ * ## 頭を隠すしくみ
+ * 一人称ではカメラが頭の中に入るので、顔の裏が見えないよう頭を消す。
+ * ただし体は残さないといけない（下を向いたときに自分の体が見えてほしい）。
+ *
+ * VRM はこのための区分を自分で持っている。ところが VRoid の区分はほとんどが
+ * `auto`（＝頭のボーンに付いた頂点だけを分ける）で、メッシュ単位では
+ * 「顔だけ」と分けられない。**体のメッシュも `auto`** なので、丸ごと
+ * 隠すと体まで消える。
+ *
+ * そこで `VRMFirstPerson.setup()` に頂点で分けてもらう。分かれたものは
+ * レイヤー 9（一人称）と 10（三人称）へ移るので、
+ *
+ * - 自分：`setup()` を呼ぶ。カメラはレイヤー 9 を足す（`vr.ts`）。
+ *   鏡のカメラは全レイヤーを見るので、鏡には頭も映る
+ * - おきゃくさん：`setup()` を**呼ばない**。レイヤー0のままなので、
+ *   どのカメラからもふつうに見える
+ *
+ * VRM でないモデルはこの区分を持っていないので、**頭のボーンから先**を
+ * `thirdPerson` に入れて、`visible` の出し入れで隠す。
+ */
+import * as THREE from 'three';
+import { VRMExpressionPresetName, VRMUtils, type VRM } from '@pixiv/three-vrm';
+import type { AvatarPose } from '../render/avatarPose';
+import { PX } from '../render/models3d.js';
+import type { AvatarLook } from '../types';
+import { RiggedHumanoid, VrmHumanoid, type Humanoid } from './humanoid';
+import { EXPRESSION_OF, poseToRig, REST_CROWN, REST_EYE, type RigBone } from './vrmPose';
+import type { Loaded } from './vrmSource';
+
+/**
+ * マテリアルの名前 → きせかえのどの色か。
+ *
+ * VRoid Studio が付ける名前は `N00_000_00_Body_00_SKIN` のような形で、
+ * 用途が語として入っている。ここを見て色を掛ける。
+ * 当てはまらないマテリアル（目・口など）はさわらない。
+ */
+const TINT_OF: ReadonlyArray<[RegExp, keyof AvatarLook]> = [
+  [/hair/i, 'hair'],
+  [/shoes|boots/i, 'shoes'],
+  [/bottoms|pants|skirt|trouser/i, 'pants'],
+  // `cloth` は最後。VRoid は `..._Bottoms_01_CLOTH` のように用途と種類を
+  // 両方入れるので、先に見るとズボンもシャツの色になる
+  [/tops|shirt|onepiece|dress|accessory|cloth/i, 'shirt'],
+  [/skin|body|face/i, 'skin'],
+];
+
+/**
+ * さわらないマテリアル。
+ * - 目（ひとみ・白目・ハイライト）は色を変えない
+ * - まつ毛・眉・口は顔の絵なので、肌色を掛けると ぼやける
+ * - 輪郭線（MToon のアウトライン）は黒のままにする
+ */
+const KEEP = /outline|_eye\b|eyeiris|eyewhite|eyehighlight|facemouth|facebrow|faceeyeline/i;
+
+/** きせかえの色は「元の絵に掛ける」。掛け算なので、白い服ほどよく乗る */
+function tintOf(name: string): keyof AvatarLook | null {
+  if (KEEP.test(name)) return null;
+  for (const [re, key] of TINT_OF) if (re.test(name)) return key;
+  return null;
+}
+
+type Tintable = THREE.Material & { color?: THREE.Color };
+
+export class VrmAvatar {
+  readonly root = new THREE.Group();
+  /** 一人称では出さない部分（頭・髪）。鏡のあいだだけ出す */
+  readonly thirdPerson: THREE.Object3D[] = [];
+  /** 頭のてっぺんの高さ(m)。吹き出しの置き場所に使う */
+  headTopY = 0;
+  /** 立っているときの目の高さ(m)。VR のカメラをここに置く */
+  eyeY = PX(REST_EYE);
+
+  private readonly body = new THREE.Group();
+  private readonly tinted: Array<[Tintable, keyof AvatarLook, THREE.Color]> = [];
+  private readonly clock = { last: 0 };
+  private readonly humanoid: Humanoid;
+  private readonly vrm: VRM | null;
+  private readonly scene: THREE.Object3D;
+  private blink = 0;
+
+  constructor(loaded: Loaded, private readonly showHead: boolean) {
+    this.vrm = loaded.vrm;
+    this.scene = loaded.scene;
+    const vrm = this.vrm;
+    this.root.name = 'modelAvatar';
+    this.root.add(this.body);
+    this.body.add(this.scene);
+
+    if (vrm) {
+      // 使っていない頂点やボーンを落とす。人数ぶん持つので効く
+      VRMUtils.removeUnnecessaryVertices(vrm.scene);
+      VRMUtils.combineSkeletons(vrm.scene);
+    }
+
+    this.scene.traverse((o) => {
+      o.frustumCulled = false; // 左右が内向きのヘッドセットで外縁が消えるのを防ぐ
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        const key = tintOf(mat.name);
+        const m = mat as Tintable;
+        if (key && m.color) this.tinted.push([m, key, m.color.clone()]);
+      }
+    });
+
+    this.humanoid = vrm?.humanoid
+      ? new VrmHumanoid(vrm.humanoid)
+      : new RiggedHumanoid(this.scene);
+    this.fitHeight();
+    this.splitFirstPerson();
+    this.measure();
+  }
+
+  /** 姿勢を当てられるモデルか。ボーンが足りなければ立たせたままにする */
+  get posable(): boolean {
+    return this.humanoid.found >= 8;
+  }
+
+  /**
+   * ゲームの背丈に合わせて、目の高さを測る。
+   *
+   * 部屋も家具も「背 `REST_CROWN` px」で作ってあるので、**背の高さ**を
+   * そこへそろえる。目でそろえてはいけない: 平らな絵は2頭身で目が身長の
+   * 71% にあるが、人の形のモデルは 89% ほどなので、体が children サイズまで
+   * 縮んで家具と釣り合わなくなる。
+   *
+   * カメラのほうは `eyeY`（モデル自身の目の高さ）へ動かす。ここをそろえないと
+   * カメラが口のあたりに入って、自分の顔の裏側が見える。
+   */
+  private fitHeight(): void {
+    const scene = this.scene;
+    scene.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(scene);
+    const height = box.max.y - box.min.y;
+    if (height > 0.3) scene.scale.setScalar(PX(REST_CROWN) / height);
+    scene.updateWorldMatrix(true, true);
+
+    // 目の高さ。VRM は「頭のボーンからの ずれ」で持っている
+    const head = this.vrm?.humanoid?.getRawBoneNode('head');
+    if (head) {
+      const p = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
+      this.root.worldToLocal(p);
+      this.eyeY = p.y + (this.vrm?.lookAt?.offsetFromHeadBone.y ?? 0.06) * scene.scale.y;
+    } else {
+      // 持っていないモデルは、背の高さから見当をつける
+      const fitted = new THREE.Box3().setFromObject(scene);
+      this.eyeY = Number.isFinite(fitted.max.y) ? fitted.max.y * 0.93 : PX(REST_EYE);
+    }
+  }
+
+  /**
+   * 一人称で消す部分を分ける。
+   *
+   * `setup()` はメッシュをレイヤーで分けるので、三人称ぶんに印のついた
+   * オブジェクトを拾って、まとめて出し入れできるようにしておく。
+   */
+  private splitFirstPerson(): void {
+    const fp = this.vrm?.firstPerson;
+    if (!fp) {
+      // VRM でないモデルは区分を持っていない。頭のボーンから先をまとめて扱う
+      const head = this.humanoid.headNode;
+      if (head) {
+        head.visible = this.showHead;
+        this.thirdPerson.push(head);
+      }
+      return;
+    }
+    // おきゃくさんは頭も見せるので、分けない（レイヤー0のままにしておく）
+    if (this.showHead) return;
+    // 自分ぶん。頂点の単位で 一人称／三人称 に分けてもらう
+    fp.setup();
+  }
+
+  /** 頭のてっぺんの高さを測る。モデルの背丈はファイルごとに違う */
+  private measure(): void {
+    this.scene.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(this.scene);
+    this.headTopY = Number.isFinite(box.max.y) ? box.max.y : PX(REST_EYE) * 1.12;
+  }
+
+  setLook(look: AvatarLook): void {
+    for (const [mat, key, base] of this.tinted) {
+      const hex = look[key];
+      if (typeof hex !== 'string') continue;
+      mat.color!.set(hex).multiply(base);
+    }
+  }
+
+  setPose(pose: AvatarPose, nowMs = 0): void {
+    const rig = poseToRig(pose);
+    if (this.posable) {
+      for (const [name, xyz] of Object.entries(rig.bones)) {
+        this.humanoid.apply(name as RigBone, xyz);
+      }
+      this.humanoid.update();
+    }
+    this.body.position.y = -PX(rig.dropPx);
+
+    const expr = this.vrm?.expressionManager;
+    if (expr) {
+      for (const preset of Object.values(VRMExpressionPresetName)) {
+        expr.setValue(preset, 0);
+      }
+      const { name, weight } = EXPRESSION_OF[pose.face];
+      if (weight > 0) expr.setValue(name, weight);
+      this.blink = pose.blinking ? 1 : 0;
+      expr.setValue('blink', this.blink);
+      expr.update();
+    }
+
+    // 揺れもの（髪・スカート）。`hairSway` は絵のための値なので使わず、
+    // 実際に動いた結果として VRM 側に揺らしてもらう
+    const dt = this.clock.last ? Math.min(0.1, (nowMs - this.clock.last) / 1000) : 0;
+    this.clock.last = nowMs;
+    if (dt > 0) this.vrm?.update(dt);
+  }
+
+  dispose(): void {
+    VRMUtils.deepDispose(this.scene);
+    this.root.clear();
+  }
+}

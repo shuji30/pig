@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { HEAD_R, type AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
 import type { AvatarLook } from '../types';
+import { REST_EYE } from './vrmPose';
+import { loadAvatarModel } from './vrmSource';
+import { VrmAvatar } from './vrmAvatar';
 
 /**
  * アバターの立体。VR で**自分の体と手**が見えるようにするためのもの。
@@ -19,10 +22,18 @@ import type { AvatarLook } from '../types';
  * - 髪型10種は「頭の丸み＋型ごとの目印」で近似している。平らな絵の輪郭を
  *   そのまま立体にすると型ごとに別のモデルが要る
  * - 顔は目・ひとみ・口だけ。鏡に映ったときに誰だか分かればいい
- * - 頭（`head`）は**鏡に映すときだけ出す**。一人称ではカメラが頭の中に入るが、
+ * - 頭は**鏡に映すときだけ出す**。一人称ではカメラが頭の中に入るが、
  *   頭の球は裏面になって消えても、目や鼻は小さな凸面なので消えず
- *   「自分の目玉が顔の前に浮く」ことになる。使う側が `head.visible` を
- *   ふだん false にして、鏡を描くあいだだけ true にする（`mirrors.ts`）
+ *   「自分の目玉が顔の前に浮く」ことになる。使う側が `thirdPerson` の
+ *   `visible` をふだん false にして、鏡を描くあいだだけ true にする
+ *   （`mirrors.ts`）
+ *
+ * ## モデルがあるときは そちらを使う
+ * `public/avatar.vrm`（VRoid Studio）か `public/avatar.glb`（リグ付きの
+ * ふつうの glTF。Tripo の自動リグ・Mixamo・Blender）が置いてあれば、
+ * 読めしだいこの基本形と**入れかえる**（`vrmAvatar.ts`）。
+ * 読み込みは非同期なので、それまでは下の基本形が出る。置いていなければ
+ * ずっと基本形のまま。どちらでも外からの使いかたは変わらない。
  */
 
 /** スカートの上端を胴のどこから始めるか(px、upper からの上ぶん) */
@@ -200,9 +211,21 @@ export class Avatar3d {
   readonly root = new THREE.Group();
   /** 頭。鏡を描くあいだだけ出す（クラスの説明を参照） */
   head: THREE.Group = new THREE.Group();
+  /**
+   * 一人称では出さないもの。鏡を描くあいだだけ出す。
+   * 基本形では頭ひとつ、VRM では頭と髪（VRM 自身が持っている区分による）。
+   *
+   * 中身は入れかわるので、使う側は**この配列を持ったまま**でよい
+   * （`mirrors.ts` は描くたびに中を見る）。
+   */
+  readonly thirdPerson: THREE.Object3D[] = [];
   private palette = new Palette();
   private parts: Parts | null = null;
   private lookKey = '';
+  private vrm: VrmAvatar | null = null;
+  private look: AvatarLook;
+  private pose: AvatarPose | null = null;
+  private disposed = false;
 
   /**
    * @param showHead 頭を出すか。自分は false（一人称で目玉が顔の前に浮くため）、
@@ -210,15 +233,69 @@ export class Avatar3d {
    */
   constructor(look: AvatarLook, private readonly showHead = false) {
     this.root.name = 'avatar3d';
+    this.look = look;
     this.setLook(look);
+    void this.tryVrm();
+  }
+
+  /**
+   * モデル（`avatar.vrm` か `avatar.glb`）が置いてあれば、読めしだい
+   * 基本形と入れかえる。無ければ何もしない（基本形のまま）。
+   */
+  private async tryVrm(): Promise<void> {
+    const loaded = await loadAvatarModel();
+    if (!loaded || this.disposed || this.vrm) return;
+    this.teardownPrimitive();
+    this.vrm = new VrmAvatar(loaded, this.showHead);
+    this.root.add(this.vrm.root);
+    this.thirdPerson.length = 0;
+    this.thirdPerson.push(...this.vrm.thirdPerson);
+    this.vrm.setLook(this.look);
+    if (this.pose) this.vrm.setPose(this.pose);
+  }
+
+  /** 吹き出しを置く高さ(m)。基本形と VRM で背丈が違うので、ここで吸収する */
+  get headTopY(): number {
+    if (this.vrm) return this.vrm.headTopY;
+    return this.head.position.y + PX(HEAD_R);
+  }
+
+  /**
+   * 立っているときの目の高さ(m)。VR のカメラをここに置く。
+   *
+   * 基本形は2頭身なので目が低い。人の形のモデルはずっと高いところにある。
+   * 背の高さは同じにそろえてあるので、違うのは目の位置だけ。
+   */
+  get eyeY(): number {
+    return this.vrm ? this.vrm.eyeY : PX(REST_EYE);
   }
 
   /** きせかえが変わっていたら組み直す */
   setLook(look: AvatarLook): void {
     const key = JSON.stringify(look);
-    if (key === this.lookKey && this.parts) return;
+    if (key === this.lookKey && (this.parts || this.vrm)) return;
     this.lookKey = key;
+    this.look = look;
+    if (this.vrm) {
+      this.vrm.setLook(look);
+      return;
+    }
     this.build(look);
+  }
+
+  /** VRM に入れかえるとき、基本形のほうを片づける */
+  private teardownPrimitive(): void {
+    for (const o of this.root.children.slice()) {
+      o.traverse((c) => {
+        const mesh = c as THREE.Mesh;
+        if (mesh.isMesh) mesh.geometry?.dispose();
+      });
+      // 吹き出しは使う側がぶら下げているので、外さずに残す
+      if (o.name !== 'bubble3d') this.root.remove(o);
+    }
+    this.palette.dispose();
+    this.palette = new Palette();
+    this.parts = null;
   }
 
   private build(look: AvatarLook): void {
@@ -305,6 +382,8 @@ export class Avatar3d {
 
     this.root.add(torso, head, legL, legR, armL, armR);
     if (skirt) this.root.add(skirt);
+    this.thirdPerson.length = 0;
+    this.thirdPerson.push(head);
 
     this.parts = {
       root: this.root,
@@ -320,7 +399,12 @@ export class Avatar3d {
   /**
    * 絵と同じ姿勢にする。`AvatarPose` は等角の絵がそのフレームで使った値そのもの。
    */
-  setPose(pose: AvatarPose): void {
+  setPose(pose: AvatarPose, nowMs = 0): void {
+    this.pose = pose;
+    if (this.vrm) {
+      this.vrm.setPose(pose, nowMs);
+      return;
+    }
     const p = this.parts;
     if (!p) return;
 
@@ -360,12 +444,16 @@ export class Avatar3d {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.vrm?.dispose();
+    this.vrm = null;
     this.root.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) mesh.geometry?.dispose();
     });
     this.palette.dispose();
     this.root.clear();
+    this.thirdPerson.length = 0;
     this.parts = null;
   }
 }
