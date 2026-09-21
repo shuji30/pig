@@ -3,6 +3,7 @@ import { PartPainter, partsReady, type Painter } from '../render/parts';
 import { WALK_SPEED } from '../config';
 import { screenToGrid, tileCenter } from '../core/iso';
 import { drawAvatarBody, restPose, type AvatarPose } from '../render/avatarArt';
+import { modelApi, readyModel } from '../render/avatarModelGate';
 import { drawStamp } from '../render/stampArt';
 import type { StampDef } from '../data/stamps';
 
@@ -28,6 +29,14 @@ export class Avatar {
   private art!: Painter;
   private artGfx: Phaser.GameObjects.Graphics | null = null;
   private parts: PartPainter | null = null;
+  /**
+   * 立体のモデル（`public/avatar.vrm`）で描くときの貼り先。
+   * 裏画面で1体ずつ描いて、そのたびにここへ貼る（`render/avatarModel.ts`）。
+   * モデルを置いていなければ null のままで、平らな絵で描く
+   */
+  private model: Phaser.GameObjects.Image | null = null;
+  private modelCanvas: HTMLCanvasElement | null = null;
+  private modelKey = '';
   private readonly label: Phaser.GameObjects.Text;
   private bubble: Phaser.GameObjects.Container | null = null;
   /** 吹き出しの中身。絵とは別に持っておき、VR の板にも同じものを出す */
@@ -94,6 +103,9 @@ export class Avatar {
     this.art = this.artGfx;
     this.bodyWrap = scene.add.container(0, 0, [this.artGfx]);
     this.useParts();
+    void readyModel().then(() => {
+      if (this.useModel()) this.redraw();
+    });
     this.label = scene.add
       .text(0, -66, look.name, {
         fontFamily: '"Hiragino Maru Gothic ProN", "Yu Gothic UI", sans-serif',
@@ -275,9 +287,23 @@ export class Avatar {
     this.setBubble(this.scene.add.container(0, 0, [g, txt]), h, 4200);
   }
 
-  /** 吹き出しの下端の高さ */
+  /**
+   * 吹き出しの下端の高さ。
+   *
+   * モデルで描いているときは背が2倍あるので、頭のてっぺんから上げる。
+   * 決めうちの値（-92 など）は 55px のアバターに合わせたもの
+   */
   private get bubbleBaseY(): number {
+    const api = modelApi();
+    if (api && this.model && this.pose) return -(api.isoHeadTopPx(this.pose) + 22);
     return this.sittingOn !== null ? -76 : -92;
+  }
+
+  /** 名前の高さ。同じく、モデルのときは背丈から出す */
+  private get labelY(): number {
+    const api = modelApi();
+    if (api && this.model && this.pose) return -(api.isoHeadTopPx(this.pose) + 6);
+    return this.sittingOn !== null ? -54 : -70;
   }
 
   /** 片づける（おきゃくさんが帰るときなど） */
@@ -522,7 +548,29 @@ export class Avatar {
 
   /** 部品が届いたので描き直す */
   refreshArt() {
-    if (this.useParts()) this.redraw();
+    const changed = this.useModel() || this.useParts();
+    if (changed) this.redraw();
+  }
+
+  /**
+   * 立体のモデルが読めていたら、そちらで描くように切りかえる。
+   * 平らな絵のほうは消さずに隠しておく（モデルが無い環境と同じ道を通す）。
+   */
+  private useModel(): boolean {
+    const api = modelApi();
+    if (this.model || !api) return false;
+    this.modelCanvas = api.makeRoomCanvas();
+    this.modelKey = `avatar3d:${this.look.name}:${Math.random().toString(36).slice(2, 8)}`;
+    this.scene.textures.addCanvas(this.modelKey, this.modelCanvas);
+    this.model = this.scene.add
+      .image(0, 0, this.modelKey)
+      .setOrigin(0.5, api.ROOM_GROUND / api.ROOM_H)
+      .setDisplaySize(api.ROOM_W, api.ROOM_H);
+    // `bodyWrap` には入れない。`PartPainter.clear()` が中身を
+    // まとめて外すので、入れると毎回消える。影と名前のあいだに置く
+    this.container.addAt(this.model, 2);
+    this.artGfx?.setVisible(false);
+    return true;
   }
 
   private redraw() {
@@ -738,7 +786,10 @@ export class Avatar {
     if (!onFurniture) {
       const air = Math.max(0, -ty);
       this.shadow.fillStyle(0x000000, Math.max(0.05, 0.15 - air * 0.007));
-      this.shadow.fillEllipse(tx * 0.4, 1, 30 - air * 0.9, 12 - air * 0.36);
+      // 立体のモデルは背が2倍あるので、影も広げる。足もとの当たりは
+      // 倍にはならないので、2倍ではなく 1.35 倍にしてある
+      const sw = this.model ? 1.35 : 1;
+      this.shadow.fillEllipse(tx * 0.4, 1, (30 - air * 0.9) * sw, (12 - air * 0.36) * sw);
     }
 
     this.pose = {
@@ -760,6 +811,25 @@ export class Avatar {
       dxL,
       dxR,
     };
+    if (this.model) {
+      this.paintModel();
+      return;
+    }
     drawAvatarBody(g, look, this.pose);
+  }
+
+  /** 裏画面で自分ぶんを描いて、貼る */
+  private paintModel() {
+    const api = modelApi();
+    if (!api || !this.pose || !this.modelCanvas) return;
+    const yaw = api.yawOf(this.facing);
+    if (!api.drawIsoAvatar(this.modelCanvas, this.look, this.pose, yaw, this.scene.time.now)) {
+      return;
+    }
+    (this.scene.textures.get(this.modelKey) as Phaser.Textures.CanvasTexture).refresh();
+    // 名前と吹き出しは、**姿勢が決まったあと**に置く。
+    // 背丈をその姿勢から出すので、redraw の先頭ではまだ分からない
+    this.label.setY(this.labelY);
+    if (this.bubble) this.bubble.setY(this.bubbleBaseY - this.bubbleHeight / 2);
   }
 }

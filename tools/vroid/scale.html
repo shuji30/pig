@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>2Dの画面に出したときの大きさ</title>
+<!--
+  VR ではない（等角の）画面に VRM を出したら、どのくらいの大きさで
+  見えるのかを並べる。
+
+    npm run dev → http://localhost:5173/tools/vroid/scale.html
+
+  ゲームの中のアバターは 55.4px（ズーム 0.8〜1.5倍）。
+  平らな絵は2頭身で、その大きさでも顔が読めるように描いてある。
+-->
+<style>
+  body { margin:0; background:#f4f1ec; font:13px/1.6 system-ui, sans-serif; color:#3a3330; }
+  h1 { font-size:16px; margin:18px 20px 2px; }
+  p  { margin:0 20px 10px; color:#6b615c; }
+  .row { display:flex; align-items:flex-end; gap:26px; padding:0 20px 22px; }
+  figure { margin:0; text-align:center; }
+  figcaption { font-size:11px; color:#6b615c; margin-top:4px; white-space:pre-line; }
+  canvas { background:#fff8; outline:1px solid #0001; }
+</style>
+<div id="out">よみこみ中…</div>
+<script type="module" src="./scale.ts"></script>
