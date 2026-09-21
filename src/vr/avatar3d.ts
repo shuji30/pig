@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { HEAD_R, type AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
 import type { AvatarLook } from '../types';
-import { loadVrm } from './vrmSource';
+import { loadAvatarModel } from './vrmSource';
 import { VrmAvatar } from './vrmAvatar';
 
 /**
@@ -27,8 +27,9 @@ import { VrmAvatar } from './vrmAvatar';
  *   `visible` をふだん false にして、鏡を描くあいだだけ true にする
  *   （`mirrors.ts`）
  *
- * ## VRM があるときは そちらを使う
- * `public/avatar.vrm`（VRoid Studio で作ったもの）が置いてあれば、
+ * ## モデルがあるときは そちらを使う
+ * `public/avatar.vrm`（VRoid Studio）か `public/avatar.glb`（リグ付きの
+ * ふつうの glTF。Tripo の自動リグ・Mixamo・Blender）が置いてあれば、
  * 読めしだいこの基本形と**入れかえる**（`vrmAvatar.ts`）。
  * 読み込みは非同期なので、それまでは下の基本形が出る。置いていなければ
  * ずっと基本形のまま。どちらでも外からの使いかたは変わらない。
@@ -237,14 +238,14 @@ export class Avatar3d {
   }
 
   /**
-   * VRM が置いてあれば、読めしだい基本形と入れかえる。
-   * 無ければ何もしない（基本形のまま）。
+   * モデル（`avatar.vrm` か `avatar.glb`）が置いてあれば、読めしだい
+   * 基本形と入れかえる。無ければ何もしない（基本形のまま）。
    */
   private async tryVrm(): Promise<void> {
-    const vrm = await loadVrm();
-    if (!vrm || this.disposed || this.vrm) return;
+    const loaded = await loadAvatarModel();
+    if (!loaded || this.disposed || this.vrm) return;
     this.teardownPrimitive();
-    this.vrm = new VrmAvatar(vrm, this.showHead);
+    this.vrm = new VrmAvatar(loaded, this.showHead);
     this.root.add(this.vrm.root);
     this.thirdPerson.length = 0;
     this.thirdPerson.push(...this.vrm.thirdPerson);

@@ -20,27 +20,51 @@
  * parse はアバター1人につき1回だけで、毎フレームではない。
  */
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import type * as THREE from 'three';
 import { VRMLoaderPlugin, type VRM } from '@pixiv/three-vrm';
 
-/** 置き場所。`public/` に入れたものは、この名前でそのまま配られる */
-export const VRM_URL = './avatar.vrm';
+/**
+ * 置き場所。`public/` に入れたものは、この名前でそのまま配られる。
+ *
+ * **上から順に**探して、最初に見つかったものを使う。
+ * - `.vrm`  VRoid Studio。表情・一人称・揺れもの が入っている
+ * - `.glb`  ふつうのリグ付き glTF（Tripo の自動リグ、Mixamo、Blender など）
+ */
+export const MODEL_URLS = ['./avatar.vrm', './avatar.glb'] as const;
+/** 後方互換。古い呼びかたを残してある */
+export const VRM_URL = MODEL_URLS[0];
 
-let bytes: Promise<ArrayBuffer | null> | null = null;
+export interface Loaded {
+  /** VRM として読めたときだけ入る */
+  vrm: VRM | null;
+  /** 置きかえ先のルート。VRM のときは `vrm.scene` と同じ */
+  scene: THREE.Object3D;
+}
 
-/** ファイルを1回だけ取ってくる。無ければ null（そのまま基本形にもどる） */
-function fetchOnce(url: string): Promise<ArrayBuffer | null> {
-  // テスト（node）からは取りにいかない。基本形のまま動けばよい
-  if (typeof window === 'undefined') return Promise.resolve(null);
-  bytes ??= fetch(url)
-    .then((res) => (res.ok ? res.arrayBuffer() : null))
-    .catch(() => null);
-  return bytes;
+/** 置いてあるファイルを1回だけ探す。無ければ null（そのまま基本形にもどる） */
+async function findOnce(urls: readonly string[]): Promise<{ url: string; buf: ArrayBuffer } | null> {
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const buf = await res.arrayBuffer();
+      // 置いていないときにサーバーが index.html を返すことがある。中身で見分ける
+      if (buf.byteLength > 12 && new DataView(buf).getUint32(0, true) === 0x46546c67) {
+        return { url, buf };
+      }
+    } catch {
+      // つぎの名前を試す
+    }
+  }
+  return null;
 }
 
 /** テストや作り直しのため、取っておいたものを捨てる */
 export function forgetVrm(): void {
-  bytes = null;
+  raw = null;
 }
+
+let raw: Promise<{ url: string; buf: ArrayBuffer } | null> | null = null;
 
 function makeLoader(): GLTFLoader {
   const loader = new GLTFLoader();
@@ -49,20 +73,24 @@ function makeLoader(): GLTFLoader {
 }
 
 /**
- * VRM をひとつ作る。置いていなければ `null`。
+ * モデルをひとつ作る。置いていなければ `null`。
  *
  * 人ぶん（自分＋おきゃくさん）それぞれで呼ぶ。同じバイト列から作るので
  * 通信は1回きり。
  */
-export async function loadVrm(url = VRM_URL): Promise<VRM | null> {
-  const buf = await fetchOnce(url);
-  if (!buf) return null;
+export async function loadAvatarModel(urls: readonly string[] = MODEL_URLS): Promise<Loaded | null> {
+  // テスト（node）からは取りにいかない。基本形のまま動けばよい
+  if (typeof window === 'undefined') return null;
+  raw ??= findOnce(urls);
+  const found = await raw;
+  if (!found) return null;
   try {
     // parse は元のバイト列を書きかえることがあるので、人ぶんに写してから渡す
-    const gltf = await makeLoader().parseAsync(buf.slice(0), '');
-    return (gltf.userData.vrm as VRM | undefined) ?? null;
+    const gltf = await makeLoader().parseAsync(found.buf.slice(0), '');
+    const vrm = (gltf.userData.vrm as VRM | undefined) ?? null;
+    return { vrm, scene: vrm?.scene ?? gltf.scene };
   } catch {
-    // VRM として読めないファイルが置かれていても、ゲームは止めない
+    // 読めないファイルが置かれていても、ゲームは止めない
     return null;
   }
 }

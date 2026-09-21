@@ -1,5 +1,8 @@
 /**
- * VRM のアバター1体。`Avatar3d` の中身として使う。
+ * 読みこんだモデルのアバター1体。`Avatar3d` の中身として使う。
+ *
+ * VRM（VRoid）でも、ふつうのリグ付き glTF（Tripo の自動リグ・Mixamo・Blender）でも
+ * 同じように扱う。骨組みの作りの違いは `humanoid.ts` が吸収する。
  *
  * やること:
  * - 紙人形の姿勢（`AvatarPose`）を人型ボーンの角度に流しこむ（`vrmPose.ts`）
@@ -14,13 +17,18 @@
  * 三人称ぶんのオブジェクトを集めておいて、鏡を描くあいだだけ出す。
  * レイヤーではなく `visible` で切りかえるのは、鏡（`Reflector`）が
  * カメラを複製して描くため、レイヤーの指定が効かないから。
+ *
+ * VRM でないモデルはその区分を持っていないので、**頭のボーンから先**を
+ * 三人称ぶんとして扱う。
  */
 import * as THREE from 'three';
 import { VRMExpressionPresetName, VRMFirstPerson, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import type { AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
 import type { AvatarLook } from '../types';
+import { RiggedHumanoid, VrmHumanoid, type Humanoid } from './humanoid';
 import { EXPRESSION_OF, poseToRig, REST_EYE, type RigBone } from './vrmPose';
+import type { Loaded } from './vrmSource';
 
 /**
  * マテリアルの名前 → きせかえのどの色か。
@@ -55,18 +63,26 @@ export class VrmAvatar {
   private readonly body = new THREE.Group();
   private readonly tinted: Array<[Tintable, keyof AvatarLook, THREE.Color]> = [];
   private readonly clock = { last: 0 };
+  private readonly humanoid: Humanoid;
+  private readonly vrm: VRM | null;
+  private readonly scene: THREE.Object3D;
   private blink = 0;
 
-  constructor(private readonly vrm: VRM, private readonly showHead: boolean) {
-    this.root.name = 'vrmAvatar';
+  constructor(loaded: Loaded, private readonly showHead: boolean) {
+    this.vrm = loaded.vrm;
+    this.scene = loaded.scene;
+    const vrm = this.vrm;
+    this.root.name = 'modelAvatar';
     this.root.add(this.body);
-    this.body.add(vrm.scene);
+    this.body.add(this.scene);
 
-    // 使っていない頂点やボーンを落とす。人数ぶん持つので効く
-    VRMUtils.removeUnnecessaryVertices(vrm.scene);
-    VRMUtils.combineSkeletons(vrm.scene);
+    if (vrm) {
+      // 使っていない頂点やボーンを落とす。人数ぶん持つので効く
+      VRMUtils.removeUnnecessaryVertices(vrm.scene);
+      VRMUtils.combineSkeletons(vrm.scene);
+    }
 
-    vrm.scene.traverse((o) => {
+    this.scene.traverse((o) => {
       o.frustumCulled = false; // 左右が内向きのヘッドセットで外縁が消えるのを防ぐ
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -78,9 +94,17 @@ export class VrmAvatar {
       }
     });
 
+    this.humanoid = vrm?.humanoid
+      ? new VrmHumanoid(vrm.humanoid)
+      : new RiggedHumanoid(this.scene);
     this.fitHeight();
     this.splitFirstPerson();
     this.measure();
+  }
+
+  /** 姿勢を当てられるモデルか。ボーンが足りなければ立たせたままにする */
+  get posable(): boolean {
+    return this.humanoid.found >= 8;
   }
 
   /**
@@ -95,14 +119,21 @@ export class VrmAvatar {
    * ファイルのために、だいたいの値も用意しておく。
    */
   private fitHeight(): void {
-    const scene = this.vrm.scene;
-    const head = this.vrm.humanoid?.getRawBoneNode('head');
-    if (!head) return;
+    const scene = this.scene;
     scene.updateWorldMatrix(true, true);
-    const p = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
-    scene.worldToLocal(p);
-    const offset = this.vrm.lookAt?.offsetFromHeadBone.y ?? 0.06;
-    const eyeY = p.y + offset;
+    let eyeY = 0;
+
+    const head = this.vrm?.humanoid?.getRawBoneNode('head');
+    if (head) {
+      const p = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
+      scene.worldToLocal(p);
+      eyeY = p.y + (this.vrm?.lookAt?.offsetFromHeadBone.y ?? 0.06);
+    } else {
+      // VRM でないモデルは目の位置を持っていない。背の高さから見当をつける
+      // （人のかたちなら、目はだいたい てっぺんの 0.93 あたり）
+      const box = new THREE.Box3().setFromObject(scene);
+      if (Number.isFinite(box.max.y)) eyeY = box.max.y * 0.93;
+    }
     if (!(eyeY > 0.2)) return; // 測れないファイルはそのままにする
     scene.scale.setScalar(PX(REST_EYE) / eyeY);
   }
@@ -114,14 +145,22 @@ export class VrmAvatar {
    * オブジェクトを拾って、まとめて出し入れできるようにしておく。
    */
   private splitFirstPerson(): void {
-    const fp = this.vrm.firstPerson;
-    if (!fp) return;
+    const fp = this.vrm?.firstPerson;
+    if (!fp) {
+      // VRM でないモデルは区分を持っていない。頭のボーンから先をまとめて扱う
+      const head = this.humanoid.headNode;
+      if (head) {
+        head.visible = this.showHead;
+        this.thirdPerson.push(head);
+      }
+      return;
+    }
     fp.setup();
     // 三人称ぶんのレイヤーが立っているものを拾う。**親は変えない**
     // （付けかえると位置がずれる）。出し入れは `visible` でする
     const mask = new THREE.Layers();
     mask.set(VRMFirstPerson.DEFAULT_THIRDPERSON_ONLY_LAYER);
-    this.vrm.scene.traverse((o) => {
+    this.scene.traverse((o) => {
       if (!o.layers.test(mask)) return;
       o.visible = this.showHead;
       this.thirdPerson.push(o);
@@ -130,8 +169,8 @@ export class VrmAvatar {
 
   /** 頭のてっぺんの高さを測る。モデルの背丈はファイルごとに違う */
   private measure(): void {
-    this.vrm.scene.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(this.vrm.scene);
+    this.scene.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(this.scene);
     this.headTopY = Number.isFinite(box.max.y) ? box.max.y : PX(REST_EYE) * 1.12;
   }
 
@@ -144,18 +183,16 @@ export class VrmAvatar {
   }
 
   setPose(pose: AvatarPose, nowMs = 0): void {
-    const humanoid = this.vrm.humanoid;
-    if (!humanoid) return;
-
     const rig = poseToRig(pose);
-    for (const [name, [x, y, z]] of Object.entries(rig.bones)) {
-      const node = humanoid.getNormalizedBoneNode(name as RigBone);
-      node?.rotation.set(x, y, z);
+    if (this.posable) {
+      for (const [name, xyz] of Object.entries(rig.bones)) {
+        this.humanoid.apply(name as RigBone, xyz);
+      }
+      this.humanoid.update();
     }
     this.body.position.y = -PX(rig.dropPx);
-    humanoid.update();
 
-    const expr = this.vrm.expressionManager;
+    const expr = this.vrm?.expressionManager;
     if (expr) {
       for (const preset of Object.values(VRMExpressionPresetName)) {
         expr.setValue(preset, 0);
@@ -171,11 +208,11 @@ export class VrmAvatar {
     // 実際に動いた結果として VRM 側に揺らしてもらう
     const dt = this.clock.last ? Math.min(0.1, (nowMs - this.clock.last) / 1000) : 0;
     this.clock.last = nowMs;
-    if (dt > 0) this.vrm.update(dt);
+    if (dt > 0) this.vrm?.update(dt);
   }
 
   dispose(): void {
-    VRMUtils.deepDispose(this.vrm.scene);
+    VRMUtils.deepDispose(this.scene);
     this.root.clear();
   }
 }

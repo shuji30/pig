@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>アバターの読みこみ確認</title>
+<!--
+  public/avatar.vrm か avatar.glb が、ゲームと同じ道すじで読めるかを見る。
+
+    npm run dev → http://localhost:5173/tools/vroid/check.html
+
+  出るもの: 背の高さ・見つかったボーン・姿勢を当てられるか。
+  ゲームを起動せずに確かめられるので、モデルを差しかえるたびにここを見る。
+-->
+<style>
+  body { margin:0; background:#dfe6ee; font:13px/1.6 system-ui, sans-serif; }
+  #log { position:fixed; left:10px; top:10px; background:#fffc; padding:10px 12px;
+         border-radius:8px; white-space:pre; color:#2b2724; }
+</style>
+<div id="log">よみこみ中…</div>
+<script type="module" src="./check.ts"></script>
