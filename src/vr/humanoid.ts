@@ -141,10 +141,8 @@ const BONES: readonly RigBone[] = [
 
 interface Rest {
   node: THREE.Object3D;
-  /** 休めの姿勢での、親から見た向き */
-  local: THREE.Quaternion;
-  /** 休めの姿勢での、親のワールドの向き（角度をこの空間へ移すのに使う） */
-  parent: THREE.Quaternion;
+  /** 休めの姿勢での、ワールドから見た向き */
+  world: THREE.Quaternion;
 }
 
 /**
@@ -156,11 +154,15 @@ interface Rest {
  * 休めの姿勢も T ポーズとはかぎらない。そのまま入れると体が ねじれる。
  *
  * ## どうするか
- * 読みこんだときの姿勢を「休め」として覚えておき、**そこからの差**として
- * 当てる。キャラクター空間の回転 q を親の空間へ移してから、休めの向きに
- * かけあわせる:
+ * 読みこんだときの姿勢を「休め」として、そのボーンの**ワールドの向き**を
+ * 覚えておく。姿勢を当てるときは、
  *
- *     新しい向き（親から見て） = (親の休めの向き)⁻¹ ・ q ・ (親の休めの向き) ・ (休めの向き)
+ *     ほしいワールドの向き = q ・ (休めのワールドの向き)
+ *     親から見た向き      = (親の いまの ワールドの向き)⁻¹ ・ ほしいワールドの向き
+ *
+ * 親の「いまの」向きを見るのがだいじ。胴を動かしてから腕を動かすので、
+ * 休めの向きを使うと、胴のぶんが二重にかかる。
+ * 当てる順も 腰 → 背 → 胸 → 腕・脚 でなければならない（`poseToRig` の並び）。
  */
 export class RiggedHumanoid implements Humanoid {
   private readonly rest = new Map<RigBone, Rest>();
@@ -178,13 +180,9 @@ export class RiggedHumanoid implements Humanoid {
     for (const [bone, name] of Object.entries(mapBoneNames([...byName.keys()]))) {
       const node = byName.get(name!);
       if (!node) continue;
-      const parent = new THREE.Quaternion();
-      node.parent?.getWorldQuaternion(parent);
-      this.rest.set(bone as RigBone, {
-        node,
-        local: node.quaternion.clone(),
-        parent,
-      });
+      const world = new THREE.Quaternion();
+      node.getWorldQuaternion(world);
+      this.rest.set(bone as RigBone, { node, world });
     }
   }
 
@@ -199,10 +197,14 @@ export class RiggedHumanoid implements Humanoid {
   apply(bone: RigBone, [x, y, z]: readonly [number, number, number]): void {
     const r = this.rest.get(bone);
     if (!r) return;
-    this.q.setFromEuler(this.e.set(x, y, z));
-    // キャラクター空間の回転を、親の空間へ移す
-    this.tmp.copy(r.parent).invert().multiply(this.q).multiply(r.parent);
-    r.node.quaternion.copy(this.tmp).multiply(r.local);
+    // ほしいワールドの向き = q ・ 休めのワールドの向き
+    this.q.setFromEuler(this.e.set(x, y, z)).multiply(r.world);
+    // 親の いまの 向きで割って、親から見た向きにする
+    if (r.node.parent) {
+      r.node.parent.getWorldQuaternion(this.tmp);
+      this.q.premultiply(this.tmp.invert());
+    }
+    r.node.quaternion.copy(this.q);
   }
 
   update(): void {

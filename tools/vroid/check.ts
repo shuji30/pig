@@ -13,6 +13,9 @@ const look = {
   shirt: '#ff9ec4', pants: '#7d9ff0', shoes: '#3b2b28', hairStyle: 0, outfit: 'dress',
 } as AvatarLook;
 
+/** `?nopose` を付けると、姿勢を当てずにそのまま出す（切り分け用） */
+const NOPOSE = new URLSearchParams(location.search).has('nopose');
+
 const POSES = [
   ['立ち', restPose()],
   ['歩き', { ...restPose(), swing: 7, legLen: 11 }],
@@ -46,7 +49,7 @@ if (!loaded) {
     const one = (await loadAvatarModel(['/avatar.vrm', '/avatar.glb']))!;
     const a = new VrmAvatar(one, true);
     a.setLook(look);
-    a.setPose(pose, performance.now());
+    if (!NOPOSE) a.setPose(pose, performance.now());
     a.root.position.x = (i - (POSES.length - 1) / 2) * 0.5;
     scene.add(a.root);
     if (i === 0) {
@@ -54,6 +57,19 @@ if (!loaded) {
       lines.push(`姿勢を当てられるか   : ${a.posable ? 'はい' : 'いいえ（ボーンが足りない）'}`);
     }
     lines.push(`${i + 1}. ${label}`);
+    if (i === 0) {
+      const w = new THREE.Vector3();
+      a.root.updateWorldMatrix(true, true);
+      a.root.traverse((o) => {
+        if (!/(LeftArm|LeftForeArm|Hips|LeftUpLeg)$/.test(o.name)) return;
+        o.getWorldPosition(w);
+        const q = o.quaternion;
+        lines.push(`   ${o.name.replace('mixamorig:', '')}: ` +
+          `pos(${w.x.toFixed(2)},${w.y.toFixed(2)},${w.z.toFixed(2)}) ` +
+          `q(${q.x.toFixed(2)},${q.y.toFixed(2)},${q.z.toFixed(2)},${q.w.toFixed(2)}) ` +
+          `len=${q.length().toFixed(3)}`);
+      });
+    }
   }
   log.textContent = lines.join('\n');
 

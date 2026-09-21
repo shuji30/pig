@@ -30,7 +30,7 @@ export const REST_LEG = 12;
  */
 export const REST_EYE = 39.6;
 /** 下ろした腕が体の横につくまでの角度(rad) */
-const ARM_DOWN = 1.32;
+const ARM_DOWN = 1.42;
 
 /** 人型ボーンのうち、ここで動かすものの名前 */
 export type RigBone =
