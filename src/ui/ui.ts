@@ -21,6 +21,7 @@ import { STAMPS } from '../data/stamps';
 import { makeStampIconCanvas } from '../render/stampArt';
 import type { MissionView } from '../state/economy';
 import { sellPrice } from '../state/economy';
+import { modelReady, whenModelReady } from '../render/avatarModelGate';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { PETS } from '../data/pets';
 import { makeIconCanvas } from '../render/furnitureTexture';
@@ -111,6 +112,9 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 /** DOM 側の UI 全般 */
 export class Ui {
+  /** 立体のモデルの到着を待っているか（プレビューの描き直しを1回だけにする） */
+  private previewWaiting = false;
+
   private tab: FurnitureCategory | 'shop' | 'pet' = 'seat';
   private inventory: Record<string, number> = {};
   private pets: string[] = [];
@@ -454,6 +458,11 @@ export class Ui {
     const box = $('avatar-preview');
     box.innerHTML = '';
     box.appendChild(makeAvatarPreviewCanvas(this.scene, this.look));
+    // 立体のモデルは画面が出てから数秒おくれて届く。届いたら描き直す
+    if (!this.previewWaiting && !modelReady()) {
+      this.previewWaiting = true;
+      whenModelReady(() => this.refreshWardrobe());
+    }
     const nameInput = $<HTMLInputElement>('avatar-name');
     if (document.activeElement !== nameInput) nameInput.value = this.look.name;
   }
