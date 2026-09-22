@@ -94,14 +94,17 @@ const TINT_OF: ReadonlyArray<[RegExp, keyof AvatarLook]> = [
 
 /**
  * さわらないマテリアル。
- * - 目（ひとみ・白目・ハイライト）は色を変えない
+ * - 白目とハイライトは色を変えない（ひとみ＝虹彩だけは きせかえで変える）
  * - まつ毛・眉・口は顔の絵なので、肌色を掛けると ぼやける
  * - 輪郭線（MToon のアウトライン）は黒のままにする
  */
-const KEEP = /outline|_eye\b|eyeiris|eyewhite|eyehighlight|facemouth|facebrow|faceeyeline/i;
+const KEEP = /outline|_eye\b|eyewhite|eyehighlight|facemouth|facebrow|faceeyeline/i;
 
 /** きせかえの色は「元の絵に掛ける」。掛け算なので、白い服ほどよく乗る */
 function tintOf(name: string): keyof AvatarLook | null {
+  // ひとみ。白目とハイライトはさわらないが、虹彩だけは きせかえで変える。
+  // 名前は `..._EyeIris_00_EYE` で `KEEP` の `_eye\b` にも当たるので、先に見る
+  if (/eyeiris/i.test(name)) return 'eyes';
   if (KEEP.test(name)) return null;
   for (const [re, key] of TINT_OF) if (re.test(name)) return key;
   return null;
@@ -153,6 +156,11 @@ export class VrmAvatar {
    * 1体を人数ぶん使いまわす裏画面では切る（人ごとの揺れが混ざるため）
    */
   springs = true;
+  /**
+   * このモデルで色を変えられる部位。きせかえの画面は、ここに無い行を
+   * 出さない（押しても何も起きないボタンを見せないため）
+   */
+  readonly tints = new Set<keyof AvatarLook>();
 
   private readonly body = new THREE.Group();
   private readonly tinted: Array<[Tintable, keyof AvatarLook, THREE.Color]> = [];
@@ -195,6 +203,7 @@ export class VrmAvatar {
     // そのまま掛けると服も髪も肌色になってしまう。掛けるのをやめて、
     // 作ったままの色で出す
     if (this.tinted.length < MIN_TINTS) this.tinted.length = 0;
+    for (const [, key] of this.tinted) this.tints.add(key);
 
     this.humanoid = vrm?.humanoid
       ? new VrmHumanoid(vrm.humanoid)

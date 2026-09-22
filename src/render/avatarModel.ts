@@ -236,6 +236,17 @@ export function lieYaw(tilt: 1 | -1): number {
   return tilt === 1 ? 0 : Math.PI / 2;
 }
 
+/**
+ * このモデルで色を変えられる部位（`AvatarLook` のどのキーか）。
+ *
+ * きせかえの画面は、ここに無い行を出さない。モデルによって持っている
+ * マテリアルが違う（ワンピースのモデルには「ズボン」が無い、など）ので、
+ * 押しても何も起きないボタンを見せないためにこれを配る
+ */
+export function modelTints(): ReadonlySet<string> | null {
+  return stage ? stage.avatar.tints : null;
+}
+
 /** 向き（タイルの進む先）→ 体の回転。体は +z を向いている */
 export function yawOf(dir: { dgx: number; dgy: number }): number {
   if (dir.dgx === 0 && dir.dgy === 0) return 0;
