@@ -63,6 +63,19 @@ const SIT_FLESH = 2.4;
 const MIN_TINTS = 3;
 
 /**
+ * ごろ寝でスカートを落とすときの、回す回数・1回ぶんの時間(秒)・重力・ばね。
+ *
+ * VRoid のスカートは**重力が 0** で、ばねで素の形へ戻るだけになっている
+ * （立っているぶんにはそれで足りるため）。横になると、その素の形＝立って
+ * いるときの広がりがそのまま残って「まくれている」ように見える。
+ * 落とすあいだだけ重力を入れ、ばねを弱めて、ふとんの上へ垂らす
+ */
+const SETTLE_STEPS = 90;
+const SETTLE_DT = 1 / 30;
+const SETTLE_GRAVITY = 0.5;
+const SETTLE_STIFFNESS = 0.3;
+
+/**
  * マテリアルの名前 → きせかえのどの色か。
  *
  * VRoid Studio が付ける名前は `N00_000_00_Body_00_SKIN` のような形で、
@@ -135,6 +148,11 @@ export class VrmAvatar {
    * ごろ寝で模型を横にたおすとき、これだけ持ち上げると背中が面に乗る
    */
   backY = 0.1;
+  /**
+   * 揺れもの（髪・スカート）を揺らすか。
+   * 1体を人数ぶん使いまわす裏画面では切る（人ごとの揺れが混ざるため）
+   */
+  springs = true;
 
   private readonly body = new THREE.Group();
   private readonly tinted: Array<[Tintable, keyof AvatarLook, THREE.Color]> = [];
@@ -143,6 +161,8 @@ export class VrmAvatar {
   private readonly vrm: VRM | null;
   private readonly scene: THREE.Object3D;
   private blink = 0;
+  /** ごろ寝で落ち着いたスカートの形。1回だけ計算して使いまわす */
+  private lieSprings: Array<[THREE.Object3D, THREE.Quaternion]> | null = null;
 
   constructor(loaded: Loaded, private readonly showHead: boolean) {
     this.vrm = loaded.vrm;
@@ -294,11 +314,53 @@ export class VrmAvatar {
     }
 
     // 揺れもの（髪・スカート）。`hairSway` は絵のための値なので使わず、
-    // 実際に動いた結果として VRM 側に揺らしてもらう
+    // 実際に動いた結果として VRM 側に揺らしてもらう。
+    //
+    // 裏画面（`render/avatarModel.ts`）は1体を人数ぶん使いまわすので、
+    // 揺れの続きが混ざらないよう `springs` を切る。そのときは素の形へ戻す
     const dt = this.clock.last ? Math.min(0.1, (nowMs - this.clock.last) / 1000) : 0;
     this.clock.last = nowMs;
-    if (dt > 0) this.vrm?.update(dt);
+    if (this.springs && dt > 0) this.vrm?.update(dt);
+    else this.vrm?.springBoneManager?.reset();
   }
+
+  /**
+   * 横にたおしたあと、スカートをふとんの上へ垂らす。
+   *
+   * 落ち着いた形は**毎回おなじ**（ごろ寝の姿勢は決めうち、重力は体から見て
+   * いつも同じ向き）なので、1回だけ回して覚えておき、あとは貼るだけにする。
+   * 使う側が体をたおし終えてから呼ぶ（`render/avatarModel.ts`）。
+   */
+  settleLying(): void {
+    const mgr = this.vrm?.springBoneManager;
+    if (!mgr) return;
+    if (this.lieSprings) {
+      for (const [bone, q] of this.lieSprings) {
+        bone.quaternion.copy(q);
+        // 骨は glTF から来ていて、three が毎フレーム行列を作り直してくれない。
+        // ここで作り直さないと、貼った向きが絵に出ない
+        bone.updateMatrix();
+      }
+      return;
+    }
+    const skirt = [...mgr.joints].filter((j) => /skirt/i.test(j.bone.name));
+    const saved = skirt.map((j) => ({ j, g: j.settings.gravityPower, s: j.settings.stiffness }));
+    for (const j of skirt) {
+      j.settings.gravityPower = SETTLE_GRAVITY;
+      j.settings.stiffness = SETTLE_STIFFNESS;
+    }
+    this.root.updateWorldMatrix(true, true);
+    mgr.reset();
+    for (let i = 0; i < SETTLE_STEPS; i++) mgr.update(SETTLE_DT);
+    for (const { j, g, s } of saved) {
+      j.settings.gravityPower = g;
+      j.settings.stiffness = s;
+    }
+    this.lieSprings = [...mgr.joints].map(
+      (j) => [j.bone, j.bone.quaternion.clone()] as [THREE.Object3D, THREE.Quaternion],
+    );
+  }
+
 
   dispose(): void {
     VRMUtils.deepDispose(this.scene);

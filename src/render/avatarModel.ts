@@ -56,6 +56,15 @@ export const ROOM_H = ROOM_GROUND + 56;
 export const PREVIEW_W = 118;
 export const PREVIEW_H = 164;
 
+/**
+ * ごろ寝で体の軸まわりにひねる角(rad)。0 なら真あお向け、π/2 で真横向き。
+ * スカートの広がりが上を向かない程度に倒す
+ */
+const LIE_ROLL = 0.7;
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+/** 体をたおす（頭が -z、顔が上）。`LIE_ROLL` の前に掛ける */
+const TIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+
 /** 画面の細かさ。上げるときれいだがそのぶん重い */
 const DPR = () => Math.min(2, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1);
 
@@ -96,7 +105,10 @@ export function readyModelStage(): Promise<Stage | null> {
     const loaded = await loadAvatarModel();
     if (!loaded) return null;
     // 頭も見せる（等角の画面は三人称なので、隠すところは無い）
-    stage = buildStage(new VrmAvatar(loaded, true));
+    const avatar = new VrmAvatar(loaded, true);
+    // 1体を人数ぶん使いまわすので、揺れものは切る。続きが混ざって暴れる
+    avatar.springs = false;
+    stage = buildStage(avatar);
     return stage;
   })();
   return loading;
@@ -190,19 +202,29 @@ export function isoHeadTopPx(pose: AvatarPose): number {
  * 等角のカメラからは本当に上から見た寝姿になる。
  *
  * - X まわりに -90度: 頭が -z（＝ -gy、画面の右上）へ、顔が上を向く
+ * - 体の軸まわりに `LIE_ROLL`: 真あお向けだと、スカートの広がりが
+ *   そのまま上を向いて「まくれている」ように見える（布の計算はしていない
+ *   ので、寝かせても形は変わらない）。横向きにすると広がりが体の横へ来て、
+ *   中も見えなくなる。顔がこちらを向く側へ倒す
  * - そのあと Y まわりに `yaw`: 頭の向きをベッドの長い方へまわす
- *   （順を守るため回転の順序を 'YXZ' にする）
  * - 足もとで回すと頭が絵からはみ出すので、**体の真ん中**を原点へ寄せる
  * - 背中の厚みぶん持ち上げて、ふとんにめりこませない
  */
 function layDown(avatar: VrmAvatar, yaw: number): void {
   const root = avatar.root;
-  root.rotation.order = 'YXZ';
-  root.rotation.set(-Math.PI / 2, yaw, 0);
+  // 体の軸まわりの ねじり（横向き）。手前を向くほうへ倒す。
+  // カメラは +x+z の側にいるので、顔の向きの (1,0,1) 成分が正になる符号を選ぶ
+  const roll = LIE_ROLL * (Math.cos(yaw) - Math.sin(yaw) >= 0 ? 1 : -1);
+  root.quaternion
+    .setFromAxisAngle(AXIS_Y, yaw)
+    .multiply(TIP)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_Y, roll));
   // たおしたあと、頭は この向きへ伸びる
   const head = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
   root.position.copy(head).multiplyScalar(-avatar.headTopY / 2);
   root.position.y = avatar.backY;
+  // スカートをふとんの上へ垂らす（素の形のままだと広がりが残ってまくれて見える）
+  avatar.settleLying();
 }
 
 /**
@@ -233,7 +255,7 @@ export function drawIsoAvatar(dest: HTMLCanvasElement, look: AvatarLook, pose: A
   s.avatar.setPose(pose, nowMs);
   if (pose.lying) layDown(s.avatar, yaw);
   else {
-    s.avatar.root.rotation.set(0, yaw, 0);
+    s.avatar.root.quaternion.setFromAxisAngle(AXIS_Y, yaw);
     s.avatar.root.position.set(0, 0, 0);
   }
   s.renderer.render(s.scene, isoCamera(ROOM_W, ROOM_H, ROOM_SCALE, ROOM_GROUND));
