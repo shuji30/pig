@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import type { Reflector } from 'three/addons/objects/Reflector.js';
 import type { TimeOfDay } from '../core/timeOfDay';
 import type { AvatarPose } from '../render/avatarPose';
-import { REST_EYE } from './vrmPose';
 import { FIRST_PERSON_LAYER } from './vrmSource';
 import { PX } from '../render/models3d.js';
 import type { PetDef } from '../data/pets';
@@ -20,8 +19,6 @@ export interface VrEye {
   /** 連続グリッド座標（マスの中心なら 3.5 のような値） */
   gx: number;
   gy: number;
-  /** 床からの目の高さ(px)。座っていれば座面のぶんも入っている */
-  heightPx: number;
   /** 足もとの高さ(px)。立っていれば 0、座っていれば座面の高さ */
   baseHeightPx: number;
   /** いまの見た目と姿勢。立体アバターがこれに合わせる */
@@ -495,9 +492,10 @@ export class VrView {
     if (!eye) return; // ゲームから最初の位置が来るまでは描かない
 
     // 目の高さ。平らな絵の値をそのまま使わず、**アバターの目の高さ**を基準に、
-    // 絵のぶんの上下（しゃがみ・すわり）だけを足す。人の形のモデルは
-    // 目が高いところにあるので、絵の値をそのまま使うと口のあたりにカメラが入る
-    const eyeY = this.avatar3d.eyeY + PX(eye.heightPx - REST_EYE);
+    // その姿勢で体が沈むぶんだけ下げる。人の形のモデルは目が高いところに
+    // あるので、絵の値をそのまま使うと口のあたりにカメラが入る。
+    // 沈む量はアバター自身に聞く（すわりは腰の高さぶん沈むので、絵とは違う）
+    const eyeY = PX(eye.baseHeightPx) + this.avatar3d.eyeY - this.avatar3d.dropY(eye.pose);
 
     // 自分のすがた。床の上（座っていれば座面の上）に、向いている方へ立たせる。
     // facingYaw() は「-z を向くカメラ」用の角度なので、顔が +z の体は半回転ぶんずらす

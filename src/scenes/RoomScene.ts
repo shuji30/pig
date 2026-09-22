@@ -1099,7 +1099,6 @@ export class RoomScene extends Phaser.Scene {
     vr.setEye({
       gx: pos.gx,
       gy: pos.gy,
-      heightPx: this.avatar.eyeHeightPx,
       baseHeightPx: this.avatar.baseHeightPx,
       look: this.avatar.currentLook,
       pose: this.avatar.currentPose,

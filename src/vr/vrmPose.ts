@@ -22,8 +22,17 @@ export const REST_HIP = -14;
 /** 立っているときの脚の長さ(px) */
 export const REST_LEG = 12;
 /**
- * 立っているときの目の高さ(px)。`Avatar.eyeHeightPx` と同じ値。
- * 基本形のアバターの目はここにある。
+ * 立っているときの腰（ヒップボーン）の床からの高さ(px)。
+ *
+ * すわったときに、腰をここから**座面（＝モデルの足もとの面）まで**落とす。
+ * 絵のほうは2頭身で腰が 14px にしかないので、その値で落とすとモデルは
+ * 座面の上に浮いてしまう。モデルを測った値を渡してもらい、渡されなければ
+ * この見当（`avatar.vrm` を測った値）を使う。
+ */
+export const REST_HIP_UP = 28;
+/**
+ * 立っているときの目の高さ(px)。基本形のアバターの目はここにある。
+ * 読みこんだモデルは自分で測った目の高さを使う（`VrmAvatar.eyeY`）。
  */
 export const REST_EYE = 39.6;
 /**
@@ -68,7 +77,7 @@ function empty(): Record<RigBone, [number, number, number]> {
  * `swing` は歩きの振り。絵では脚と腕を前後にずらす px なので、
  * 付けねからの回転に読みかえる。
  */
-export function poseToRig(pose: AvatarPose): RigPose {
+export function poseToRig(pose: AvatarPose, hipUpPx = REST_HIP_UP): RigPose {
   const b = empty();
   const { swing, breathe, liftL, liftR, legLen, hipY, sitting } = pose;
 
@@ -86,6 +95,10 @@ export function poseToRig(pose: AvatarPose): RigPose {
     b.leftFoot = [0.20, 0, 0];
     b.rightFoot = [0.20, 0, 0];
     b.spine = [0.06, 0, 0];
+    // 腰を座面まで落とす。使う側が置く原点（＝座面）にお尻が乗るように、
+    // **腰の高さぶん** 下げる。絵の値（hipY - REST_HIP = 13px）は2頭身の
+    // 腰の高さなので、人の形のモデルではまるで足りず、椅子の上に浮く
+    dropPx = hipUpPx;
   } else {
     // 立ち・歩き。脚が縮んだぶんを ひざ の曲げにする
     const bend = Math.max(0, 1 - legLen / REST_LEG);

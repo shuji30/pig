@@ -35,6 +35,14 @@ export class Avatar {
    * モデルを置いていなければ null のままで、平らな絵で描く
    */
   private model: Phaser.GameObjects.Image | null = null;
+  /**
+   * モデルの貼り先を入れる容れもの。
+   *
+   * `bodyWrap` には入れられない（`PartPainter.clear()` が中身をまとめて
+   * 外すので、毎回消える）。かわりに兄弟として置き、**`bodyWrap` と同じ
+   * 動かしかた**（すわる位置・ごろ寝の傾き・モーションの角度）をする
+   */
+  private modelWrap: Phaser.GameObjects.Container | null = null;
   private modelCanvas: HTMLCanvasElement | null = null;
   private modelKey = '';
   private readonly label: Phaser.GameObjects.Text;
@@ -500,18 +508,6 @@ export class Avatar {
     return screenToGrid(this.container.x, this.container.y + this.liftPx);
   }
 
-  /**
-   * 足もとからの目の高さ(px)。VR のカメラの高さに使う。
-   *
-   * 絵のほうは `hipY`（立ち -14 / 座り -1）を起点に `headY = hipY - 28`、
-   * 目は `headY + 2.4`（`render/avatarArt.ts`）。座っているぶんは
-   * 座面の高さをそのまま足す。
-   */
-  get eyeHeightPx(): number {
-    const hipY = this.sittingOn !== null ? -1 : -14;
-    return this.liftPx - (hipY - 28 + 2.4);
-  }
-
   setDepthResolver(fn: (box: { gx0: number; gx1: number; gy0: number; gy1: number }) => number) {
     this.depthResolver = fn;
     this.updateDepth();
@@ -566,9 +562,9 @@ export class Avatar {
       .image(0, 0, this.modelKey)
       .setOrigin(0.5, api.ROOM_GROUND / api.ROOM_H)
       .setDisplaySize(api.ROOM_W, api.ROOM_H);
-    // `bodyWrap` には入れない。`PartPainter.clear()` が中身を
-    // まとめて外すので、入れると毎回消える。影と名前のあいだに置く
-    this.container.addAt(this.model, 2);
+    this.modelWrap = this.scene.add.container(0, 0, [this.model]);
+    // 影と名前のあいだに置く
+    this.container.addAt(this.modelWrap, 2);
     this.artGfx?.setVisible(false);
     return true;
   }
@@ -780,6 +776,9 @@ export class Avatar {
     this.bodyWrap.setPosition(tx, ty);
     this.bodyWrap.setAngle(angle);
     this.bodyWrap.setScale(this.flip ? -1 : 1, sy);
+    // モデルも同じに動かす。ただし**左右は反転しない**（絵は裏返せばよいが、
+    // 立体を裏返すと左右の手が入れかわる）。向きは `facing` から角度で出す
+    this.modelWrap?.setPosition(tx, ty).setAngle(angle).setScale(1, sy);
 
     // 影は床に置いたまま。跳ぶと小さくなる
     this.shadow.clear();

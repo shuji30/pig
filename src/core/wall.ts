@@ -37,6 +37,17 @@ export function levelCenter(level: number): number {
   return WALL_H - TOP_MARGIN - WALL_LEVEL_H / 2 - level * WALL_LEVEL_H;
 }
 
+/**
+ * その段に置いたときの、かざりの**下端**の高さ(px)。
+ *
+ * ふだんは段の中心にそろえるが、背の高いもの（姿見など）は段からはみ出して
+ * 床より下や天井より上へ行ってしまう。壁の中に収まるところまで寄せる。
+ */
+export function itemBottom(level: number, height: number): number {
+  const top = WALL_H - TOP_MARGIN - height;
+  return Math.min(Math.max(0, top), Math.max(0, levelCenter(level) - height / 2));
+}
+
 /** 高さから段を求める */
 export function levelOf(h: number): number {
   const i = Math.floor((WALL_H - TOP_MARGIN - h) / WALL_LEVEL_H);

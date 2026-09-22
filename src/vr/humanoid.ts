@@ -108,6 +108,8 @@ export interface Humanoid {
   readonly found: number;
   /** 頭のボーン。一人称で頭ごと隠すのに使う（VRM は自前のしくみを使う） */
   readonly headNode: THREE.Object3D | null;
+  /** その部位のボーン。背丈や腰の高さを測るのに使う。無ければ null */
+  nodeOf(bone: RigBone): THREE.Object3D | null;
 }
 
 /** VRM。正規化された骨組みは T ポーズで軸もそろっているので、そのまま入れる */
@@ -122,6 +124,10 @@ export class VrmHumanoid implements Humanoid {
   /** VRM は一人称のしくみを自分で持っているので、ここでは使わない */
   get headNode(): THREE.Object3D | null {
     return null;
+  }
+
+  nodeOf(bone: RigBone): THREE.Object3D | null {
+    return this.humanoid.getNormalizedBoneNode(bone);
   }
 
   apply(bone: RigBone, [x, y, z]: readonly [number, number, number]): void {
@@ -192,6 +198,10 @@ export class RiggedHumanoid implements Humanoid {
 
   get headNode(): THREE.Object3D | null {
     return this.rest.get('head')?.node ?? null;
+  }
+
+  nodeOf(bone: RigBone): THREE.Object3D | null {
+    return this.rest.get(bone)?.node ?? null;
   }
 
   apply(bone: RigBone, [x, y, z]: readonly [number, number, number]): void {

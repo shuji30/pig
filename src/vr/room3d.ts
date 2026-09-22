@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FLOOR_STYLES, WALL_STYLES } from '../config';
 import { rotatedSize } from '../core/iso';
-import { levelCenter, WALL_COL_W } from '../core/wall';
+import { itemBottom, WALL_COL_W } from '../core/wall';
 import { TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { findDef, isWallDef } from '../data/furniture';
 import { recolored } from '../render/furnitureTexture';
@@ -130,8 +130,8 @@ function placeWallItem(item: PlacedWall, cache: PaintCache): THREE.Object3D | nu
 
   const pivot = new THREE.Group();
   pivot.add(model);
-  // WallLayer と同じで、段の中心から高さの半分ぶん下が下端
-  const bottom = PX(levelCenter(item.level) - def.height / 2);
+  // WallLayer と同じ決めかた（背の高いものは壁の中へ寄せる）
+  const bottom = PX(itemBottom(item.level, def.height));
 
   if (item.side === 'right') {
     // gy=0 の壁。模型の +x がそのまま gx、+z が部屋の内側

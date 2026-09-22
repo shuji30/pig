@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { HEAD_R, type AvatarPose } from '../render/avatarPose';
 import { PX } from '../render/models3d.js';
 import type { AvatarLook } from '../types';
-import { REST_EYE } from './vrmPose';
+import { poseToRig, REST_EYE, REST_HIP } from './vrmPose';
 import { loadAvatarModel } from './vrmSource';
 import { VrmAvatar } from './vrmAvatar';
 
@@ -235,6 +235,10 @@ export class Avatar3d {
     this.root.name = 'avatar3d';
     this.look = look;
     this.setLook(look);
+    // モデルが届くまで**出さない**。基本形が一瞬だけ映ると、鏡の前で VR に
+    // 入ったときに「別の姿」がちらつく。出ないほうがましなので、
+    // 入れかえが済むか、モデルが無いと分かるまで待つ
+    this.root.visible = false;
     void this.tryVrm();
   }
 
@@ -243,15 +247,20 @@ export class Avatar3d {
    * 基本形と入れかえる。無ければ何もしない（基本形のまま）。
    */
   private async tryVrm(): Promise<void> {
-    const loaded = await loadAvatarModel();
-    if (!loaded || this.disposed || this.vrm) return;
-    this.teardownPrimitive();
-    this.vrm = new VrmAvatar(loaded, this.showHead);
-    this.root.add(this.vrm.root);
-    this.thirdPerson.length = 0;
-    this.thirdPerson.push(...this.vrm.thirdPerson);
-    this.vrm.setLook(this.look);
-    if (this.pose) this.vrm.setPose(this.pose);
+    try {
+      const loaded = await loadAvatarModel();
+      if (!loaded || this.disposed || this.vrm) return;
+      this.teardownPrimitive();
+      this.vrm = new VrmAvatar(loaded, this.showHead);
+      this.root.add(this.vrm.root);
+      this.thirdPerson.length = 0;
+      this.thirdPerson.push(...this.vrm.thirdPerson);
+      this.vrm.setLook(this.look);
+      if (this.pose) this.vrm.setPose(this.pose);
+    } finally {
+      // モデルが無くても、読めなくても、ここで出す（基本形のまま）
+      if (!this.disposed) this.root.visible = true;
+    }
   }
 
   /** 吹き出しを置く高さ(m)。基本形と VRM で背丈が違うので、ここで吸収する */
@@ -268,6 +277,18 @@ export class Avatar3d {
    */
   get eyeY(): number {
     return this.vrm ? this.vrm.eyeY : PX(REST_EYE);
+  }
+
+  /**
+   * その姿勢で体を沈める量(m)。VR のカメラも同じだけ下げる。
+   *
+   * 基本形は腰の高さ（`hipY`）をそのまま絵から取っているので、絵との差が
+   * そのまま沈む量になる。VRM はすわると**自分の腰の高さぶん**沈む
+   * （`poseToRig`）ので、絵の値では合わない。
+   */
+  dropY(pose: AvatarPose): number {
+    if (this.vrm) return PX(poseToRig(pose, this.vrm.hipUpPx).dropPx);
+    return PX(pose.hipY - REST_HIP);
   }
 
   /** きせかえが変わっていたら組み直す */

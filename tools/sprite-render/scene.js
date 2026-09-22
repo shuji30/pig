@@ -18,7 +18,7 @@
  * ゲーム側は out = shade * (白*(1-R-G) + 本体色*R + 張地色*G) で合成する。
  */
 import * as THREE from 'three';
-import { PX, PX_PER_HEIGHT, PX_PER_UNIT, roundedBoxGeo, SHAPES, WALL_SHAPES } from '../../src/render/models3d.js';
+import { PX, PX_PER_HEIGHT, PX_PER_UNIT, roundedBoxGeo, SHAPES, WALL_SHAPES, WU } from '../../src/render/models3d.js';
 
 export const HEIGHT_UNIT = PX_PER_HEIGHT;
 
