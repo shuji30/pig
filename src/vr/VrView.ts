@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Reflector } from 'three/addons/objects/Reflector.js';
 import type { TimeOfDay } from '../core/timeOfDay';
 import type { AvatarPose } from '../render/avatarPose';
+import { errText, hasSpace, xrSupport, type Support } from './xrSupport';
 import { FIRST_PERSON_LAYER } from './vrmSource';
 import { PX } from '../render/models3d.js';
 import type { PetDef } from '../data/pets';
@@ -183,6 +184,8 @@ export class VrView {
   /** セッションの最初に測った、遊んでいる人の目の高さ(m) */
   private baselineEyeY = 1.6;
   private measured = false;
+  /** 床が原点の空間（`local-floor`）で入れたか。入れなければ目の高さは測らない */
+  private floorSpace = true;
 
   /** ヘッドセットが無いときの見まわし */
   private yaw = 0;
@@ -239,7 +242,7 @@ export class VrView {
     }
 
     this.renderer.xr.addEventListener('sessionstart', () => {
-      this.measured = false;
+      this.measured = !this.floorSpace;
       this.yaw = 0;
       this.pitch = 0;
     });
@@ -407,29 +410,46 @@ export class VrView {
 
   // ---------------- VR の出入り ----------------
 
-  static async isSupported(): Promise<boolean> {
-    try {
-      return (await navigator.xr?.isSessionSupported('immersive-vr')) ?? false;
-    } catch {
-      return false;
-    }
+  /**
+   * ヘッドセットに入れるか。入れないときは**理由**も返す。
+   *
+   * 「入れません」だけだと、遊ぶ人にはどうしようもない。つまずく所は
+   * だいたい決まっている（http で開いている・ブラウザが対応していない・
+   * ランタイムが動いていない）ので、そのまま伝えて手が打てるようにする。
+   */
+  static support(): Promise<Support> {
+    return xrSupport();
   }
 
   get presenting(): boolean {
     return this.renderer.xr.isPresenting;
   }
 
-  /** ヘッドセットに入る。対応していなければ false（画面のプレビューはそのまま使える） */
-  async enterVr(): Promise<boolean> {
-    if (!navigator.xr) return false;
+  /**
+   * ヘッドセットに入る。入れなければ理由を返す（画面のプレビューはそのまま使える）。
+   *
+   * 基準になる空間は `local-floor`（床が原点）を使いたいが、部屋の設定を
+   * していないランタイムでは断られる。そのときは `local`（かぶった所が原点）
+   * へ落とす。ここで落とさないと、対応しているヘッドセットでも入れない
+   */
+  async enterVr(): Promise<Support> {
+    const support = await VrView.support();
+    if (!support.ok) return support;
     try {
-      const session = await navigator.xr.requestSession('immersive-vr', {
+      const session = await navigator.xr!.requestSession('immersive-vr', {
         optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'],
       });
+      const floor = await hasSpace(session, 'local-floor');
+      this.floorSpace = floor;
+      // 床が原点なら、実際の目の高さを測って沈める。かぶった所が原点の
+      // ときは測りようがないので、その場の高さをそのまま目の高さにする
+      this.baselineEyeY = floor ? 1.6 : 0;
+      this.measured = !floor;
+      this.renderer.xr.setReferenceSpaceType(floor ? 'local-floor' : 'local');
       await this.renderer.xr.setSession(session);
-      return true;
-    } catch {
-      return false;
+      return { ok: true, retry: true, why: '' };
+    } catch (e) {
+      return { ok: false, retry: true, why: `ヘッドセットに入れませんでした（${errText(e)}）` };
     }
   }
 
