@@ -108,7 +108,7 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'wall-clock', name: 'かべどけい', category: 'wall', shape: 'box', wallShape: 'clock', size: [1, 1], height: 26, color: '#f3e6d2', accent: '#cfa855', price: 130, rarity: 'common' },
   { id: 'art-small', name: 'ちいさい絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [1, 1], height: 24, color: '#cfa855', accent: '#dcc6e0', price: 140, rarity: 'common' },
   { id: 'sconce', name: 'かべしょくだい', category: 'wall', shape: 'box', wallShape: 'sconce', size: [1, 1], height: 30, color: '#cfa855', accent: '#fff3cf', price: 160, rarity: 'common' },
-  { id: 'wall-mirror', name: 'かべかがみ', category: 'wall', shape: 'box', wallShape: 'mirror', size: [1, 1], height: 34, color: '#cfa855', accent: '#e8f2f8', price: 200, rarity: 'common' },
+  { id: 'wall-mirror', name: 'すがたみ', category: 'wall', shape: 'box', wallShape: 'mirror', size: [1, 1], height: 72, color: '#cfa855', accent: '#e8f2f8', price: 200, rarity: 'common' },
   { id: 'wall-shelf', name: 'かべだな', category: 'wall', shape: 'box', wallShape: 'shelf', size: [2, 1], height: 22, color: '#f3e6d2', accent: '#cfa855', price: 220, rarity: 'common' },
   { id: 'art-rose', name: 'ばらの絵', category: 'wall', shape: 'box', wallShape: 'painting', size: [2, 1], height: 30, color: '#cfa855', accent: '#e6a9bd', price: 300, rarity: 'uncommon' },
   { id: 'window', name: 'まど', category: 'wall', shape: 'box', wallShape: 'window', size: [2, 1], height: 34, color: '#f3e6d2', accent: '#bcdcf0', price: 340, rarity: 'uncommon' },

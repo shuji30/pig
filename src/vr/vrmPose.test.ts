@@ -55,6 +55,18 @@ describe('poseToRig', () => {
     expect(bones.leftLowerLeg[0]).toBeGreaterThan(1);
   });
 
+  it('すわると 腰の高さぶん沈む（座面にお尻が乗る）', () => {
+    const sit = { ...restPose(), sitting: true };
+    // 渡した腰の高さがそのまま沈む量になる。絵の 13px では足りない
+    expect(poseToRig(sit, 27).dropPx).toBeCloseTo(27);
+    expect(poseToRig(sit, 40).dropPx).toBeCloseTo(40);
+    expect(poseToRig(sit).dropPx).toBeGreaterThan(20);
+  });
+
+  it('立っているあいだは 腰の高さを渡しても沈まない', () => {
+    expect(poseToRig(restPose(), 40).dropPx).toBeCloseTo(0);
+  });
+
   it('腰の高さの変化がそのまま上下の量になる', () => {
     const { dropPx } = poseToRig({ ...restPose(), hipY: REST_HIP + 5 });
     expect(dropPx).toBeCloseTo(5);

@@ -68,6 +68,9 @@ export function stripKnobs(model: THREE.Object3D): void {
  *   前面パネル: x = 0.17 〜 W-0.17 / z = D+0.04 / 高さ = bodyZ+8 〜 H-13
  */
 export function floorMirrorFor(def: FurnitureDef): Reflector | null {
+  // 壁にかけるものはこちらではない（`wallMirrorFor`）。かつては高さで
+  // 弾けていたが、姿見のように背の高い壁かけが来ると通ってしまう
+  if (def.wallShape || def.category === 'wall') return null;
   if (def.shape !== 'box') return null;
   const [W, D] = def.size;
   const bodyZ = def.height <= 50 ? 11 : 5;

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { gridToScreen } from '../core/iso';
-import { clampCol, levelCenter, WALL_COL_W, wallToScreen, type WallSide, type WallSlot } from '../core/wall';
+import { clampCol, itemBottom, levelCenter, WALL_COL_W, wallToScreen, type WallSide, type WallSlot } from '../core/wall';
 import { getDef } from '../data/furniture';
 import { getWallTexture } from '../render/wallTexture';
 import type { FurnitureDef, PlacedWall } from '../types';
@@ -148,9 +148,8 @@ export class WallLayer {
   slotOutline(def: FurnitureDef, slot: WallSlot): Array<{ x: number; y: number }> {
     const u0 = slot.col * WALL_COL_W;
     const u1 = u0 + def.size[0] * WALL_COL_W;
-    const center = levelCenter(slot.level);
-    const h0 = center - def.height / 2;
-    const h1 = center + def.height / 2;
+    const h0 = itemBottom(slot.level, def.height);
+    const h1 = h0 + def.height;
     return [
       [u0, h1],
       [u1, h1],
@@ -166,9 +165,8 @@ export class WallLayer {
     const def = getDef(item.defId);
     const tex = getWallTexture(this.scene, def, item.side, item.recolor);
     // テクスチャの原点は「スロットの u=0, h=0」なので、そこへ合わせる
-    const center = levelCenter(item.level);
     const u = item.col * WALL_COL_W;
-    const p = wallToScreen(item.side, u, center - def.height / 2);
+    const p = wallToScreen(item.side, u, itemBottom(item.level, def.height));
     const sprite = this.scene.add
       .image(this.origin.x + p.x, this.origin.y + p.y, tex.key)
       .setOrigin(tex.originX, tex.originY)

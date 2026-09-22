@@ -10,7 +10,7 @@
  * 等角の本来の大きさだと、アバターは 55px（`REST_CROWN`）にしかならない。
  * 平らな絵が2頭身なのは、その大きさで顔が読めるように描いてあるからで、
  * 5.6頭身のモデルを同じ高さに収めると頭が 10px ほどになって、目も口も
- * 点になる。そこで**本来の2倍**で出す（`ROOM_SCALE`）。家具との釣りあいは
+ * 点になる。そこで**本来の1.6倍**で出す（`ROOM_SCALE`）。家具との釣りあいは
  * そのぶん崩れる。見比べる道具: `tools/vroid/scale.html`
  *
  * ## ひとつだけ作って使いまわす
@@ -27,17 +27,23 @@ import { poseToRig } from '../vr/vrmPose';
 import { VrmAvatar } from '../vr/vrmAvatar';
 import { loadAvatarModel } from '../vr/vrmSource';
 
-/** 部屋の中で、等角の本来の大きさの何倍で出すか */
-export const ROOM_SCALE = 2;
+/**
+ * 部屋の中で、等角の本来の大きさの何倍で出すか。
+ *
+ * 1倍だと 55.4px にしかならず、5.6頭身のモデルでは頭が 10px ほどになって
+ * 顔が読めない。2倍にすると顔は読めるが、家具との釣りあいが目に見えて
+ * 崩れる（ベッドが小さく見える）。その間をとって 1.6倍。
+ */
+export const ROOM_SCALE = 1.6;
 /**
  * 部屋の中の1体ぶんの絵の大きさ(px)と、足もとの行。
  *
- * 高さ: 55.4px × 2 = 111px。腕を上げるモーションと髪のぶんに余りを見て 150。
- * よこ: 腕を左右に出すと ±0.45m ＝ ±29px。余りを見て 104。
+ * 高さ: 55.4px × 1.6 = 89px。腕を上げるモーションと髪のぶんに余りを見て 120。
+ * よこ: 腕を左右に出すと ±0.45m ＝ ±23px。余りを見て 88。
  */
-export const ROOM_W = 104;
-export const ROOM_H = 150;
-export const ROOM_GROUND = 138;
+export const ROOM_W = 88;
+export const ROOM_H = 120;
+export const ROOM_GROUND = 110;
 
 /** きせかえ画面のプレビューの大きさ(px)。平らな絵のときと同じ */
 export const PREVIEW_W = 118;
@@ -163,7 +169,7 @@ export function isoHeadTopPx(pose: AvatarPose): number {
   if (!s) return 0;
   // headTopY は m。等角では たて 1m が PX_PER_HEIGHT px。
   // すわりの沈みこみ（dropPx）は px なのでそのまま引く
-  return (s.avatar.headTopY * PX_PER_HEIGHT - poseToRig(pose).dropPx) * ROOM_SCALE;
+  return (s.avatar.headTopY * PX_PER_HEIGHT - poseToRig(pose, s.avatar.hipUpPx).dropPx) * ROOM_SCALE;
 }
 
 /** 向き（タイルの進む先）→ 体の回転。体は +z を向いている */

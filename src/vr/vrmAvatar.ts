@@ -19,8 +19,11 @@
  * 「顔だけ」と分けられない。**体のメッシュも `auto`** なので、丸ごと
  * 隠すと体まで消える。
  *
- * そこで `VRMFirstPerson.setup()` に頂点で分けてもらう。分かれたものは
- * レイヤー 9（一人称）と 10（三人称）へ移るので、
+ * そこで `VRMFirstPerson.setup()` に頂点で分けてもらう。ただし規格どおりに
+ * **頭のボーン**で切ると、首が残って「頭のない首」が下を向いたときに見える。
+ * ここでは**首のボーン**で切る（`neckFirstPerson()`）。
+ *
+ * 分かれたものはレイヤー 9（一人称）と 10（三人称）へ移るので、
  *
  * - 自分：`setup()` を呼ぶ。カメラはレイヤー 9 を足す（`vr.ts`）。
  *   鏡のカメラは全レイヤーを見るので、鏡には頭も映る
@@ -31,13 +34,24 @@
  * `thirdPerson` に入れて、`visible` の出し入れで隠す。
  */
 import * as THREE from 'three';
-import { VRMExpressionPresetName, VRMUtils, type VRM } from '@pixiv/three-vrm';
+import {
+  VRMExpressionPresetName, VRMFirstPerson, VRMUtils,
+  type VRM, type VRMHumanoid,
+} from '@pixiv/three-vrm';
 import type { AvatarPose } from '../render/avatarPose';
-import { PX } from '../render/models3d.js';
+import { PX, PX_PER_HEIGHT } from '../render/models3d.js';
 import type { AvatarLook } from '../types';
 import { RiggedHumanoid, VrmHumanoid, type Humanoid } from './humanoid';
-import { EXPRESSION_OF, poseToRig, REST_CROWN, REST_EYE, type RigBone } from './vrmPose';
+import {
+  EXPRESSION_OF, poseToRig, REST_CROWN, REST_EYE, REST_HIP_UP, type RigBone,
+} from './vrmPose';
 import type { Loaded } from './vrmSource';
+
+/**
+ * すわったときに、腰のボーンを座面からどれだけ上に残すか(px)。
+ * ボーンは関節の中心にあるので、0 にするとお尻が座面にめりこむ
+ */
+const SIT_FLESH = 2.4;
 
 /**
  * マテリアルの名前 → きせかえのどの色か。
@@ -73,6 +87,27 @@ function tintOf(name: string): keyof AvatarLook | null {
 
 type Tintable = THREE.Material & { color?: THREE.Color };
 
+/**
+ * 「首から上」を消す一人称のしくみを作る。
+ *
+ * 規格の `VRMFirstPerson` は**頭のボーン**から先を消す。それだと首が残り、
+ * 下を向いたときに**頭のない首**が見えて気持ちが悪い。
+ *
+ * 消す基準のボーンを首にすげ替えたものを作る。`VRMFirstPerson` が
+ * `humanoid` を使うのは「消す対象か」を見るところだけなので、そこだけ
+ * 首を返す受け皿を渡せばよい。首を持たないモデルでは、今までどおり頭で切る。
+ */
+function neckFirstPerson(vrm: VRM, fp: VRMFirstPerson): VRMFirstPerson {
+  const humanoid = vrm.humanoid;
+  const neck = humanoid?.getRawBoneNode('neck');
+  if (!humanoid || !neck) return fp;
+  const proxy = {
+    getRawBoneNode: (name: string) =>
+      (name === 'head' ? neck : humanoid.getRawBoneNode(name as 'head')),
+  } as unknown as VRMHumanoid;
+  return new VRMFirstPerson(proxy, fp.meshAnnotations);
+}
+
 export class VrmAvatar {
   readonly root = new THREE.Group();
   /** 一人称では出さない部分（頭・髪）。鏡のあいだだけ出す */
@@ -81,6 +116,11 @@ export class VrmAvatar {
   headTopY = 0;
   /** 立っているときの目の高さ(m)。VR のカメラをここに置く */
   eyeY = PX(REST_EYE);
+  /**
+   * 立っているときの腰の高さ(px)。すわったときに、ここから座面まで落とす。
+   * モデルごとに違うので、読みこんだあとに測る
+   */
+  hipUpPx = REST_HIP_UP;
 
   private readonly body = new THREE.Group();
   private readonly tinted: Array<[Tintable, keyof AvatarLook, THREE.Color]> = [];
@@ -181,7 +221,7 @@ export class VrmAvatar {
     // おきゃくさんは頭も見せるので、分けない（レイヤー0のままにしておく）
     if (this.showHead) return;
     // 自分ぶん。頂点の単位で 一人称／三人称 に分けてもらう
-    fp.setup();
+    neckFirstPerson(this.vrm!, fp).setup();
   }
 
   /** 頭のてっぺんの高さを測る。モデルの背丈はファイルごとに違う */
@@ -189,6 +229,15 @@ export class VrmAvatar {
     this.scene.updateWorldMatrix(true, true);
     const box = new THREE.Box3().setFromObject(this.scene);
     this.headTopY = Number.isFinite(box.max.y) ? box.max.y : PX(REST_EYE) * 1.12;
+
+    // 腰の高さ。すわるとここまで沈める（`vrmPose.poseToRig`）。
+    // ボーンの位置は関節の中心なので、お尻の肉のぶんだけ浅くする
+    const hips = this.humanoid.nodeOf('hips');
+    if (hips) {
+      const p = new THREE.Vector3().setFromMatrixPosition(hips.matrixWorld);
+      this.root.worldToLocal(p);
+      this.hipUpPx = Math.max(0, p.y * PX_PER_HEIGHT - SIT_FLESH);
+    }
   }
 
   setLook(look: AvatarLook): void {
@@ -200,7 +249,7 @@ export class VrmAvatar {
   }
 
   setPose(pose: AvatarPose, nowMs = 0): void {
-    const rig = poseToRig(pose);
+    const rig = poseToRig(pose, this.hipUpPx);
     if (this.posable) {
       for (const [name, xyz] of Object.entries(rig.bones)) {
         this.humanoid.apply(name as RigBone, xyz);

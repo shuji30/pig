@@ -11,6 +11,8 @@ export declare const PX_PER_UNIT: number;
 export declare const PX_PER_HEIGHT: number;
 /** 高さ(px) → ワールド単位。1ワールド単位はだいたい 1m */
 export declare function PX(px: number): number;
+/** 壁ぞいの距離(px) → ワールド単位。壁の1マスは 32px */
+export declare function WU(u: number): number;
 export declare function roundedBoxGeo(w: number, h: number, d: number, r: number): THREE.BufferGeometry;
 
 /**
