@@ -2,6 +2,7 @@
  * Service Worker が最初にまとめて取っておくファイル。
  *
  * HTML・JS・CSS を「ひとまとまり」として版ごとに保存するのが要点。
+ * あとから読みこむ塊（`import()` で分かれたもの）も**ここに並べる**。
  * 出力ファイル名を固定している（vite.config.ts 参照）ので、片方だけ新しく
  * なると「新しい HTML ＋ 古い JS」の組み合わせが起きうる。版ごとに
  * まとめて入れて、まとめて切り替えることでそれを防いでいる。
@@ -13,6 +14,13 @@ export const PRECACHE: readonly string[] = [
   './',
   './index.html',
   './assets/index.js',
+  // あとから読みこむぶん（VR・立体アバター）。**ここに入れないと版がずれる**:
+  // 版の名前はこの一覧の中身から作るので、入れないと「新しい index.js と
+  // 古い vr.js」の組み合わせが残り、共有している部分（core/wall など）の
+  // 取り出しに失敗して VR が開かなくなる（実際に踏んだ）
+  './assets/vr.js',
+  './assets/avatarModel.js',
+  './assets/vrmSource.js',
   './assets/index.css',
   './manifest.webmanifest',
   './icon.svg',

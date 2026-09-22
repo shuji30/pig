@@ -25,6 +25,12 @@ describe('取っておくファイルの一覧', () => {
     expect(PRECACHE).toContain('./assets/index.css');
   });
 
+  it('あとから読みこむ塊も入っている（古い塊と新しい本体が混ざると VR が開かない）', () => {
+    for (const f of ['./assets/vr.js', './assets/avatarModel.js', './assets/vrmSource.js']) {
+      expect(PRECACHE, f).toContain(f);
+    }
+  });
+
   it('vite の出力名と一致している（ハッシュ付きに戻したら気づけるように）', () => {
     const names = outputNames();
     // ハッシュ付き（[hash] を含む）に戻すと、この一覧では見つけられなくなる
@@ -32,7 +38,7 @@ describe('取っておくファイルの一覧', () => {
     expect(names.assetFileNames).toBe('assets/[name][extname]');
     // ハッシュが付くと assets/index-a1b2c3.js のようになり、この一覧では届かなくなる
     for (const f of PRECACHE.filter((x) => x.startsWith('./assets/'))) {
-      expect(f, f).toMatch(/^\.\/assets\/[a-z]+\.(js|css)$/);
+      expect(f, f).toMatch(/^\.\/assets\/[A-Za-z]+\.(js|css)$/);
     }
   });
 

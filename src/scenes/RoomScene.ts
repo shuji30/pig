@@ -1021,7 +1021,8 @@ export class RoomScene extends Phaser.Scene {
       this.ui.setVrOn(true);
       this.setHint();
     } catch {
-      this.ui.toast('VR を読みこめなかったよ');
+      // だいたいは「古い塊と新しい本体が混ざった」とき。開きなおせば直る
+      this.ui.toast('VR を読みこめなかったよ。ページを開きなおしてみて');
     } finally {
       this.vrLoading = false;
     }

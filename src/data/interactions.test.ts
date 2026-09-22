@@ -59,7 +59,7 @@ describe('interactionsOf', () => {
   });
 
   it('書いてあればそれに従う', () => {
-    expect(interactionsOf(getDef('bed'))).toEqual(['sit', 'sleep']);
+    expect(interactionsOf(getDef('bed'))).toEqual(['sleep', 'sit']);
     expect(interactionsOf(getDef('tv'))).toEqual(['watch']);
   });
 });
@@ -81,10 +81,19 @@ describe('カタログとの整合', () => {
     }
   });
 
-  it('座れる家具の先頭は すわる（家具をおしたら すわる を保つ）', () => {
+  it('家具をおしたときの既定は すわる。ねられる家具だけ ねる', () => {
     for (const f of FURNITURE) {
       if (f.seatHeight === undefined) continue;
-      expect(interactionsOf(f)[0], f.id).toBe('sit');
+      const kinds = interactionsOf(f);
+      // ベッドは「すわる」より「ねる」がしたいもの。おしたら横になる
+      expect(kinds[0], f.id).toBe(kinds.includes('sleep') ? 'sleep' : 'sit');
+    }
+  });
+
+  it('ねられる家具は すわることもできる（ならびが入れかわっただけ）', () => {
+    for (const f of FURNITURE) {
+      const kinds = interactionsOf(f);
+      if (kinds.includes('sleep')) expect(kinds, f.id).toContain('sit');
     }
   });
 
