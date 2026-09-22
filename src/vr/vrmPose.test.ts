@@ -55,6 +55,25 @@ describe('poseToRig', () => {
     expect(bones.leftLowerLeg[0]).toBeGreaterThan(1);
   });
 
+  it('ごろ寝は 腕を体から離し、脚をまっすぐにする', () => {
+    const { bones, dropPx } = poseToRig({ ...restPose(), lying: true });
+    const stand = poseToRig(restPose());
+    // 腕は下ろしきらない（体にぴったり付けると板に見える）
+    expect(Math.abs(bones.leftUpperArm[2])).toBeLessThan(Math.abs(stand.bones.leftUpperArm[2]));
+    expect(Math.abs(bones.rightUpperArm[2])).toBeLessThan(Math.abs(stand.bones.rightUpperArm[2]));
+    // ひざはほんの少しだけ。すわりほど曲げない
+    expect(bones.leftLowerLeg[0]).toBeLessThan(0.5);
+    // つま先を伸ばす
+    expect(bones.leftFoot[0]).toBeLessThan(0);
+    // 寝かせるのは使う側なので、ここで沈めない
+    expect(dropPx).toBe(0);
+  });
+
+  it('ごろ寝は すわりより優先する（ベッドの上でも横になる）', () => {
+    const { dropPx } = poseToRig({ ...restPose(), lying: true, sitting: true }, 30);
+    expect(dropPx).toBe(0);
+  });
+
   it('すわると 腰の高さぶん沈む（座面にお尻が乗る）', () => {
     const sit = { ...restPose(), sitting: true };
     // 渡した腰の高さがそのまま沈む量になる。絵の 13px では足りない

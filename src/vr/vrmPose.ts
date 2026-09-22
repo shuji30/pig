@@ -79,12 +79,27 @@ function empty(): Record<RigBone, [number, number, number]> {
  */
 export function poseToRig(pose: AvatarPose, hipUpPx = REST_HIP_UP): RigPose {
   const b = empty();
-  const { swing, breathe, liftL, liftR, legLen, hipY, sitting } = pose;
+  const { swing, breathe, liftL, liftR, legLen, hipY, sitting, lying } = pose;
 
   // ---- 体ぜんぶの上下。絵は腰の高さで しゃがみ を表す
   let dropPx = hipY - REST_HIP;
 
-  if (sitting) {
+  if (lying) {
+    // ごろ寝。まっすぐ寝かせるだけでは板のようになるので、ふとんの上で
+    // くつろいでいる形にする。体そのものを寝かせるのは使う側
+    // （`render/avatarModel.ts` が模型ごと 90度たおす）
+    b.leftUpperLeg = [0.04, 0, 0.07];   // 脚をすこし開く
+    b.rightUpperLeg = [0.04, 0, -0.07];
+    b.leftLowerLeg = [0.14, 0, 0];      // ひざをほんの少しゆるめる
+    b.rightLowerLeg = [0.20, 0, 0];     // 左右をそろえない（寝相）
+    b.leftFoot = [-0.24, 0, 0];         // つま先を伸ばす
+    b.rightFoot = [-0.28, 0, 0];
+    b.spine = [-0.05, 0, 0];            // 背中をすこし反らす
+    b.chest = [-0.03, 0, 0];
+    b.neck = [0.10, 0, 0.04];           // まくらに乗せて、顔を少し横へ
+    b.head = [0.10, 0, 0.06];
+    dropPx = 0;
+  } else if (sitting) {
     // すわり。ももを前へ、すねを下へ。腰も座面まで落とす。
     // ももを上げすぎると、スカートが持ち上がって下着が見える（布の計算は
     // していないので、めくれたぶんは戻らない）。ひざは深く曲げて高さを稼ぐ
@@ -128,12 +143,15 @@ export function poseToRig(pose: AvatarPose, hipUpPx = REST_HIP_UP): RigPose {
     b[low] = [0, -sign * (0.18 + lift * 0.10), 0];
   };
   const armSwing = (swing * 0.45) / REST_LEG;
-  arm(liftL, 1, armSwing);
-  arm(liftR, -1, -armSwing);
+  // ごろ寝は腕を体からすこし離す（ぴったり付けると板に見える）
+  const lie = lying ? 0.13 : 0;
+  arm(liftL + lie, 1, armSwing);
+  arm(liftR + lie, -1, -armSwing);
 
   // ---- 呼吸。胸をほんの少し起こすだけ。大きくすると のけぞる
-  b.chest = [-breathe * 0.012, 0, 0];
-  b.neck = [breathe * 0.008, 0, 0];
+  // 上で入れた値（ごろ寝の反りや まくら）を消さないよう、足しこむ
+  b.chest[0] += -breathe * 0.012;
+  b.neck[0] += breathe * 0.008;
 
   return { dropPx, bones: b };
 }

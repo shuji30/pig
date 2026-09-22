@@ -16,6 +16,8 @@ export const HEAD_R = 13.4;
  */
 export interface AvatarPose {
   sitting: boolean;
+  /** 家具の上で横になっているか（ベッドのごろ寝） */
+  lying: boolean;
   /** 後ろ姿か */
   back: boolean;
   face: FaceKind;
@@ -47,6 +49,7 @@ export function restPose(): AvatarPose {
   const hipY = -14;
   return {
     sitting: false,
+    lying: false,
     back: false,
     face: 'normal',
     blinking: false,

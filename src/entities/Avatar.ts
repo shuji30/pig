@@ -776,9 +776,14 @@ export class Avatar {
     this.bodyWrap.setPosition(tx, ty);
     this.bodyWrap.setAngle(angle);
     this.bodyWrap.setScale(this.flip ? -1 : 1, sy);
-    // モデルも同じに動かす。ただし**左右は反転しない**（絵は裏返せばよいが、
-    // 立体を裏返すと左右の手が入れかわる）。向きは `facing` から角度で出す
-    this.modelWrap?.setPosition(tx, ty).setAngle(angle).setScale(1, sy);
+    // モデルも同じに動かす。ただし
+    // - **左右は反転しない**（絵は裏返せばよいが、立体を裏返すと手が入れかわる）
+    // - **ごろ寝では傾けない**。立体は絵を回すのではなく、モデルそのものを
+    //   3D で寝かせる（`render/avatarModel.ts`）ので、ここで回すと二重になる
+    this.modelWrap
+      ?.setPosition(lying ? 0 : tx, lying ? 0 : ty)
+      .setAngle(lying ? 0 : angle)
+      .setScale(1, lying ? 1 : sy);
 
     // 影は床に置いたまま。跳ぶと小さくなる
     this.shadow.clear();
@@ -793,6 +798,7 @@ export class Avatar {
 
     this.pose = {
       sitting,
+      lying,
       back,
       face,
       blinking: this.blinking,
@@ -821,7 +827,8 @@ export class Avatar {
   private paintModel() {
     const api = modelApi();
     if (!api || !this.pose || !this.modelCanvas) return;
-    const yaw = api.yawOf(this.facing);
+    // ごろ寝はベッドの長いほうへ寝かせる。立っているときは進む向き
+    const yaw = this.pose.lying ? api.lieYaw(this.lieTilt) : api.yawOf(this.facing);
     if (!api.drawIsoAvatar(this.modelCanvas, this.look, this.pose, yaw, this.scene.time.now)) {
       return;
     }
