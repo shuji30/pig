@@ -54,6 +54,15 @@ import type { Loaded } from './vrmSource';
 const SIT_FLESH = 2.4;
 
 /**
+ * きせかえの色を掛けるのに要る、色分けできるマテリアルの数。
+ *
+ * ふつうに書き出した VRoid は 肌・顔・トップス・ボトムス・髪・靴… と
+ * 8枚ほどに分かれている。まとめて書き出すと1〜2枚になり、どこが服かを
+ * 名前で見分けられない。そのときは掛けない（`MIN_TINTS` に届かない）
+ */
+const MIN_TINTS = 3;
+
+/**
  * マテリアルの名前 → きせかえのどの色か。
  *
  * VRoid Studio が付ける名前は `N00_000_00_Body_00_SKIN` のような形で、
@@ -155,6 +164,12 @@ export class VrmAvatar {
         if (key && m.color) this.tinted.push([m, key, m.color.clone()]);
       }
     });
+
+    // マテリアルをまとめて書き出したモデル（VRoid の「テクスチャアトラス化」）は
+    // 体ぜんぶが1枚の `..._Body_00_SKIN` になる。部位を見分けられないので、
+    // そのまま掛けると服も髪も肌色になってしまう。掛けるのをやめて、
+    // 作ったままの色で出す
+    if (this.tinted.length < MIN_TINTS) this.tinted.length = 0;
 
     this.humanoid = vrm?.humanoid
       ? new VrmHumanoid(vrm.humanoid)

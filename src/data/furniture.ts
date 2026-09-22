@@ -24,11 +24,11 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'stool-gold', name: 'きんのスツール', category: 'seat', shape: 'chair', size: [1, 1], height: 26, color: '#cfa855', accent: '#fdf3d2', seatHeight: 20, price: 210, rarity: 'uncommon' },
   { id: 'armchair', name: 'アームチェア', category: 'seat', shape: 'sofa', size: [1, 1], height: 46, color: '#f3e6d2', accent: '#e6a9bd', seatHeight: 20, price: 230, rarity: 'uncommon' },
   { id: 'sofa', name: 'カナッペ', category: 'seat', shape: 'sofa', size: [2, 1], height: 48, color: '#f3e6d2', accent: '#a9c4dc', seatHeight: 20, price: 240, rarity: 'uncommon' },
-  { id: 'daybed', name: 'デイベッド', category: 'seat', shape: 'bed', size: [2, 2], height: 34, color: '#eee0e8', accent: '#fdf8f2', seatHeight: 18, interactions: ['sit', 'sleep'], price: 320, rarity: 'uncommon' },
+  { id: 'daybed', name: 'デイベッド', category: 'seat', shape: 'bed', size: [2, 2], height: 34, color: '#eee0e8', accent: '#fdf8f2', seatHeight: 18, interactions: ['sleep', 'sit'], price: 320, rarity: 'uncommon' },
   { id: 'sofa-long', name: 'ながいカナッペ', category: 'seat', shape: 'sofa', size: [3, 1], height: 48, color: '#f3e6d2', accent: '#b7d4c4', seatHeight: 20, price: 330, rarity: 'uncommon' },
-  { id: 'bed', name: 'ロココベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#f2e4ea', accent: '#fdf8f2', seatHeight: 18, interactions: ['sit', 'sleep'], price: 480, rarity: 'rare' },
+  { id: 'bed', name: 'ロココベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#f2e4ea', accent: '#fdf8f2', seatHeight: 18, interactions: ['sleep', 'sit'], price: 480, rarity: 'rare' },
   { id: 'sofa-royal', name: 'ロイヤルソファ', category: 'seat', shape: 'sofa', size: [3, 1], height: 50, color: '#cbb0d8', accent: '#f0e2f6', seatHeight: 20, price: 520, rarity: 'rare' },
-  { id: 'bed-canopy', name: 'てんがいベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#d8c6e4', accent: '#fbf6ff', seatHeight: 18, interactions: ['sit', 'sleep'], price: 640, rarity: 'rare' },
+  { id: 'bed-canopy', name: 'てんがいベッド', category: 'seat', shape: 'bed', size: [2, 3], height: 50, color: '#d8c6e4', accent: '#fbf6ff', seatHeight: 18, interactions: ['sleep', 'sit'], price: 640, rarity: 'rare' },
 
   // ---- つくえ ----
   { id: 'round-table', name: 'まるテーブル', category: 'table', shape: 'round', size: [1, 1], height: 30, color: '#e9d9bd', accent: '#f1ece3', price: 110, rarity: 'common' },
