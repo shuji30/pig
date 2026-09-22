@@ -1005,17 +1005,16 @@ export class RoomScene extends Phaser.Scene {
       this.vrOverlay = createVrOverlay(view.canvas, {
         onExit: () => this.closeVr(),
         onEnterVr: () => {
-          void view.enterVr().then((ok) => {
-            if (!ok) this.vrOverlay?.setNote('このブラウザからは VR に入れませんでした', 3200);
+          void view.enterVr().then((r) => {
+            if (!r.ok) this.vrOverlay?.setNote(r.why, 6000);
           });
         },
       });
       this.vrOverlay.setEnterVisible(false);
-      void VrView.isSupported().then((ok) => {
-        this.vrOverlay?.setEnterVisible(ok);
-        this.vrOverlay?.setNote(
-          ok ? '' : 'ヘッドセットが見つからないので、画面で見ています（ドラッグで見まわし）',
-        );
+      // 入れない理由はそのまま出す。「見つかりません」だけだと手の打ちようがない
+      void VrView.support().then((r) => {
+        this.vrOverlay?.setEnterVisible(r.ok || r.retry);
+        this.vrOverlay?.setNote(r.ok ? '' : `${r.why}（いまは画面で見ています。ドラッグで見まわし）`);
       });
       this.syncVr();
       this.ui.setVrOn(true);
