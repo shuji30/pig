@@ -21,7 +21,7 @@ import { STAMPS } from '../data/stamps';
 import { makeStampIconCanvas } from '../render/stampArt';
 import type { MissionView } from '../state/economy';
 import { sellPrice } from '../state/economy';
-import { modelReady, whenModelReady } from '../render/avatarModelGate';
+import { modelApi, modelReady, whenModelReady } from '../render/avatarModelGate';
 import { makeAvatarPreviewCanvas } from '../render/avatarPreview';
 import { PETS } from '../data/pets';
 import { makeIconCanvas } from '../render/furnitureTexture';
@@ -289,24 +289,37 @@ export class Ui {
   private buildWardrobe() {
     const body = $('wardrobe-body');
     body.innerHTML = '';
-    body.appendChild(
+    const note = document.createElement('p');
+    note.id = 'wardrobe-note';
+    note.className = 'note';
+    note.hidden = true;
+    body.appendChild(note);
+    const add = (row: HTMLElement, needs: keyof AvatarLook | 'shape') => {
+      row.dataset.needs = needs;
+      body.appendChild(row);
+    };
+    add(
       this.chipRow('かみがた', HAIR_STYLE_NAMES, () => this.look.hairStyle, (i) => this.patchLook({ hairStyle: i })),
+      'shape',
     );
-    body.appendChild(
+    add(
       this.swatchRow('かみのいろ', HAIR_COLORS, () => this.look.hair, (c) => this.patchLook({ hair: c })),
+      'hair',
     );
-    body.appendChild(this.swatchRow('はだ', SKIN_COLORS, () => this.look.skin, (c) => this.patchLook({ skin: c })));
-    body.appendChild(this.swatchRow('ひとみ', EYE_COLORS, () => this.look.eyes, (c) => this.patchLook({ eyes: c })));
-    body.appendChild(
+    add(this.swatchRow('はだ', SKIN_COLORS, () => this.look.skin, (c) => this.patchLook({ skin: c })), 'skin');
+    add(this.swatchRow('ひとみ', EYE_COLORS, () => this.look.eyes, (c) => this.patchLook({ eyes: c })), 'eyes');
+    add(
       this.chipRow('ふくのかたち', OUTFIT_NAMES, () => outfitIndex(this.look.outfit), (i) =>
         this.patchLook({ outfit: outfitAt(i) }),
       ),
+      'shape',
     );
-    body.appendChild(this.swatchRow('ふく', CLOTH_COLORS, () => this.look.shirt, (c) => this.patchLook({ shirt: c })));
-    body.appendChild(
+    add(this.swatchRow('ふく', CLOTH_COLORS, () => this.look.shirt, (c) => this.patchLook({ shirt: c })), 'shirt');
+    add(
       this.swatchRow('ズボン／くつした', CLOTH_COLORS, () => this.look.pants, (c) => this.patchLook({ pants: c })),
+      'pants',
     );
-    body.appendChild(this.swatchRow('くつ', CLOTH_COLORS, () => this.look.shoes, (c) => this.patchLook({ shoes: c })));
+    add(this.swatchRow('くつ', CLOTH_COLORS, () => this.look.shoes, (c) => this.patchLook({ shoes: c })), 'shoes');
 
     const nameInput = $<HTMLInputElement>('avatar-name');
     nameInput.addEventListener('input', () => {
@@ -453,7 +466,30 @@ export class Ui {
     });
   }
 
+  /**
+   * モデルでできない着替えの行を隠す。
+   *
+   * 立体のモデル（`avatar.vrm`）を出しているあいだ、かみがた と
+   * ふくのかたち は**モデルが持っている形そのもの**なので変えられない。
+   * 色も、モデルにそのマテリアルが無ければ変わらない（ワンピースの
+   * モデルに「ズボン」は無い）。押しても何も起きないボタンは出さない。
+   */
+  private syncWardrobeRows() {
+    const api = modelApi();
+    const tints = api?.modelTints() ?? null;
+    const body = $('wardrobe-body');
+    body.querySelectorAll<HTMLElement>('.row').forEach((row) => {
+      const needs = row.dataset.needs;
+      if (!needs) return;
+      row.hidden = tints !== null && (needs === 'shape' || !tints.has(needs));
+    });
+    const note = $('wardrobe-note');
+    note.hidden = tints === null;
+    note.textContent = 'いまのすがたは 3Dモデルなので、かみがた と ふくのかたち はモデルのままです';
+  }
+
   private refreshWardrobe() {
+    this.syncWardrobeRows();
     this.refreshRows($('wardrobe-body'));
     const box = $('avatar-preview');
     box.innerHTML = '';

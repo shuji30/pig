@@ -88,12 +88,15 @@ export function poseToRig(pose: AvatarPose, hipUpPx = REST_HIP_UP): RigPose {
     // ごろ寝。まっすぐ寝かせるだけでは板のようになるので、ふとんの上で
     // くつろいでいる形にする。体そのものを寝かせるのは使う側
     // （`render/avatarModel.ts` が模型ごと 90度たおす）
-    b.leftUpperLeg = [0.04, 0, 0.07];   // 脚をすこし開く
-    b.rightUpperLeg = [0.04, 0, -0.07];
-    b.leftLowerLeg = [0.14, 0, 0];      // ひざをほんの少しゆるめる
-    b.rightLowerLeg = [0.20, 0, 0];     // 左右をそろえない（寝相）
-    b.leftFoot = [-0.24, 0, 0];         // つま先を伸ばす
-    b.rightFoot = [-0.28, 0, 0];
+    // ひざを軽く曲げた横向き寝。まっすぐ伸ばすと板に見えるうえ、
+    // スカートの中がカメラから見えてしまう（布の計算はしていないので、
+    // スカートは立っているときの広がりのままになる）
+    b.leftUpperLeg = [-0.20, 0, 0.05];
+    b.rightUpperLeg = [-0.08, 0, -0.05];
+    b.leftLowerLeg = [0.38, 0, 0];
+    b.rightLowerLeg = [0.22, 0, 0];     // 左右をそろえない（寝相）
+    b.leftFoot = [-0.18, 0, 0];         // つま先をすこし伸ばす
+    b.rightFoot = [-0.14, 0, 0];
     b.spine = [-0.05, 0, 0];            // 背中をすこし反らす
     b.chest = [-0.03, 0, 0];
     b.neck = [0.10, 0, 0.04];           // まくらに乗せて、顔を少し横へ
