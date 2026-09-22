@@ -130,6 +130,11 @@ export class VrmAvatar {
    * モデルごとに違うので、読みこんだあとに測る
    */
   hipUpPx = REST_HIP_UP;
+  /**
+   * 背中が体の中心からどれだけ後ろにあるか(m)。
+   * ごろ寝で模型を横にたおすとき、これだけ持ち上げると背中が面に乗る
+   */
+  backY = 0.1;
 
   private readonly body = new THREE.Group();
   private readonly tinted: Array<[Tintable, keyof AvatarLook, THREE.Color]> = [];
@@ -244,6 +249,9 @@ export class VrmAvatar {
     this.scene.updateWorldMatrix(true, true);
     const box = new THREE.Box3().setFromObject(this.scene);
     this.headTopY = Number.isFinite(box.max.y) ? box.max.y : PX(REST_EYE) * 1.12;
+
+    // 背中の位置。ごろ寝で横にたおしたとき、めりこまないように使う
+    if (Number.isFinite(box.min.z)) this.backY = Math.max(0.02, -box.min.z);
 
     // 腰の高さ。すわるとここまで沈める（`vrmPose.poseToRig`）。
     // ボーンの位置は関節の中心なので、お尻の肉のぶんだけ浅くする

@@ -174,9 +174,44 @@ function frontCamera(w: number, h: number, bodyH: number): THREE.Camera {
 export function isoHeadTopPx(pose: AvatarPose): number {
   const s = stage;
   if (!s) return 0;
+  // ごろ寝は背が高さにならない。寝ている体の上端までで足りる
+  // （厚みぶん ＋ 体の半分を等角に落とした縦のぶん）
+  if (pose.lying) return (s.avatar.backY * PX_PER_HEIGHT + s.avatar.headTopY * 8) * ROOM_SCALE;
   // headTopY は m。等角では たて 1m が PX_PER_HEIGHT px。
   // すわりの沈みこみ（dropPx）は px なのでそのまま引く
   return (s.avatar.headTopY * PX_PER_HEIGHT - poseToRig(pose, s.avatar.hipUpPx).dropPx) * ROOM_SCALE;
+}
+
+/**
+ * ごろ寝。模型ごと 90度たおして、ふとんの面に寝かせる。
+ *
+ * 絵を回すのではなく**モデルを回す**。平らな絵は立ち姿を傾ければ済むが、
+ * 立体は「立っている人を倒したもの」に見えてしまう。3D で寝かせれば、
+ * 等角のカメラからは本当に上から見た寝姿になる。
+ *
+ * - X まわりに -90度: 頭が -z（＝ -gy、画面の右上）へ、顔が上を向く
+ * - そのあと Y まわりに `yaw`: 頭の向きをベッドの長い方へまわす
+ *   （順を守るため回転の順序を 'YXZ' にする）
+ * - 足もとで回すと頭が絵からはみ出すので、**体の真ん中**を原点へ寄せる
+ * - 背中の厚みぶん持ち上げて、ふとんにめりこませない
+ */
+function layDown(avatar: VrmAvatar, yaw: number): void {
+  const root = avatar.root;
+  root.rotation.order = 'YXZ';
+  root.rotation.set(-Math.PI / 2, yaw, 0);
+  // たおしたあと、頭は この向きへ伸びる
+  const head = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  root.position.copy(head).multiplyScalar(-avatar.headTopY / 2);
+  root.position.y = avatar.backY;
+}
+
+/**
+ * ごろ寝の向き。`Avatar.lieTilt` の +1 は「頭が画面の右上」＝ -gy の向き、
+ * -1 は「頭が画面の左上」＝ -gx の向き。たおした体の頭は yaw=0 で -z（-gy）
+ * を向くので、+1 は 0、-1 は 90度まわす
+ */
+export function lieYaw(tilt: 1 | -1): number {
+  return tilt === 1 ? 0 : Math.PI / 2;
 }
 
 /** 向き（タイルの進む先）→ 体の回転。体は +z を向いている */
@@ -196,8 +231,11 @@ export function drawIsoAvatar(dest: HTMLCanvasElement, look: AvatarLook, pose: A
   resize(s, ROOM_W, ROOM_H);
   s.avatar.setLook(look);
   s.avatar.setPose(pose, nowMs);
-  s.avatar.root.rotation.y = yaw;
-  s.avatar.root.position.set(0, 0, 0);
+  if (pose.lying) layDown(s.avatar, yaw);
+  else {
+    s.avatar.root.rotation.set(0, yaw, 0);
+    s.avatar.root.position.set(0, 0, 0);
+  }
   s.renderer.render(s.scene, isoCamera(ROOM_W, ROOM_H, ROOM_SCALE, ROOM_GROUND));
 
   const ctx = dest.getContext('2d');

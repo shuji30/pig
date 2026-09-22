@@ -14,6 +14,19 @@ import { scopeMirrorRender, updateMirrors } from './mirrors';
 import { buildRoom3d, disposeRoom3d } from './room3d';
 import { roomSignature } from './roomSignature';
 
+/**
+ * カメラを顔からどれだけ前へ出すか(px)。
+ *
+ * 一人称では頭を消しているので、頭の中にカメラを置くと、下を向いたときに
+ * 首のあなから体の内側（黒い輪郭の裏）が見えてしまう。すこし前へ出すと
+ * 見おろしたときに胸から足もとまでがふつうに見える。
+ * 出しすぎると体から離れて、自分の体が遠くに見える
+ */
+const EYE_FRONT = 7;
+
+/** 画面で見まわすときの、上下に向けられる角度の上限(rad)。真下は π/2 */
+const PITCH_MAX = 1.45;
+
 /** アバターの目。ゲーム側から毎フレーム渡してもらう */
 export interface VrEye {
   /** 連続グリッド座標（マスの中心なら 3.5 のような値） */
@@ -453,7 +466,8 @@ export class VrView {
       if (!this.dragging || this.presenting) return;
       this.yaw -= (e.clientX - this.lastPointer.x) * 0.005;
       this.pitch -= (e.clientY - this.lastPointer.y) * 0.005;
-      this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch));
+      // 真下（±π/2）の手前まで。ここが浅いと自分の足もとが見られない
+      this.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, this.pitch));
       this.lastPointer = { x: e.clientX, y: e.clientY };
     });
     const stop = () => {
@@ -499,8 +513,16 @@ export class VrView {
 
     // 自分のすがた。床の上（座っていれば座面の上）に、向いている方へ立たせる。
     // facingYaw() は「-z を向くカメラ」用の角度なので、顔が +z の体は半回転ぶんずらす
+    const bodyYaw = this.facingYaw() + Math.PI;
     this.avatar3d.root.position.set(eye.gx, PX(eye.baseHeightPx), eye.gy);
-    this.avatar3d.root.rotation.y = this.facingYaw() + Math.PI;
+    this.avatar3d.root.rotation.y = bodyYaw;
+
+    // カメラを顔のすこし前へ出す。頭の中に置くと、下を向いたとき
+    // 消した首のあなから体の内側が見えて「首のない姿」になる。
+    // 顔の前から見おろせば、胸・スカート・足もとがそのまま見える
+    const front = PX(EYE_FRONT);
+    const fx = Math.sin(bodyYaw) * front;
+    const fz = Math.cos(bodyYaw) * front;
 
     if (this.presenting) {
       // 遊んでいる人の実際の目の高さを最初に測って、その差だけリグを沈める。
@@ -515,12 +537,12 @@ export class VrView {
           this.measured = true;
         }
       }
-      this.rig.position.set(eye.gx, eyeY - this.baselineEyeY, eye.gy);
+      this.rig.position.set(eye.gx + fx, eyeY - this.baselineEyeY, eye.gy + fz);
       this.rig.rotation.y = this.facingYaw();
     } else {
       this.rig.position.set(eye.gx, 0, eye.gy);
       this.rig.rotation.y = 0;
-      this.camera.position.set(0, eyeY, 0);
+      this.camera.position.set(fx, eyeY, fz);
       this.camera.rotation.set(this.pitch, this.facingYaw() + this.yaw, 0, 'YXZ');
     }
 
