@@ -28,6 +28,35 @@ const EYE_FRONT = 7;
 /** 画面で見まわすときの、上下に向けられる角度の上限(rad)。真下は π/2 */
 const PITCH_MAX = 1.45;
 
+/** つなぐのを試す回数（文脈の作り直しと、床なしのぶん） */
+const ATTACH_TRIES = 3;
+/** 文脈が戻るのを待つ上限(ms) */
+const CONTEXT_WAIT_MS = 6000;
+
+/** 「文脈が飛んだ」たぐいの失敗か */
+function lostContext(e: unknown): boolean {
+  return /context lost/i.test(errText(e));
+}
+
+/**
+ * WebGL の文脈が戻るまで待つ。飛んでいなければすぐ返る。
+ * 戻らないまま時間切れになったら false。
+ */
+function waitForContext(renderer: THREE.WebGLRenderer, ms: number): Promise<boolean> {
+  if (!renderer.getContext().isContextLost()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const canvas = renderer.domElement;
+    const done = (ok: boolean): void => {
+      window.clearTimeout(timer);
+      canvas.removeEventListener('webglcontextrestored', back);
+      resolve(ok);
+    };
+    const back = (): void => done(true);
+    const timer = window.setTimeout(() => done(false), ms);
+    canvas.addEventListener('webglcontextrestored', back);
+  });
+}
+
 /**
  * VR 用のキャンバスと WebGL の文脈を作る。
  *
@@ -487,9 +516,6 @@ export class VrView {
   private async openSession(): Promise<Support> {
     const support = await VrView.support();
     if (!support.ok) return support;
-    if (this.renderer.getContext().isContextLost()) {
-      return { ok: false, retry: true, why: '画面の作り直しが起きました。ページを開きなおしてください' };
-    }
     // 開きかけて残っているものがあれば先にとじる。WebXR はいちどに1つしか
     // 開けないので、残っていると「すでに開いている」と言われて入れない
     await this.endSession();
@@ -512,31 +538,53 @@ export class VrView {
 
     this.session = session;
     try {
-      const floor = await hasSpace(session, 'local-floor');
-      this.floorSpace = floor;
-      // 床が原点なら、実際の目の高さを測って沈める。かぶった所が原点の
-      // ときは測りようがないので、その場の高さをそのまま目の高さにする
-      this.baselineEyeY = floor ? 1.6 : 0;
-      this.measured = !floor;
-      this.renderer.xr.setReferenceSpaceType(floor ? 'local-floor' : 'local');
-      try {
-        await this.renderer.xr.setSession(session);
-      } catch (first) {
-        // 「使える」と答えたのに つなぐ段で断られるランタイムがある。
-        // かぶった所を原点にして、もういちどだけ試す
-        if (!floor) throw first;
-        this.floorSpace = false;
-        this.baselineEyeY = 0;
-        this.measured = true;
-        this.renderer.xr.setReferenceSpaceType('local');
-        await this.renderer.xr.setSession(session);
-      }
+      this.useFloor(await hasSpace(session, 'local-floor'));
+      await this.attach(session);
       return { ok: true, retry: true, why: '' };
     } catch (e) {
       // **ここで開いたままにしない。** 残すと、次に押したときに
       // 「すでに開いている」と言われて二度と入れなくなる（実際に踏んだ）
       await this.endSession();
       return { ok: false, retry: true, why: `ヘッドセットに入れませんでした（${errText(e)}）` };
+    }
+  }
+
+  /** 原点を床にするか、かぶった所にするか */
+  private useFloor(floor: boolean): void {
+    this.floorSpace = floor;
+    // 床が原点なら、実際の目の高さを測って沈める。かぶった所が原点の
+    // ときは測りようがないので、その場の高さをそのまま目の高さにする
+    this.baselineEyeY = floor ? 1.6 : 0;
+    this.measured = !floor;
+    this.renderer.xr.setReferenceSpaceType(floor ? 'local-floor' : 'local');
+  }
+
+  /**
+   * 開いたセッションに つなぐ。つまずきやすい2つを、ここで吸収する。
+   *
+   * - **文脈の作り直し**: セッションを開くと、ブラウザは絵を描く先を
+   *   ヘッドセット側の GPU へ移すために、WebGL の文脈をいちど捨てて作り直す
+   *   ことがある（ヘッドセットを別のカードにつないだ PC でよく起きる）。
+   *   そのまま進むと「Context lost」で落ちるので、戻るのを待ってやり直す
+   * - **床のない空間**: 使えると答えたのに つなぐ段で断られるランタイムが
+   *   ある。そのときは かぶった所を原点にして試す
+   */
+  private async attach(session: XRSession): Promise<void> {
+    for (let i = 0; ; i++) {
+      if (!(await waitForContext(this.renderer, CONTEXT_WAIT_MS))) {
+        throw new Error('画面の作り直しが終わりませんでした。もういちどおしてみてください');
+      }
+      try {
+        await this.renderer.xr.setSession(session);
+        return;
+      } catch (e) {
+        if (i >= ATTACH_TRIES - 1) throw e;
+        // 文脈が飛んだだけなら、戻るのを待って同じことをやり直す
+        if (lostContext(e)) continue;
+        // それ以外は、床なしでもういちどだけ
+        if (!this.floorSpace) throw e;
+        this.useFloor(false);
+      }
     }
   }
 
