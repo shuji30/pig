@@ -1011,10 +1011,13 @@ export class RoomScene extends Phaser.Scene {
         },
       });
       this.vrOverlay.setEnterVisible(false);
-      // 入れない理由はそのまま出す。「見つかりません」だけだと手の打ちようがない
+      // 入れない理由はそのまま出す。「見つかりません」だけだと手の打ちようがない。
+      // ソフトウェア描画に落ちているときは、ヘッドセットの有無より先に伝える
       void VrView.support().then((r) => {
         this.vrOverlay?.setEnterVisible(r.ok || r.retry);
-        this.vrOverlay?.setNote(r.ok ? '' : `${r.why}（いまは画面で見ています。ドラッグで見まわし）`);
+        const soft = view.softwareGpu();
+        if (soft) this.vrOverlay?.setNote(soft);
+        else this.vrOverlay?.setNote(r.ok ? '' : `${r.why}（いまは画面で見ています。ドラッグで見まわし）`);
       });
       this.syncVr();
       this.ui.setVrOn(true);
