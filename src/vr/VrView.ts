@@ -28,6 +28,34 @@ const EYE_FRONT = 7;
 /** 画面で見まわすときの、上下に向けられる角度の上限(rad)。真下は π/2 */
 const PITCH_MAX = 1.45;
 
+/**
+ * VR 用のキャンバスと WebGL の文脈を作る。
+ *
+ * **`xrCompatible: true` を付けて自分で作る**のがだいじ。付いていないと
+ * three は入るときに `makeXRCompatible()` を呼ぶが、ヘッドセットが別の
+ * GPU にぶら下がっている PC では、そこで文脈が VR 側の GPU へ作り直され、
+ * その拍子に「Context lost」で入れないことがある（Pimax で踏んだ）。
+ * 最初から VR 用に作っておけば、その呼び出し自体が要らない。
+ *
+ * webgl2 が取れない環境では three にまかせる（そこでは VR も使えない）。
+ */
+function makeRenderer(): THREE.WebGLRenderer {
+  const opts = { antialias: true, powerPreference: 'high-performance' as const };
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('webgl2', {
+    alpha: false,
+    antialias: true,
+    depth: true,
+    stencil: false,
+    premultipliedAlpha: true,
+    preserveDrawingBuffer: false,
+    powerPreference: 'high-performance',
+    xrCompatible: true,
+  });
+  if (!context) return new THREE.WebGLRenderer(opts);
+  return new THREE.WebGLRenderer({ ...opts, canvas, context });
+}
+
 /** アバターの目。ゲーム側から毎フレーム渡してもらう */
 export interface VrEye {
   /** 連続グリッド座標（マスの中心なら 3.5 のような値） */
@@ -190,6 +218,8 @@ export class VrView {
   private session: XRSession | null = null;
   /** 二度押しよけ。入りかけのうちにもう一度頼むと「すでに開いている」になる */
   private entering = false;
+  /** もう片づけたか。文脈が飛んでも戻してもらわなくていい印 */
+  private gone = false;
 
   /** ヘッドセットが無いときの見まわし */
   private yaw = 0;
@@ -207,7 +237,7 @@ export class VrView {
   private readonly floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   constructor(look: AvatarLook, private readonly options: VrViewOptions = {}) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer = makeRenderer();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -216,6 +246,11 @@ export class VrView {
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType('local-floor');
     this.canvas = this.renderer.domElement;
+    // 文脈が飛んだら、既定ではもう戻らない。止めておくとブラウザが戻してくれる。
+    // ただし自分で捨てるとき（`dispose`）は戻してもらわなくていい
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      if (!this.gone) e.preventDefault();
+    });
 
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.05, 120);
     // VRM の一人称のぶん。頭は レイヤー10 に移るので、ここでは足さない
@@ -452,6 +487,9 @@ export class VrView {
   private async openSession(): Promise<Support> {
     const support = await VrView.support();
     if (!support.ok) return support;
+    if (this.renderer.getContext().isContextLost()) {
+      return { ok: false, retry: true, why: '画面の作り直しが起きました。ページを開きなおしてください' };
+    }
     // 開きかけて残っているものがあれば先にとじる。WebXR はいちどに1つしか
     // 開けないので、残っていると「すでに開いている」と言われて入れない
     await this.endSession();
@@ -519,6 +557,7 @@ export class VrView {
   }
 
   dispose(): void {
+    this.gone = true;
     window.removeEventListener('resize', this.onResize);
     this.renderer.setAnimationLoop(null);
     void this.endSession();
@@ -529,6 +568,9 @@ export class VrView {
     for (const o of this.pets.values()) o.dispose();
     this.others.clear();
     this.pets.clear();
+    // ブラウザが同時に持てる WebGL の文脈は数に限りがある。開け閉めを
+    // くり返すと古いものから飛ばされるので、使い終わりに自分で手放す
+    this.renderer.forceContextLoss();
     this.renderer.dispose();
     this.canvas.remove();
   }
