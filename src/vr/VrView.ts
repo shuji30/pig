@@ -186,6 +186,10 @@ export class VrView {
   private measured = false;
   /** 床が原点の空間（`local-floor`）で入れたか。入れなければ目の高さは測らない */
   private floorSpace = true;
+  /** いま開いている（開きかけの）セッション。失敗したときにとじるために持つ */
+  private session: XRSession | null = null;
+  /** 二度押しよけ。入りかけのうちにもう一度頼むと「すでに開いている」になる */
+  private entering = false;
 
   /** ヘッドセットが無いときの見まわし */
   private yaw = 0;
@@ -246,7 +250,10 @@ export class VrView {
       this.yaw = 0;
       this.pitch = 0;
     });
-    this.renderer.xr.addEventListener('sessionend', () => this.options.onExit?.());
+    this.renderer.xr.addEventListener('sessionend', () => {
+      this.session = null;
+      this.options.onExit?.();
+    });
 
     this.bindPointer();
     window.addEventListener('resize', this.onResize);
@@ -433,12 +440,40 @@ export class VrView {
    * へ落とす。ここで落とさないと、対応しているヘッドセットでも入れない
    */
   async enterVr(): Promise<Support> {
+    if (this.entering) return { ok: false, retry: true, why: 'いま入ろうとしています…' };
+    this.entering = true;
+    try {
+      return await this.openSession();
+    } finally {
+      this.entering = false;
+    }
+  }
+
+  private async openSession(): Promise<Support> {
     const support = await VrView.support();
     if (!support.ok) return support;
+    // 開きかけて残っているものがあれば先にとじる。WebXR はいちどに1つしか
+    // 開けないので、残っていると「すでに開いている」と言われて入れない
+    await this.endSession();
+
+    let session: XRSession;
     try {
-      const session = await navigator.xr!.requestSession('immersive-vr', {
+      session = await navigator.xr!.requestSession('immersive-vr', {
         optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'],
       });
+    } catch (e) {
+      const stale = e instanceof DOMException && e.name === 'InvalidStateError';
+      return {
+        ok: false,
+        retry: true,
+        why: stale
+          ? 'ほかのタブか、さっきの VR がまだ開いています。それをとじるか、ページを開きなおしてください'
+          : `ヘッドセットに入れませんでした（${errText(e)}）`,
+      };
+    }
+
+    this.session = session;
+    try {
       const floor = await hasSpace(session, 'local-floor');
       this.floorSpace = floor;
       // 床が原点なら、実際の目の高さを測って沈める。かぶった所が原点の
@@ -446,10 +481,36 @@ export class VrView {
       this.baselineEyeY = floor ? 1.6 : 0;
       this.measured = !floor;
       this.renderer.xr.setReferenceSpaceType(floor ? 'local-floor' : 'local');
-      await this.renderer.xr.setSession(session);
+      try {
+        await this.renderer.xr.setSession(session);
+      } catch (first) {
+        // 「使える」と答えたのに つなぐ段で断られるランタイムがある。
+        // かぶった所を原点にして、もういちどだけ試す
+        if (!floor) throw first;
+        this.floorSpace = false;
+        this.baselineEyeY = 0;
+        this.measured = true;
+        this.renderer.xr.setReferenceSpaceType('local');
+        await this.renderer.xr.setSession(session);
+      }
       return { ok: true, retry: true, why: '' };
     } catch (e) {
+      // **ここで開いたままにしない。** 残すと、次に押したときに
+      // 「すでに開いている」と言われて二度と入れなくなる（実際に踏んだ）
+      await this.endSession();
       return { ok: false, retry: true, why: `ヘッドセットに入れませんでした（${errText(e)}）` };
+    }
+  }
+
+  /** 開いているものをとじる。とじられなくても先へ進む */
+  private async endSession(): Promise<void> {
+    const open = this.session ?? this.renderer.xr.getSession();
+    this.session = null;
+    if (!open) return;
+    try {
+      await open.end();
+    } catch {
+      // すでに終わっているぶんには困らない
     }
   }
 
@@ -460,7 +521,7 @@ export class VrView {
   dispose(): void {
     window.removeEventListener('resize', this.onResize);
     this.renderer.setAnimationLoop(null);
-    void this.renderer.xr.getSession()?.end();
+    void this.endSession();
     if (this.room3d) disposeRoom3d(this.room3d);
     this.avatar3d.dispose();
     this.selfBubble.dispose();
