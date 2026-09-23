@@ -5,6 +5,9 @@ import {
   EYE_COLORS,
   FLOOR_STYLES,
   HAIR_COLORS,
+  GARDEN_FLOOR,
+  GARDEN_ROOM_SIZE,
+  GARDEN_WALL,
   MOON_FLOOR,
   MOON_ROOM_SIZE,
   MOON_WALL,
@@ -18,6 +21,7 @@ import {
   DEFAULT_LAYOUT,
   DEFAULT_WALL_LAYOUT,
   findDef,
+  GARDEN_LAYOUT,
   MOON_LAYOUT,
   MOON_WALL_LAYOUT,
   resolveWallId,
@@ -35,6 +39,9 @@ export const HOME_ROOM = 'home';
 /** 月コロニーの部屋 id */
 export const MOON_ROOM = 'moon';
 export const MOON_ROOM_NAME = 'つきのおへや';
+/** 家の外の庭 */
+export const GARDEN_ROOM = 'garden';
+export const GARDEN_ROOM_NAME = 'おにわ';
 
 let uidSeq = 0;
 export function newUid(): string {
@@ -176,6 +183,22 @@ export function makeMoonRoom(): RoomData {
   return room;
 }
 
+/**
+ * おにわをつくる。はじめてとびらを出たときに呼ばれる。
+ * 月と同じで、着いた時点で遊べる形にしておく（置いたぶんは持ちものから引かない）。
+ */
+export function makeGardenRoom(): RoomData {
+  const room = emptyRoom(GARDEN_ROOM_NAME, GARDEN_ROOM_SIZE);
+  room.floor = GARDEN_FLOOR;
+  room.wall = GARDEN_WALL;
+  room.note = 'すべりだいと サルスベリ';
+  room.items = GARDEN_LAYOUT.map((l) => ({ uid: newUid(), defId: l.defId, gx: l.gx, gy: l.gy, rot: l.rot }));
+  room.wallItems = [];
+  // とびらのすぐ前に出る
+  room.spawn = { gx: 6, gy: 2 };
+  return room;
+}
+
 /** v3 まではセーブの直下に部屋の中身が置かれていた */
 interface LegacyFlatRoom {
   floor?: number;
@@ -291,6 +314,8 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
  * v4 → v5: 壁に掛ける家具（`RoomData.wallItems`）が増えた。既存の部屋は空で始まる
  * v5 → v6: 床の部分張り替え（`RoomData.floorPatch`）が増えた。既存の部屋は空で始まる
  * v6 → v7: ペット（`pets` / `pet`）が増えた。既存のセーブは「飼っていない」で始まる
+ * v8 → v9: おにわが増えた。すでに遊んでいる人の家には「にわへのとびら」が
+ *          無いので、持ちものへ1つ配る（新しく始める人は最初から置いてある）
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -331,6 +356,12 @@ function migrate(raw: unknown): SaveData | null {
     currentRoom = HOME_ROOM;
   }
 
+  // v9 で増えたおにわ。とびらを持っていない人には配る。
+  // **版で区切る。**毎回配ると、売ってはもらい直せてしまう
+  if (old.version < 9 && !hasGardenDoor(rooms, inventory)) {
+    inventory[GARDEN_DOOR] = (inventory[GARDEN_DOOR] ?? 0) + 1;
+  }
+
   return {
     version: SAVE_VERSION,
     autoPlay: old.autoPlay ?? base.autoPlay,
@@ -347,6 +378,15 @@ function migrate(raw: unknown): SaveData | null {
     friends: cleanFriends(old.friends),
     avatar: { look: { ...base.avatar.look, ...old.avatar?.look } },
   };
+}
+
+/** 外へ出るとびらの id。版を上げたときに配るので、名前で持っておく */
+const GARDEN_DOOR = 'garden-door';
+
+/** もう、とびらをどこかに持っているか（置いてある / 持ちものにある） */
+function hasGardenDoor(rooms: Record<string, RoomData>, inventory: Record<string, number>): boolean {
+  if ((inventory[GARDEN_DOOR] ?? 0) > 0) return true;
+  return Object.values(rooms).some((r) => r.items.some((i) => i.defId === GARDEN_DOOR));
 }
 
 /** あそびに来てくれた人。いなくなった id は捨てる */

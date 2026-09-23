@@ -18,7 +18,10 @@ export type FurnitureShape =
   | 'piano'
   | 'fireplace'
   | 'aquarium'
-  | 'rocket'; // 月へ行けるロケット（と、そのミニチュア）
+  | 'rocket' // 月へ行けるロケット（と、そのミニチュア）
+  | 'slide' // すべりだい（おにわ）
+  | 'tree' // 庭木（サルスベリ）
+  | 'door'; // 外へ出るとびら
 
 export type FurnitureCategory = 'seat' | 'table' | 'storage' | 'deco' | 'floor' | 'wall';
 

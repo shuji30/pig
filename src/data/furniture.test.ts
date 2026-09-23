@@ -39,8 +39,11 @@ describe('ロケットの値段', () => {
     expect(resolveWallId('sofa')).toBe('sofa');
   });
 
-  it('行き先を持っているのはロケットだけ', () => {
-    expect(FURNITURE.filter((f) => f.travel !== undefined).map((f) => f.id)).toEqual(['rocket']);
+  it('行き先を持っているのは ロケット と にわへのとびら だけ', () => {
+    expect(FURNITURE.filter((f) => f.travel !== undefined).map((f) => f.id)).toEqual([
+      'rocket',
+      'garden-door',
+    ]);
   });
 });
 
@@ -72,6 +75,9 @@ describe('カタログの整合性', () => {
       'fireplace',
       'aquarium',
       'rocket',
+      'slide',
+      'tree',
+      'door',
     ];
     for (const f of FURNITURE) expect(drawable, f.id).toContain(f.shape);
   });

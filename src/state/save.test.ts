@@ -57,7 +57,8 @@ describe('版の移行', () => {
     expect(room.wall).toBe(1);
     expect(room.items.map((i) => i.defId)).toEqual(['sofa', 'bed']);
     expect(room.spawn).toEqual({ gx: 3, gy: 9 });
-    expect(s.inventory).toEqual({ chair: 3, lamp: 1 });
+    // v9 で増えたおにわのとびらが配られる（下の「おにわのとびら」参照）
+    expect(s.inventory).toEqual({ chair: 3, lamp: 1, 'garden-door': 1 });
     expect(s.avatar.look.name).toBe('v1ひめ');
     // v1 に無かった項目には既定値が入る
     expect(s.avatar.look.outfit).toBe('dress');
@@ -98,7 +99,7 @@ describe('版の移行', () => {
     });
     const s = load();
     expect(currentRoom(s).items.map((i) => i.defId)).toEqual(['stool']);
-    expect(s.inventory).toEqual({ chair: 2 });
+    expect(s.inventory).toEqual({ chair: 2, 'garden-door': 1 });
   });
 
   it('v4 の複数部屋はそのまま読める', () => {
@@ -399,5 +400,52 @@ describe('版の移行', () => {
     expect(s.daily.day).not.toBe('2020-01-01');
     expect(s.daily.placed).toBe(0);
     expect(s.doneMissions).toEqual([]);
+  });
+});
+
+/**
+ * v9 で増えたおにわ。すでに遊んでいる人の家には「にわへのとびら」が無いので、
+ * 移行のときに配る。新しく始める人は最初から家に置いてある（DEFAULT_LAYOUT）。
+ */
+describe('おにわのとびら', () => {
+  const oldSave = (extra: Record<string, unknown> = {}) => ({
+    version: 8,
+    rooms: {
+      home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [], spawn: { gx: 2, gy: 2 } },
+    },
+    currentRoom: 'home',
+    inventory: { chair: 1 },
+    avatar: {},
+    ...extra,
+  });
+
+  it('持っていない人には配る', () => {
+    put(oldSave());
+    expect(load().inventory['garden-door']).toBe(1);
+  });
+
+  it('もう持ちものにある人には配らない', () => {
+    put(oldSave({ inventory: { 'garden-door': 1 } }));
+    expect(load().inventory['garden-door']).toBe(1);
+  });
+
+  it('すでに家に置いてある人にも配らない', () => {
+    put(
+      oldSave({
+        rooms: {
+          home: {
+            name: 'いえ', note: '', floor: 0, wall: 0, size: 12,
+            items: [{ uid: 'd1', defId: 'garden-door', gx: 3, gy: 3, rot: 0 }],
+            spawn: { gx: 2, gy: 2 },
+          },
+        },
+      }),
+    );
+    expect(load().inventory['garden-door']).toBeUndefined();
+  });
+
+  it('配るのは1回きり（売ってはもらい直せない）', () => {
+    put(oldSave({ version: SAVE_VERSION }));
+    expect(load().inventory['garden-door']).toBeUndefined();
   });
 });

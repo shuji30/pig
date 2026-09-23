@@ -50,8 +50,10 @@ import {
   clearSave,
   currentRoom,
   DEFAULT_ROOM_NAME,
+  GARDEN_ROOM,
   HOME_ROOM,
   load,
+  makeGardenRoom,
   makeMoonRoom,
   MOON_ROOM,
   newUid,
@@ -83,6 +85,22 @@ type Tile = { gx: number; gy: number };
 const HW = TILE_W / 2;
 const HH = TILE_H / 2;
 const DRAG_THRESHOLD = 10;
+
+/**
+ * 行き先ごとの、出発のひとこと。無い部屋は「おうちへもどる」あつかい。
+ * `travelTargetOf` が「行き先にもう居るなら家へ帰す」ので、帰りはここに要らない
+ */
+const TRAVEL_TOAST: Record<string, string> = {
+  [MOON_ROOM]: 'つきへ しゅっぱつ！ 🚀',
+  [GARDEN_ROOM]: 'おにわへ でるよ 🌿',
+  [HOME_ROOM]: 'おうちへ もどるよ 🏠',
+};
+
+/** はじめて行くときの、部屋の作りかた */
+const MAKE_ROOM: Record<string, () => RoomData> = {
+  [MOON_ROOM]: makeMoonRoom,
+  [GARDEN_ROOM]: makeGardenRoom,
+};
 
 export class RoomScene extends Phaser.Scene {
   private save!: SaveData;
@@ -1886,7 +1904,7 @@ export class RoomScene extends Phaser.Scene {
     this.deselect();
     if (this.mode === 'paint') this.togglePaint(false);
     else if (this.mode !== 'idle') this.cancelPlacing();
-    this.ui.toast(roomId === MOON_ROOM ? 'つきへ しゅっぱつ！ 🚀' : 'ちきゅうへ もどるよ 🌍');
+    this.ui.toast(TRAVEL_TOAST[roomId] ?? 'おうちへ もどるよ 🏠');
 
     const cam = this.cameras.main;
     cam.fadeOut(420, 255, 255, 255);
@@ -1900,9 +1918,8 @@ export class RoomScene extends Phaser.Scene {
   /** 部屋を入れ替える。描画・占有マス・カメラ・UI をまとめて作り直す */
   private enterRoom(roomId: string) {
     this.persist(); // いまの部屋の内容を先に保存する
-    if (roomId === MOON_ROOM && !this.save.rooms[MOON_ROOM]) {
-      this.save.rooms[MOON_ROOM] = makeMoonRoom();
-    }
+    // はじめて行く部屋は、そのとき作る（作りかたは部屋ごと）
+    if (!this.save.rooms[roomId]) this.save.rooms[roomId] = MAKE_ROOM[roomId]?.();
     if (!this.save.rooms[roomId]) return;
     this.save.currentRoom = roomId;
     const room = this.cur;
