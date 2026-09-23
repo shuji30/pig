@@ -641,6 +641,149 @@ export const SHAPES = {
     box(g, 0.13, 0.6, W - 0.13, 0.64, 17, H - 5, M.acc(), 0.02); // 画面
     rosette(g, W / 2, 0.47, H, 6.4, M.goldLight());
   },
+
+  /**
+   * すべりだい。うしろにはしご、まえへすべり面。
+   *
+   * すべり面は**傾いた板**なので、`box()` では置けない（あれは軸に沿った
+   * 箱しか作らない）。長さと角度を出してから、自分でまわして置く。
+   */
+  slide(g, W, D, H) {
+    const cx = W / 2;
+    const top = H - 6; // 踊り場の面
+    const railR = 0.055;
+
+    // ---- うしろのはしご
+    const back = D - 0.3;
+    for (const dx of [-0.46, 0.46]) {
+      cyl(g, cx + dx, back, 0, H + 14, railR, railR * 1.15, M.base());
+      // 手すりの玉
+      stud(g, cx + dx, back, H + 14, 5, M.gold());
+    }
+    for (let i = 1; i <= 4; i++) {
+      const z = (top * i) / 5;
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.92, 12), M.gold());
+      r.rotation.z = Math.PI / 2;
+      r.position.set(cx, PX(z), back);
+      r.castShadow = true;
+      g.add(r);
+    }
+
+    // ---- 踊り場と、それを支える脚
+    box(g, cx - 0.56, D - 0.78, cx + 0.56, D - 0.06, top - 5, top, M.acc(), 0.03);
+    for (const dx of [-0.46, 0.46]) cyl(g, cx + dx, D - 0.72, 0, top - 5, 0.04, 0.05, M.base());
+
+    // ---- すべり面。踊り場の前ばな → 地面すこし手前
+    const v0 = D - 0.78;
+    const v1 = 0.24;
+    const y0 = PX(top - 5);
+    const y1 = PX(6);
+    const len = Math.hypot(v0 - v1, y0 - y1);
+    const tilt = Math.atan2(y0 - y1, v0 - v1);
+    const chute = new THREE.Mesh(roundedBoxGeo(1.04, PX(4), len, 0.05), M.acc());
+    chute.rotation.x = -tilt;
+    chute.position.set(cx, (y0 + y1) / 2, (v0 + v1) / 2);
+    chute.castShadow = true;
+    chute.receiveShadow = true;
+    g.add(chute);
+    // すべり面のふち（左右）。落ちないための立ちあがり
+    for (const dx of [-0.54, 0.54]) {
+      const side = new THREE.Mesh(roundedBoxGeo(0.08, PX(9), len, 0.025), M.gold());
+      side.rotation.x = -tilt;
+      side.position.set(cx + dx, (y0 + y1) / 2 + PX(4), (v0 + v1) / 2);
+      side.castShadow = true;
+      g.add(side);
+    }
+    // 出口の丸み。ここでいちど水平になって、すとんと落ちない
+    const lip = new THREE.Mesh(new THREE.CylinderGeometry(PX(4.2), PX(4.2), 1.04, 16), M.acc());
+    lip.rotation.z = Math.PI / 2;
+    lip.position.set(cx, PX(6), v1);
+    lip.castShadow = true;
+    g.add(lip);
+    // 着地のところの砂
+    box(g, cx - 0.6, 0, cx + 0.6, v1, 0, 2, M.sand(), 0.03);
+  },
+
+  /**
+   * サルスベリ。幹はつるりと細く、上のほうに縮れた花のかたまりが乗る。
+   * 株立ち（根もとから何本か分かれる）にすると、それらしく見える
+   */
+  tree(g, W, D, H) {
+    const cx = W / 2;
+    const cv = D / 2;
+    // 根もとの土。大きく黒くすると「影」に見えてしまうので、うすく小さく
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 8), M.sand());
+    mound.scale.set(1, 0.16, 1);
+    mound.position.set(cx, PX(1.5), cv);
+    g.add(mound);
+
+    // 株立ち。サルスベリは根もとから何本かに分かれて、すべすべの幹が伸びる
+    const trunks = [
+      { dx: -0.16, dv: 0.08, lean: 0.1, h: 0.66 },
+      { dx: 0.12, dv: -0.12, lean: -0.09, h: 0.74 },
+      { dx: 0.02, dv: 0.16, lean: 0.02, h: 0.6 },
+    ];
+    const tips = [];
+    for (const t of trunks) {
+      const hpx = H * t.h;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.068, PX(hpx), 14), M.base());
+      trunk.rotation.z = -t.lean;
+      trunk.position.set(cx + t.dx + (t.lean * PX(hpx)) / 2, PX(hpx / 2 + 2), cv + t.dv);
+      trunk.castShadow = true;
+      g.add(trunk);
+      // 枝。先を覚えておいて、そこに花をぶら下げる
+      for (const sgn of [-1, 1]) {
+        const len = H * 0.22;
+        const br = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.03, PX(len), 10), M.base());
+        br.rotation.z = -sgn * 0.75;
+        br.rotation.x = sgn * 0.3;
+        br.position.set(cx + t.dx + sgn * 0.17, PX(hpx * 0.84), cv + t.dv - sgn * 0.07);
+        br.castShadow = true;
+        g.add(br);
+        tips.push([cx + t.dx + sgn * 0.32, cv + t.dv - sgn * 0.14, hpx * 0.84 + len * 0.45]);
+      }
+      tips.push([cx + t.dx + t.lean * 4, cv + t.dv, hpx + H * 0.04]);
+    }
+
+    // 葉。花のしたに緑を置くと、花だけが浮かない
+    for (const [u, v, z, r] of [
+      [cx, cv, H * 0.62, 0.15], [cx - 0.26, cv + 0.18, H * 0.68, 0.12],
+      [cx + 0.24, cv - 0.16, H * 0.7, 0.12], [cx - 0.06, cv - 0.24, H * 0.6, 0.11],
+    ]) {
+      blob(g, u, v, z, H * r, H * r * 0.72, M.leaf());
+    }
+
+    // 花。**小さいかたまりを散らす。**ひとつの大玉にすると、綿あめに見える
+    for (const [u, v, z] of tips) {
+      blob(g, u, v, z, H * 0.115, H * 0.095, M.acc());
+      blob(g, u + 0.09, v - 0.05, z + H * 0.05, H * 0.075, H * 0.062, M.acc());
+      blob(g, u - 0.08, v + 0.06, z - H * 0.03, H * 0.07, H * 0.058, M.acc());
+    }
+  },
+
+  /**
+   * とびら。おすと外（おにわ）と行き来できる。
+   * 壁ぎわに立てて使うので、正面は v が大きいほう（画面の手前側）にある
+   */
+  door(g, W, D, H) {
+    const face = D - 0.12;
+    // 枠
+    box(g, 0.06, face - 0.06, W - 0.06, face + 0.06, 0, H, M.gold(), 0.03);
+    // とびら本体
+    box(g, 0.16, face - 0.02, W - 0.16, face + 0.07, 3, H - 6, M.base(), 0.03);
+    // 上のアーチ窓
+    const win = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 20, 1, false, 0, Math.PI), M.glass());
+    win.rotation.x = Math.PI / 2;
+    win.rotation.y = Math.PI;
+    win.position.set(W / 2, PX(H - 22), face + 0.08);
+    g.add(win);
+    // 鏡板
+    box(g, 0.26, face + 0.04, W - 0.26, face + 0.08, 12, H - 34, M.acc(), 0.02);
+    // ノブ
+    stud(g, W - 0.26, face + 0.1, H * 0.5, 3.4, M.goldLight());
+    // 踏み段
+    box(g, 0.02, face - 0.42, W - 0.02, face - 0.1, 0, 4, M.ivory(), 0.02);
+  },
 };
 
 // ---------------------------------------------------------------- 壁に掛けるもの

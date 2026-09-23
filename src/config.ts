@@ -29,7 +29,7 @@ export const GUEST_GAP_MAX = 320_000;
 export const GUEST_GIFT = 40;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 /** はじめて遊ぶときの所持コイン */
 export const START_COINS = 420;
@@ -129,6 +129,12 @@ export const MOON_ROOM_SIZE = 14;
 /** 月コロニーの床と壁 */
 export const MOON_FLOOR = 5;
 export const MOON_WALL = 5;
+
+/** おにわ。家より広くとって「外」らしくする */
+export const GARDEN_ROOM_SIZE = 14;
+/** おにわの床（くさ）と壁（そら） */
+export const GARDEN_FLOOR = 3;
+export const GARDEN_WALL = 3;
 
 /** きせかえ用のカラーパレット */
 export const SKIN_COLORS = ['#ffe0c8', '#f7cba6', '#e0aa7c', '#c08858', '#8d5f3d'];

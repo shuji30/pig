@@ -96,6 +96,17 @@ export const FURNITURE: FurnitureDef[] = [
   // この意図は data/furniture.test.ts で固定してある
   { id: 'rocket', name: '🚀 ロケット', category: 'deco', shape: 'rocket', size: [2, 2], height: 118, color: '#f4f7ff', accent: '#e06a6a', travel: 'moon', price: 480, rarity: 'rare' },
 
+  // ---- おにわ ----
+  // とびらは**はじめから持っている**（DEFAULT_LAYOUT）。外は行き先であって
+  // 関所にしないので、ロケットと違って買わなくても出られる。
+  // 同じ1つの定義で行きも帰りも足りる（`travelTargetOf` が、いま居る部屋が
+  // 行き先と同じなら家へ帰す）
+  { id: 'garden-door', name: 'にわへのとびら', category: 'deco', shape: 'door', size: [1, 1], height: 78, color: '#e6d3b8', accent: '#cfa855', travel: 'garden', price: 240, rarity: 'common' },
+  { id: 'slide', name: 'すべりだい', category: 'seat', shape: 'slide', size: [2, 2], height: 62, color: '#f2e7d5', accent: '#ff9ec4', seatHeight: 52, price: 420, rarity: 'uncommon' },
+  { id: 'crape-myrtle', name: 'サルスベリ', category: 'deco', shape: 'tree', size: [2, 2], height: 128, color: '#e3d9cb', accent: '#e88fb8', interactions: ['water'], price: 460, rarity: 'rare' },
+  { id: 'garden-bench', name: 'にわのベンチ', category: 'seat', shape: 'sofa', size: [2, 1], height: 44, color: '#e0cba8', accent: '#cfe0c0', seatHeight: 18, price: 260, rarity: 'common' },
+  { id: 'flower-bed', name: 'かだん', category: 'deco', shape: 'plant', size: [1, 1], height: 34, color: '#c89a6a', accent: '#f3a0c0', interactions: ['water'], price: 120, rarity: 'common' },
+
   // ---- かべ ----
   // 壁に掛けるもの。size[0] が壁に沿ったマス数、height は壁の上での高さ(px)。
   // 描画は render/wallTexture.ts。床の家具と同じショップ・持ちものに並ぶ
@@ -253,8 +264,24 @@ export const MOON_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; co
   { defId: 'star-chart', side: 'left', col: 3, level: 0 },
 ];
 
+/**
+ * おにわの初期レイアウト。はじめて出たときに置いてある。
+ * 帰りのとびらも置いてある（しまってしまっても上のボタンで帰れる）。
+ */
+export const GARDEN_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 0 | 1 | 2 | 3 }> = [
+  { defId: 'garden-door', gx: 6, gy: 0, rot: 0 },
+  { defId: 'slide', gx: 9, gy: 4, rot: 0 },
+  { defId: 'crape-myrtle', gx: 2, gy: 2, rot: 0 },
+  { defId: 'garden-bench', gx: 5, gy: 8, rot: 0 },
+  { defId: 'flower-bed', gx: 1, gy: 9, rot: 0 },
+  { defId: 'flower-bed', gx: 2, gy: 10, rot: 0 },
+  { defId: 'flower-bed', gx: 11, gy: 9, rot: 0 },
+  { defId: 'topiary', gx: 11, gy: 1, rot: 0 },
+];
+
 /** 部屋の初期レイアウト */
 export const DEFAULT_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 0 | 1 | 2 | 3 }> = [
+  { defId: 'garden-door', gx: 11, gy: 5, rot: 0 },
   { defId: 'rug-big', gx: 2, gy: 5, rot: 0 },
   { defId: 'shelf', gx: 0, gy: 0, rot: 0 },
   { defId: 'tv', gx: 2, gy: 0, rot: 0 },
