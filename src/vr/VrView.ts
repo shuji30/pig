@@ -28,6 +28,15 @@ const EYE_FRONT = 7;
 /** 画面で見まわすときの、上下に向けられる角度の上限(rad)。真下は π/2 */
 const PITCH_MAX = 1.45;
 
+/**
+ * ソフトウェアで絵を描いているときの描画エンジンの名前。
+ *
+ * Chrome のハードウェア アクセラレーションが切れていると、WebGL は
+ * WARP（Microsoft Basic Render Driver）や SwiftShader に落ちる。この状態では
+ * ヘッドセットぶんの大きな絵を用意できず、VR には入れない。
+ */
+const SOFTWARE_GPU = /swiftshader|warp|basic render|software|llvmpipe/i;
+
 /** つなぐのを試す回数（文脈の作り直しと、床なしのぶん） */
 const ATTACH_TRIES = 3;
 /** 文脈が戻るのを待つ上限(ms) */
@@ -492,6 +501,24 @@ export class VrView {
     return xrSupport();
   }
 
+  /**
+   * ソフトウェアで絵を描いていたら、その一言。ふつうに描けていれば空。
+   *
+   * ここに落ちていると、何をしてもヘッドセットには入れない（`makeXRCompatible`
+   * が「Context lost」で落ちる）。原因が VR ではなくブラウザの設定なので、
+   * そこを直せることを伝える
+   */
+  softwareGpu(): string {
+    const gl = this.renderer.getContext();
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = String(
+      (dbg && gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || '',
+    );
+    return SOFTWARE_GPU.test(name)
+      ? 'Chrome が絵をソフトウェアで描いています。chrome://settings/system でハードウェア アクセラレーションを入れ、Chrome を起動しなおしてください'
+      : '';
+  }
+
   get presenting(): boolean {
     return this.renderer.xr.isPresenting;
   }
@@ -545,7 +572,13 @@ export class VrView {
       // **ここで開いたままにしない。** 残すと、次に押したときに
       // 「すでに開いている」と言われて二度と入れなくなる（実際に踏んだ）
       await this.endSession();
-      return { ok: false, retry: true, why: `ヘッドセットに入れませんでした（${errText(e)}）` };
+      // ソフトウェア描画なら、例外の中身より先にそちらを直してもらう
+      const soft = this.softwareGpu();
+      return {
+        ok: false,
+        retry: true,
+        why: soft || `ヘッドセットに入れませんでした（${errText(e)}）`,
+      };
     }
   }
 
