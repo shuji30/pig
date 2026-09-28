@@ -29,7 +29,7 @@ export const GUEST_GAP_MAX = 320_000;
 export const GUEST_GIFT = 40;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /** はじめて遊ぶときの所持コイン */
 export const START_COINS = 420;
@@ -51,7 +51,8 @@ export type FloorPattern =
   | 'plank' // 板張り（列ごとに色を替え、継ぎ目を入れる）
   | 'quad' // 4分割の細かい市松
   | 'star' // 寄木（中央に菱形）
-  | 'inset'; // 目地つき（内側に一回り小さい面）
+  | 'inset' // 目地つき（内側に一回り小さい面）
+  | 'grass'; // しばふ（市松にしないで、短い草を散らす）
 
 export interface FloorStyle {
   name: string;
@@ -76,6 +77,9 @@ export const FLOOR_STYLES: FloorStyle[] = [
   { name: 'ちいさいタイル', a: 0xe8eef0, b: 0xd6dfe4, line: 0xbcc7cd, pattern: 'quad' },
   { name: 'よせぎ', a: 0xc99a63, b: 0xb98c58, line: 0xa07c46, pattern: 'star' },
   { name: 'だいりせき', a: 0xf2eee9, b: 0xe6e0da, line: 0xcfc7bf, pattern: 'inset' },
+  // a と b をほとんど同じにしてある。差を付けると市松が出て、
+  // とたんに「みどりのカーペット」に見える
+  { name: 'しばふ', a: 0x85c169, b: 0x82bd66, line: 0x669c4f, pattern: 'grass' },
 ];
 
 /** 壁のバリエーション */
@@ -85,7 +89,8 @@ export type WallPattern =
   | 'stripe' // 縦じま
   | 'panel' // 腰壁（腰の高さに見切り＋下に鏡板）
   | 'dot' // 水玉
-  | 'brick'; // レンガ
+  | 'brick' // レンガ
+  | 'hedge'; // いけがき（下が生け垣、上は空。外の部屋に使う）
 
 export interface WallStyle {
   name: string;
@@ -106,7 +111,19 @@ export const WALL_STYLES: WallStyle[] = [
   { name: 'こしかべ', a: 0xeae4f2, b: 0xdcd4e8, pattern: 'panel' },
   { name: 'みずたま', a: 0xfdf1e6, b: 0xf5e6d8, pattern: 'dot' },
   { name: 'レンガ', a: 0xdca98c, b: 0xd09c7f, pattern: 'brick' },
+  { name: 'いけがき', a: 0xc4e2f3, b: 0xb6d9ef, pattern: 'hedge' },
 ];
+
+/**
+ * 外の部屋か。**壁の柄で決める。**「いけがき」なら、それは囲いであって
+ * 部屋の壁ではないので、天井を張らず、モールディングや幅木も付けない
+ */
+export function isOutdoorWall(style: WallStyle): boolean {
+  return style.pattern === 'hedge';
+}
+
+/** いけがきの高さ(px)。これより上は空 */
+export const HEDGE_H = 34;
 
 /**
  * 部屋テーマ。床と壁の組み合わせをひとおしで替えられるようにしたもの。
@@ -132,9 +149,11 @@ export const MOON_WALL = 5;
 
 /** おにわ。家より広くとって「外」らしくする */
 export const GARDEN_ROOM_SIZE = 14;
-/** おにわの床（くさ）と壁（そら） */
-export const GARDEN_FLOOR = 3;
-export const GARDEN_WALL = 3;
+/** おにわの床（しばふ）と囲い（いけがき）。どちらも一覧の末尾 */
+export const GARDEN_FLOOR = FLOOR_STYLES.length - 1;
+export const GARDEN_WALL = WALL_STYLES.length - 1;
+/** おにわの小道に敷く床（だいりせき） */
+export const GARDEN_PATH_FLOOR = 9;
 
 /** きせかえ用のカラーパレット */
 export const SKIN_COLORS = ['#ffe0c8', '#f7cba6', '#e0aa7c', '#c08858', '#8d5f3d'];

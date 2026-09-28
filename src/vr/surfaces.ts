@@ -1,10 +1,21 @@
 import * as THREE from 'three';
-import { WALL_H, type FloorStyle, type WallStyle } from '../config';
+import { HEDGE_H, WALL_H, type FloorStyle, type WallStyle } from '../config';
 import { applyTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
 import { PX } from '../render/models3d.js';
 
 /** 1マスを何 px で描くか（テクスチャの中の解像度） */
 const TILE_PX = 128;
+
+/** いけがきの色（`render/room.ts` と同じ） */
+const HEDGE = 0x5f9e55;
+const HEDGE_LIGHT = 0x76b568;
+const HEDGE_DARK = 0x4a7f43;
+
+/** その場所に決まった乱数（0..1）。草と葉を散らすのに使う */
+function noise(x: number, y: number): number {
+  const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
 
 /** 0xrrggbb に時間帯の色調をかける。null ならそのまま */
 export function toned(color: number, tod: TimeOfDay | null): number {
@@ -93,6 +104,22 @@ export function floorTexture(style: FloorStyle, tod: TimeOfDay | null, repeatTil
           ctx.fillRect(x + 4, y + 4, TILE_PX - 8, TILE_PX - 8);
           break;
         }
+        case 'grass': {
+          // しばふ。市松にしないで、短い草を散らす（`render/room.ts` と同じ考え）
+          ctx.fillStyle = noise(tx, ty) < 0.5 ? a : b;
+          ctx.fillRect(x, y, TILE_PX, TILE_PX);
+          ctx.lineWidth = 2;
+          for (let i = 0; i < 26; i++) {
+            const gxp = x + noise(tx * 9 + i, ty * 5) * TILE_PX;
+            const gyp = y + noise(tx * 3, ty * 11 + i) * TILE_PX;
+            ctx.strokeStyle = i % 2 === 0 ? line : hex(toned(0x9ad07d, tod));
+            ctx.beginPath();
+            ctx.moveTo(gxp, gyp);
+            ctx.lineTo(gxp + (noise(i, tx) - 0.5) * 6, gyp - 6 - noise(i, ty) * 5);
+            ctx.stroke();
+          }
+          break;
+        }
         default: {
           // 市松
           ctx.fillStyle = even ? a : b;
@@ -149,6 +176,32 @@ export function wallTexture3d(style: WallStyle, tod: TimeOfDay | null, repeatTil
         }
       }
       break;
+    case 'hedge': {
+      // 上は空、下はいけがき。外の部屋は壁を低くして立てるので（`room3d.ts`）、
+      // ここで描くのは主に いけがき のぶん
+      const hedgeTop = H - Math.round((HEDGE_H / 32) * TILE_PX);
+      ctx.fillStyle = b;
+      ctx.fillRect(0, 0, TILE_PX, hedgeTop);
+      ctx.fillStyle = hex(toned(HEDGE, tod));
+      ctx.fillRect(0, hedgeTop, TILE_PX, H - hedgeTop);
+      // 上のでこぼこ
+      ctx.fillStyle = hex(toned(HEDGE_LIGHT, tod));
+      for (let i = 0; i <= 8; i++) {
+        ctx.beginPath();
+        ctx.arc((i * TILE_PX) / 8, hedgeTop + (i % 2 === 0 ? 2 : 6), 11, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 葉のつぶ
+      for (let i = 0; i < 70; i++) {
+        ctx.fillStyle = hex(toned(noise(i, 3) < 0.5 ? HEDGE_DARK : HEDGE_LIGHT, tod));
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(noise(i, 1) * TILE_PX, hedgeTop + noise(i, 2) * (H - hedgeTop), 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
     case 'brick': {
       // レンガ。1段ずつ半分ずらす
       const bh = 22;

@@ -270,13 +270,32 @@ export const MOON_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; co
  */
 export const GARDEN_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 0 | 1 | 2 | 3 }> = [
   { defId: 'garden-door', gx: 6, gy: 0, rot: 0 },
-  { defId: 'slide', gx: 9, gy: 4, rot: 0 },
-  { defId: 'crape-myrtle', gx: 2, gy: 2, rot: 0 },
-  { defId: 'garden-bench', gx: 5, gy: 8, rot: 0 },
-  { defId: 'flower-bed', gx: 1, gy: 9, rot: 0 },
-  { defId: 'flower-bed', gx: 2, gy: 10, rot: 0 },
-  { defId: 'flower-bed', gx: 11, gy: 9, rot: 0 },
-  { defId: 'topiary', gx: 11, gy: 1, rot: 0 },
+  { defId: 'slide', gx: 9, gy: 3, rot: 0 },
+  { defId: 'crape-myrtle', gx: 1, gy: 1, rot: 0 },
+  { defId: 'garden-bench', gx: 4, gy: 8, rot: 0 },
+  { defId: 'tea-table', gx: 6, gy: 8, rot: 0 },
+  // いけがきぞいに花を並べると、まんなかが空いていても庭に見える
+  { defId: 'flower-bed', gx: 0, gy: 5, rot: 0 },
+  { defId: 'flower-bed', gx: 0, gy: 7, rot: 0 },
+  { defId: 'flower-bed', gx: 0, gy: 9, rot: 0 },
+  { defId: 'flower-bed', gx: 3, gy: 0, rot: 0 },
+  { defId: 'flower-bed', gx: 9, gy: 0, rot: 0 },
+  { defId: 'flower-bed', gx: 12, gy: 10, rot: 0 },
+  { defId: 'rose-vase', gx: 11, gy: 12, rot: 0 },
+  { defId: 'topiary', gx: 12, gy: 0, rot: 0 },
+  { defId: 'topiary', gx: 0, gy: 12, rot: 0 },
+  { defId: 'plant', gx: 12, gy: 6, rot: 0 },
+];
+
+/**
+ * おにわの敷石。とびらから出て、ベンチのほうへ伸びる小道。
+ * 番号は `FLOOR_STYLES` の「だいりせき」。芝の中に道があるだけで、
+ * ただの緑の四角が「庭」になる
+ */
+export const GARDEN_PATH: Array<[number, number]> = [
+  [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7],
+  [5, 4], [7, 4], [8, 4],
+  [5, 7], [4, 7],
 ];
 
 /** 部屋の初期レイアウト */

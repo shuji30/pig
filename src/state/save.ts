@@ -6,6 +6,7 @@ import {
   FLOOR_STYLES,
   HAIR_COLORS,
   GARDEN_FLOOR,
+  GARDEN_PATH_FLOOR,
   GARDEN_ROOM_SIZE,
   GARDEN_WALL,
   MOON_FLOOR,
@@ -22,6 +23,7 @@ import {
   DEFAULT_WALL_LAYOUT,
   findDef,
   GARDEN_LAYOUT,
+  GARDEN_PATH,
   MOON_LAYOUT,
   MOON_WALL_LAYOUT,
   resolveWallId,
@@ -194,6 +196,8 @@ export function makeGardenRoom(): RoomData {
   room.note = 'すべりだいと サルスベリ';
   room.items = GARDEN_LAYOUT.map((l) => ({ uid: newUid(), defId: l.defId, gx: l.gx, gy: l.gy, rot: l.rot }));
   room.wallItems = [];
+  // 敷石の小道。だいりせき（FLOOR_STYLES の最後から2番目）を芝に敷く
+  for (const [gx, gy] of GARDEN_PATH) room.floorPatch[`${gx},${gy}`] = GARDEN_PATH_FLOOR;
   // とびらのすぐ前に出る
   room.spawn = { gx: 6, gy: 2 };
   return room;
@@ -316,6 +320,8 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
  * v6 → v7: ペット（`pets` / `pet`）が増えた。既存のセーブは「飼っていない」で始まる
  * v8 → v9: おにわが増えた。すでに遊んでいる人の家には「にわへのとびら」が
  *          無いので、持ちものへ1つ配る（新しく始める人は最初から置いてある）
+ * v9 → v10: おにわの見た目を しばふ／いけがき にした。作ったばかりで、まだ
+ *          模様替えしていない庭は、そちらへ移す
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -360,6 +366,15 @@ function migrate(raw: unknown): SaveData | null {
   // **版で区切る。**毎回配ると、売ってはもらい直せてしまう
   if (old.version < 9 && !hasGardenDoor(rooms, inventory)) {
     inventory[GARDEN_DOOR] = (inventory[GARDEN_DOOR] ?? 0) + 1;
+  }
+
+  // v10 で変えたおにわの見た目。**まだ模様替えしていない庭だけ**を移す
+  // （古い既定は くさ=3 / そら=3 だった）
+  const garden = rooms[GARDEN_ROOM];
+  if (old.version < 10 && garden && garden.floor === 3 && garden.wall === 3) {
+    garden.floor = GARDEN_FLOOR;
+    garden.wall = GARDEN_WALL;
+    for (const [gx, gy] of GARDEN_PATH) garden.floorPatch[`${gx},${gy}`] ??= GARDEN_PATH_FLOOR;
   }
 
   return {

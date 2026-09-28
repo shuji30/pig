@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import {
   FLOOR_STYLES,
+  HEDGE_H,
+  isOutdoorWall,
   TILE_H,
   TILE_W,
   WALL_H,
@@ -14,6 +16,21 @@ import { shade } from './color';
 
 const HW = TILE_W / 2;
 const HH = TILE_H / 2;
+
+/** いけがきの色。空の色から作れないので、ここに持つ（時間帯はかける） */
+const HEDGE = 0x5f9e55;
+const HEDGE_LIGHT = 0x76b568;
+const HEDGE_DARK = 0x4a7f43;
+
+/**
+ * マスごとの、決まった乱数（0..1）。
+ * しばふを市松にしないための散らしに使う。毎回おなじ値が出ないと、
+ * 描き直すたびに草の向きが変わってちらつく
+ */
+function noise(x: number, y: number): number {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
 
 /** 床と壁の描画。模様替えのたびに描き直す */
 export class RoomView {
@@ -90,8 +107,13 @@ export class RoomView {
     p: { x: number; y: number },
     pts: Array<{ x: number; y: number }>,
   ) {
-    // 地の色。板張りは列ごと、それ以外は市松
-    const even = style.pattern === 'plank' ? gy % 2 === 0 : (gx + gy) % 2 === 0;
+    // 地の色。板張りは列ごと、しばふはマスごとに散らし、それ以外は市松
+    const even =
+      style.pattern === 'plank'
+        ? gy % 2 === 0
+        : style.pattern === 'grass'
+          ? noise(gx, gy) < 0.5
+          : (gx + gy) % 2 === 0;
     g.fillStyle(this.tone(even ? style.a : style.b), 1);
     g.fillPoints(pts, true);
 
@@ -152,12 +174,31 @@ export class RoomView {
         g.lineBetween(cx - HW, cy, cx, cy + HH);
         break;
       }
+      case 'grass': {
+        // しばふ。**マスの縁を描かない。**線を引くと、とたんに
+        // 「みどりのカーペット」に見える。かわりに短い草を散らす
+        for (let i = 0; i < 5; i++) {
+          const a = noise(gx * 7 + i, gy * 13);
+          const b = noise(gx * 17, gy * 23 + i);
+          // ひし形の中に収める（|dx|/HW + |dy|/HH <= 1）
+          const u = (a - 0.5) * 1.5;
+          const v = (b - 0.5) * (1 - Math.abs(u)) * 1.5;
+          const x = cx + u * HW;
+          const y = cy + v * HH;
+          const len = 3 + a * 2.5;
+          g.lineStyle(1, this.tone(i % 2 === 0 ? style.line : shade(style.a, 1.12)), 0.75);
+          g.lineBetween(x, y, x + (b - 0.5) * 2.4, y - len);
+        }
+        break;
+      }
       default:
         break;
     }
 
-    g.lineStyle(1, this.tone(style.line), style.pattern === 'plank' ? 0.3 : 0.5);
-    g.strokePoints(pts, true);
+    if (style.pattern !== 'grass') {
+      g.lineStyle(1, this.tone(style.line), style.pattern === 'plank' ? 0.3 : 0.5);
+      g.strokePoints(pts, true);
+    }
   }
 
   private drawWalls(style: WallStyle) {
@@ -172,9 +213,10 @@ export class RoomView {
     // 左側の壁（gx = 0 の縁）
     this.wallQuad(g, n, w, this.tone(style.b), style.pattern);
 
-    // 継ぎ目
-    g.lineStyle(1, this.tone(shade(style.b, 0.7)), 0.6);
-    g.lineBetween(n.x, n.y, n.x, n.y - WALL_H);
+    // 継ぎ目。いけがきは空まで線を引くと目立つので、囲いのぶんだけ
+    const seamH = isOutdoorWall(style) ? HEDGE_H : WALL_H;
+    g.lineStyle(1, this.tone(isOutdoorWall(style) ? HEDGE_DARK : shade(style.b, 0.7)), 0.6);
+    g.lineBetween(n.x, n.y, n.x, n.y - seamH);
   }
 
   private wallQuad(
@@ -193,6 +235,9 @@ export class RoomView {
     g.fillStyle(color, 1);
     g.fillPoints(pts, true);
     this.wallPattern(g, from, to, color, pattern);
+    // いけがきは部屋の壁ではなく囲いなので、モールディングも幅木も付けない。
+    // これを付けると、とたんに「みどりの部屋」に見えてしまう
+    if (pattern === 'hedge') return;
     // 上部のモールディング
     const trim = 8;
     g.fillStyle(shade(color, 1.06), 1);
@@ -270,6 +315,38 @@ export class RoomView {
             const pt = at(t, h);
             g.fillCircle(pt.x, pt.y, 2.6);
           }
+        }
+        break;
+      }
+      case 'hedge': {
+        // 上は空。すこし明るくして、空気の層があるように見せる
+        quad(0, HEDGE_H, 1, WALL_H, shade(color, 1.05));
+        quad(0, WALL_H * 0.72, 1, WALL_H, shade(color, 1.1));
+        // くも。ひとつを3つの丸で作る（ばらばらに置くと ただの点に見える）
+        g.fillStyle(this.tone(0xffffff), 0.7);
+        for (const [ct, ch] of [[0.24, 78], [0.66, 70]]) {
+          for (const [dt, dh, r] of [[-0.035, 0, 8], [0, 4, 11], [0.04, -1, 7]]) {
+            const pt = at(ct + dt, ch + dh);
+            g.fillCircle(pt.x, pt.y, r);
+          }
+        }
+        // いけがき本体
+        quad(0, 0, 1, HEDGE_H, this.tone(HEDGE));
+        // 上の輪郭を でこぼこ にする。まっすぐだと「塀」に見える
+        const bumps = 26;
+        g.fillStyle(this.tone(HEDGE_LIGHT), 1);
+        for (let i = 0; i <= bumps; i++) {
+          const t = i / bumps;
+          const pt = at(t, HEDGE_H - 2 + (i % 2 === 0 ? 1.5 : -1));
+          g.fillCircle(pt.x, pt.y, 4.6);
+        }
+        // 葉のつぶ
+        for (let i = 0; i < 90; i++) {
+          const t = noise(i, 1);
+          const h = 2 + noise(i, 2) * (HEDGE_H - 6);
+          const pt = at(t, h);
+          g.fillStyle(this.tone(noise(i, 3) < 0.5 ? HEDGE_DARK : HEDGE_LIGHT), 0.55);
+          g.fillCircle(pt.x, pt.y, 2.2);
         }
         break;
       }
