@@ -18,3 +18,14 @@ export function tint(color: number | string, amount: number): number {
   const mix = (v: number) => Math.round(v + (255 - v) * amount);
   return (mix((c >> 16) & 0xff) << 16) | (mix((c >> 8) & 0xff) << 8) | mix(c & 0xff);
 }
+
+/** ふたつの色を t(0..1) で混ぜる */
+export function blend(a: number, b: number, t: number): number {
+  const k = Math.max(0, Math.min(1, t));
+  const mix = (sh: number) => {
+    const va = (a >> sh) & 0xff;
+    const vb = (b >> sh) & 0xff;
+    return Math.round(va + (vb - va) * k);
+  };
+  return (mix(16) << 16) | (mix(8) << 8) | mix(0);
+}
