@@ -9,6 +9,7 @@ import { PX, SHAPES, WALL_SHAPES } from '../render/models3d.js';
 import type { FurnitureDef, PlacedFurniture, PlacedWall, RoomData } from '../types';
 import { floorMirrorFor, isMirror, stripKnobs, wallMirrorFor } from './mirrors';
 import { floorTexture, toned, WALL_HEIGHT, wallTexture3d } from './surfaces';
+import { buildSky } from './sky3d';
 import type { Reflector } from 'three/addons/objects/Reflector.js';
 
 /**
@@ -240,6 +241,11 @@ function shell(room: RoomData, tod: TimeOfDay | null): THREE.Group {
   return g;
 }
 
+/** 主光源（お日さま）の位置。遠景の太陽もここに置いて、影の向きを合わせる */
+function keyLightPos(size: number): THREE.Vector3 {
+  return new THREE.Vector3(size * 0.35, WALL_HEIGHT * 1.6, size * 0.25);
+}
+
 /** 部屋の明かり。時間帯で色と強さを変える */
 function lighting(room: RoomData, tod: TimeOfDay | null): THREE.Group {
   const g = new THREE.Group();
@@ -256,7 +262,7 @@ function lighting(room: RoomData, tod: TimeOfDay | null): THREE.Group {
   g.add(new THREE.AmbientLight(tint.getHex(), 0.5 * brightness));
 
   const key = new THREE.DirectionalLight(0xfff3e2, 2.1 * brightness);
-  key.position.set(size * 0.35, WALL_HEIGHT * 1.6, size * 0.25);
+  key.position.copy(keyLightPos(size));
   key.target.position.set(size / 2, 0, size / 2);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
@@ -299,6 +305,13 @@ export function buildRoom3d(room: RoomData, tod: TimeOfDay | null): Room3d {
   g.name = 'room3d';
   g.add(shell(room, tod));
   g.add(lighting(room, tod));
+
+  // 外の部屋からは、遠くの海と山が見える。四角い芝の板の上ではなく、
+  // どこかの丘の上に立っているように見せる
+  if (isOutdoorWall(WALL_STYLES[room.wall % WALL_STYLES.length])) {
+    const center = new THREE.Vector3(room.size / 2, 0, room.size / 2);
+    g.add(buildSky(room.size, keyLightPos(room.size).sub(center)));
+  }
 
   const cache: PaintCache = new Map();
   for (const item of room.items) {

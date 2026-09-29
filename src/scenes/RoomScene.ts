@@ -6,10 +6,12 @@ import {
   GUEST_GAP_MAX,
   GUEST_GAP_MIN,
   GUEST_GIFT,
+  isOutdoorWall,
   ROOM_THEMES,
   TILE_H,
   TILE_W,
   WALL_H,
+  WALL_STYLES,
 } from '../config';
 import { gridToScreen, rotatedSize, screenToTile } from '../core/iso';
 import { findPath, findPathAdjacent } from '../core/pathfinding';
@@ -516,9 +518,14 @@ export class RoomScene extends Phaser.Scene {
   /**
    * その部屋に時間帯の色調をかけるか。
    * 月コロニーは「いつも星空」なので、朝夕でドームの外が明るくならないようにする。
+   * 外の部屋（おにわ）は「いつも晴れ」。VR で外に出たときに、夜空ではなく
+   * 青空と海と山が見えるようにする。
    */
   private todFor(roomId: string): TimeOfDay | null {
-    return roomId === MOON_ROOM ? null : currentTimeOfDay();
+    if (roomId === MOON_ROOM) return null;
+    const room = this.save.rooms[roomId];
+    if (room && isOutdoorWall(WALL_STYLES[room.wall % WALL_STYLES.length])) return 'day';
+    return currentTimeOfDay();
   }
 
   /** 床・壁・夜の灯りを、いまの時間帯で描き直す */
