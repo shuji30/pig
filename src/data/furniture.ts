@@ -101,6 +101,7 @@ export const FURNITURE: FurnitureDef[] = [
   // 関所にしないので、ロケットと違って買わなくても出られる。
   // 同じ1つの定義で行きも帰りも足りる（`travelTargetOf` が、いま居る部屋が
   // 行き先と同じなら家へ帰す）
+  { id: 'house', name: 'おうち', category: 'deco', shape: 'house', size: [4, 2], height: 150, color: '#f6ead8', accent: '#c56a5c', travel: 'home', price: 1200, rarity: 'rare' },
   { id: 'garden-door', name: 'にわへのとびら', category: 'deco', shape: 'door', size: [1, 1], height: 78, color: '#e6d3b8', accent: '#cfa855', travel: 'garden', price: 240, rarity: 'common' },
   { id: 'slide', name: 'すべりだい', category: 'seat', shape: 'slide', size: [2, 2], height: 62, color: '#f2e7d5', accent: '#ff9ec4', seatHeight: 52, price: 420, rarity: 'uncommon' },
   { id: 'crape-myrtle', name: 'サルスベリ', category: 'deco', shape: 'tree', size: [2, 2], height: 128, color: '#e3d9cb', accent: '#e88fb8', interactions: ['water'], price: 460, rarity: 'rare' },
@@ -269,7 +270,8 @@ export const MOON_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; co
  * 帰りのとびらも置いてある（しまってしまっても上のボタンで帰れる）。
  */
 export const GARDEN_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 0 | 1 | 2 | 3 }> = [
-  { defId: 'garden-door', gx: 6, gy: 0, rot: 0 },
+  // 家。おにわの奥に建っていて、おすと中へ入れる
+  { defId: 'house', gx: 4, gy: 0, rot: 0 },
   { defId: 'slide', gx: 9, gy: 3, rot: 0 },
   { defId: 'crape-myrtle', gx: 1, gy: 1, rot: 0 },
   { defId: 'garden-bench', gx: 4, gy: 8, rot: 0 },
@@ -278,7 +280,7 @@ export const GARDEN_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 
   { defId: 'flower-bed', gx: 0, gy: 5, rot: 0 },
   { defId: 'flower-bed', gx: 0, gy: 7, rot: 0 },
   { defId: 'flower-bed', gx: 0, gy: 9, rot: 0 },
-  { defId: 'flower-bed', gx: 3, gy: 0, rot: 0 },
+  { defId: 'flower-bed', gx: 2, gy: 0, rot: 0 },
   { defId: 'flower-bed', gx: 9, gy: 0, rot: 0 },
   { defId: 'flower-bed', gx: 12, gy: 10, rot: 0 },
   { defId: 'rose-vase', gx: 11, gy: 12, rot: 0 },
@@ -293,7 +295,7 @@ export const GARDEN_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 
  * ただの緑の四角が「庭」になる
  */
 export const GARDEN_PATH: Array<[number, number]> = [
-  [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7],
+  [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7],
   [5, 4], [7, 4], [8, 4],
   [5, 7], [4, 7],
 ];

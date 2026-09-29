@@ -21,7 +21,8 @@ export type FurnitureShape =
   | 'rocket' // 月へ行けるロケット（と、そのミニチュア）
   | 'slide' // すべりだい（おにわ）
   | 'tree' // 庭木（サルスベリ）
-  | 'door'; // 外へ出るとびら
+  | 'door' // 外へ出るとびら
+  | 'house'; // おにわから見た家（おすと中へ入れる）
 
 export type FurnitureCategory = 'seat' | 'table' | 'storage' | 'deco' | 'floor' | 'wall';
 
