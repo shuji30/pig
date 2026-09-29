@@ -29,7 +29,7 @@ export const GUEST_GAP_MAX = 320_000;
 export const GUEST_GIFT = 40;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 /** はじめて遊ぶときの所持コイン */
 export const START_COINS = 420;
@@ -90,7 +90,7 @@ export type WallPattern =
   | 'panel' // 腰壁（腰の高さに見切り＋下に鏡板）
   | 'dot' // 水玉
   | 'brick' // レンガ
-  | 'hedge'; // いけがき（下が生け垣、上は空。外の部屋に使う）
+  | 'open'; // 壁なし（外の部屋。囲わずに、背景の芝へそのまま続かせる）
 
 export interface WallStyle {
   name: string;
@@ -111,19 +111,17 @@ export const WALL_STYLES: WallStyle[] = [
   { name: 'こしかべ', a: 0xeae4f2, b: 0xdcd4e8, pattern: 'panel' },
   { name: 'みずたま', a: 0xfdf1e6, b: 0xf5e6d8, pattern: 'dot' },
   { name: 'レンガ', a: 0xdca98c, b: 0xd09c7f, pattern: 'brick' },
-  { name: 'いけがき', a: 0xc4e2f3, b: 0xb6d9ef, pattern: 'hedge' },
+  { name: 'そらのした', a: 0x85c169, b: 0x82bd66, pattern: 'open' },
 ];
 
 /**
- * 外の部屋か。**壁の柄で決める。**「いけがき」なら、それは囲いであって
- * 部屋の壁ではないので、天井を張らず、モールディングや幅木も付けない
+ * 外の部屋か。**壁の柄で決める。**外なら壁も天井も立てない。
+ * 板を立てて空を描くと、庭ではなく「空の絵をかけた部屋」に見えてしまうので、
+ * 何も立てずに、画面の余白を芝の色でうめて外へ続いているように見せる
  */
 export function isOutdoorWall(style: WallStyle): boolean {
-  return style.pattern === 'hedge';
+  return style.pattern === 'open';
 }
-
-/** いけがきの高さ(px)。これより上は空 */
-export const HEDGE_H = 34;
 
 /**
  * 部屋テーマ。床と壁の組み合わせをひとおしで替えられるようにしたもの。

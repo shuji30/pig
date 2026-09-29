@@ -1,3 +1,4 @@
+import { boxOf, insideRoom, overlaps } from '../core/placement';
 import { WALL_LEVELS } from '../core/wall';
 import {
   CLOTH_COLORS,
@@ -322,6 +323,8 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
  *          無いので、持ちものへ1つ配る（新しく始める人は最初から置いてある）
  * v9 → v10: おにわの見た目を しばふ／いけがき にした。作ったばかりで、まだ
  *          模様替えしていない庭は、そちらへ移す
+ * v10 → v11: おにわに「おうち」が建った。すでに庭を作ってある人の庭には
+ *          無いので、建てる（芝の上にぽつんと立っていた とびら は家にする）
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -377,6 +380,12 @@ function migrate(raw: unknown): SaveData | null {
     for (const [gx, gy] of GARDEN_PATH) garden.floorPatch[`${gx},${gy}`] ??= GARDEN_PATH_FLOOR;
   }
 
+  // v11 で庭に建てた家。**外に出たのに帰る家が見えない**ので、後から建てる。
+  // 建てる場所がふさがっていたら、持ちものへ入れて好きなところに置いてもらう
+  if (old.version < 11 && garden && buildHouse(garden)) {
+    inventory[HOUSE] = (inventory[HOUSE] ?? 0) + 1;
+  }
+
   return {
     version: SAVE_VERSION,
     autoPlay: old.autoPlay ?? base.autoPlay,
@@ -397,6 +406,35 @@ function migrate(raw: unknown): SaveData | null {
 
 /** 外へ出るとびらの id。版を上げたときに配るので、名前で持っておく */
 const GARDEN_DOOR = 'garden-door';
+
+/** おにわに建っている家の id */
+const HOUSE = 'house';
+
+/**
+ * すでにある庭に、後から家を建てる。
+ * 前の版では、芝の上に とびら だけがぽつんと立っていたので、それは片づける。
+ * 建てる場所に何か置いてあったら、無理に建てず持ちものへ回す
+ * （せっかく並べた家具を消さない）。
+ */
+function buildHouse(garden: RoomData): boolean {
+  if (garden.items.some((i) => i.defId === HOUSE)) return false;
+  const spot = GARDEN_LAYOUT.find((l) => l.defId === HOUSE);
+  const def = findDef(HOUSE);
+  if (!spot || !def) return false;
+  // 芝の上に立っていた とびら は、家にとってかわられる
+  const door = garden.items.findIndex((i) => i.defId === GARDEN_DOOR);
+  if (door >= 0) garden.items.splice(door, 1);
+
+  const box = boxOf(def.size, spot.rot, spot.gx, spot.gy);
+  const busy = garden.items.some((i) => {
+    const d = findDef(i.defId);
+    return d !== undefined && overlaps(box, boxOf(d.size, i.rot, i.gx, i.gy));
+  });
+  if (busy || !insideRoom(box, garden.size, garden.size)) return true;
+  garden.items.push({ uid: newUid(), defId: HOUSE, gx: spot.gx, gy: spot.gy, rot: spot.rot });
+  for (const [gx, gy] of GARDEN_PATH) garden.floorPatch[`${gx},${gy}`] ??= GARDEN_PATH_FLOOR;
+  return false;
+}
 
 /** もう、とびらをどこかに持っているか（置いてある / 持ちものにある） */
 function hasGardenDoor(rooms: Record<string, RoomData>, inventory: Record<string, number>): boolean {
