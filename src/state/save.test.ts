@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ROOM_SIZE, GARDEN_FLOOR, GARDEN_WALL, SAVE_KEY, SAVE_VERSION } from '../config';
+import { GARDEN_LAYOUT } from '../data/furniture';
 import { currentRoom, HOME_ROOM, load } from './save';
 
 // localStorage の最小実装（node には無いので差し込む）
@@ -480,5 +481,64 @@ describe('おにわの見た目の移行', () => {
     const g = load().rooms.garden;
     expect(g.floor).toBe(6);
     expect(g.wall).toBe(9);
+  });
+});
+
+/**
+ * v11 でおにわに家が建った。外に出たのに帰る家が見えない、を直す移行。
+ * すでに庭を作っていた人の庭にも、後から建てる。
+ */
+describe('おにわの家の移行', () => {
+  const houseSpot = GARDEN_LAYOUT.find((l) => l.defId === 'house')!;
+  const withGarden = (items: unknown[]) => ({
+    version: 10,
+    rooms: {
+      home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [], spawn: { gx: 2, gy: 2 } },
+      garden: {
+        name: 'おにわ', note: '', floor: GARDEN_FLOOR, wall: GARDEN_WALL, size: 14,
+        items, spawn: { gx: 6, gy: 2 },
+      },
+    },
+    currentRoom: 'home',
+    inventory: {},
+    avatar: {},
+  });
+
+  it('家の無い庭には建てる', () => {
+    put(withGarden([]));
+    const s = load();
+    const house = s.rooms.garden.items.find((i) => i.defId === 'house');
+    expect(house).toBeDefined();
+    expect(house).toMatchObject({ gx: houseSpot.gx, gy: houseSpot.gy });
+    expect(s.inventory.house).toBeUndefined();
+  });
+
+  it('芝の上に立っていた とびら は片づける', () => {
+    put(withGarden([{ uid: 'd1', defId: 'garden-door', gx: 4, gy: 0, rot: 0 }]));
+    const items = load().rooms.garden.items;
+    expect(items.some((i) => i.defId === 'garden-door')).toBe(false);
+    expect(items.some((i) => i.defId === 'house')).toBe(true);
+  });
+
+  it('建てる場所がふさがっていたら 持ちものへ入れる', () => {
+    put(withGarden([{ uid: 'b1', defId: 'bed', gx: houseSpot.gx, gy: houseSpot.gy, rot: 0 }]));
+    const s = load();
+    expect(s.rooms.garden.items.some((i) => i.defId === 'house')).toBe(false);
+    expect(s.rooms.garden.items.some((i) => i.defId === 'bed')).toBe(true);
+    expect(s.inventory.house).toBe(1);
+  });
+
+  it('もう家がある庭では増やさない', () => {
+    put(withGarden([{ uid: 'h1', defId: 'house', gx: 1, gy: 1, rot: 0 }]));
+    const s = load();
+    expect(s.rooms.garden.items.filter((i) => i.defId === 'house')).toHaveLength(1);
+    expect(s.inventory.house).toBeUndefined();
+  });
+
+  it('建てるのは1回きり（売ってはもらい直せない）', () => {
+    put({ ...withGarden([]), version: SAVE_VERSION });
+    const s = load();
+    expect(s.rooms.garden.items.some((i) => i.defId === 'house')).toBe(false);
+    expect(s.inventory.house).toBeUndefined();
   });
 });

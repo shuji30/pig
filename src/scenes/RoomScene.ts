@@ -524,6 +524,7 @@ export class RoomScene extends Phaser.Scene {
   /** 床・壁・夜の灯りを、いまの時間帯で描き直す */
   private repaintRoom() {
     this.room.redraw(this.cur.floor, this.cur.wall, this.size, this.cur.floorPatch, this.tod);
+    this.cameras.main.setBackgroundColor(this.room.backdrop());
     this.drawGlow();
   }
 

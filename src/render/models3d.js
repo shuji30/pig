@@ -769,25 +769,28 @@ export const SHAPES = {
    */
   house(g, W, D, H) {
     const eave = H * 0.58; // 軒（屋根のはじまり）の高さ
+    const rise = H - eave; // 屋根の高さ
     const face = D - 0.06; // 正面（手前）の面
+    // 高さは すべて eave の割合で置く。おうちの大きさを変えても、
+    // 扉や窓だけ取り残されないように
+    const r = (k) => eave * k;
 
     // 土台の石積み
-    box(g, 0.02, 0.02, W - 0.02, D - 0.02, 0, 9, M.sand(), 0.03);
+    box(g, 0.02, 0.02, W - 0.02, D - 0.02, 0, r(0.1), M.sand(), 0.03);
     // 壁
-    box(g, 0.08, 0.08, W - 0.08, D - 0.08, 9, eave, M.base(), 0.04);
+    box(g, 0.08, 0.08, W - 0.08, D - 0.08, r(0.1), eave, M.base(), 0.04);
     // 軒下の帯
-    box(g, 0.02, 0.02, W - 0.02, D - 0.02, eave - 5, eave, M.ivory(), 0.02);
+    box(g, 0.02, 0.02, W - 0.02, D - 0.02, r(0.94), eave, M.ivory(), 0.02);
 
     // 屋根（三角柱）。妻を向こうがわ・手前がわに向けて、u に沿って押し出す。
     // **軒の出は小さく。**焼く絵の枠は占有マスぶんしかないので、
     // はみ出すと切れる（`tools/sprite-render` が「はみ出し!」と言う）
     const over = 0.12;
     const halfV = D / 2 + over;
-    const ridge = PX(H - eave);
     const sh = new THREE.Shape();
     sh.moveTo(-halfV, 0);
     sh.lineTo(halfV, 0);
-    sh.lineTo(0, ridge);
+    sh.lineTo(0, PX(rise));
     const roofGeo = new THREE.ExtrudeGeometry(sh, { depth: W, bevelEnabled: false });
     roofGeo.rotateY(Math.PI / 2); // (sx, sy, d) → (d, sy, -sx)
     roofGeo.translate(0, PX(eave), D / 2);
@@ -796,30 +799,31 @@ export const SHAPES = {
     roof.receiveShadow = true;
     g.add(roof);
     // 棟（屋根のてっぺんの押さえ）
-    box(g, 0, D / 2 - 0.05, W, D / 2 + 0.05, H - 4, H + 1, M.gold(), 0.02);
+    box(g, 0, D / 2 - 0.05, W, D / 2 + 0.05, H - rise * 0.06, H + rise * 0.02, M.gold(), 0.02);
 
     // えんとつ
-    box(g, W - 0.95, D / 2 - 0.16, W - 0.6, D / 2 + 0.16, eave + 16, H + 12, M.sand(), 0.03);
+    box(g, W * 0.8 - 0.17, D / 2 - 0.16, W * 0.8 + 0.17, D / 2 + 0.16, eave + rise * 0.25, H + rise * 0.19, M.sand(), 0.03);
 
     // 玄関。奥まらせて、扉を入れる
-    const dw = 0.34;
-    box(g, W / 2 - dw, face - 0.06, W / 2 + dw, face + 0.03, 0, eave - 22, M.ivory(), 0.02);
-    box(g, W / 2 - dw + 0.06, face - 0.02, W / 2 + dw - 0.06, face + 0.05, 4, eave - 28, M.gold(), 0.03);
-    stud(g, W / 2 + dw - 0.16, face + 0.08, (eave - 28) * 0.55, 3.2, M.goldLight());
+    const dw = Math.min(0.34, W * 0.12);
+    box(g, W / 2 - dw, face - 0.06, W / 2 + dw, face + 0.03, 0, r(0.75), M.ivory(), 0.02);
+    box(g, W / 2 - dw + 0.06, face - 0.02, W / 2 + dw - 0.06, face + 0.05, r(0.05), r(0.68), M.gold(), 0.03);
+    stud(g, W / 2 + dw - 0.16, face + 0.08, r(0.68) * 0.55, 3.2, M.goldLight());
     // 玄関まわりの踏み段
-    box(g, W / 2 - dw - 0.1, face - 0.02, W / 2 + dw + 0.1, face + 0.34, 0, 5, M.sand(), 0.02);
+    box(g, W / 2 - dw - 0.1, face - 0.02, W / 2 + dw + 0.1, face + 0.34, 0, r(0.06), M.sand(), 0.02);
 
     // まど。よろい戸と花台つき
+    const ww = Math.min(0.3, W * 0.1);
     for (const u of [W * 0.22, W * 0.78]) {
-      box(g, u - 0.3, face - 0.02, u + 0.3, face + 0.03, 26, eave - 24, M.gold(), 0.02);
-      box(g, u - 0.24, face + 0.01, u + 0.24, face + 0.04, 29, eave - 27, M.glass(), 0.02);
+      box(g, u - ww, face - 0.02, u + ww, face + 0.03, r(0.3), r(0.72), M.gold(), 0.02);
+      box(g, u - ww * 0.8, face + 0.01, u + ww * 0.8, face + 0.04, r(0.33), r(0.69), M.glass(), 0.02);
       for (const s of [-1, 1]) {
-        box(g, u + s * 0.3, face, u + s * 0.44, face + 0.06, 26, eave - 24, M.acc(), 0.02);
+        box(g, u + s * ww, face, u + s * (ww + 0.14), face + 0.06, r(0.3), r(0.72), M.acc(), 0.02);
       }
       // 花台
-      box(g, u - 0.3, face + 0.02, u + 0.3, face + 0.16, 22, 29, M.base(), 0.02);
+      box(g, u - ww, face + 0.02, u + ww, face + 0.16, r(0.25), r(0.33), M.base(), 0.02);
       for (const dx of [-0.16, 0, 0.16]) {
-        blob(g, u + dx, face + 0.09, 32, 4.2, 3.6, M.acc());
+        blob(g, u + dx, face + 0.09, r(0.37), 4.2, 3.6, M.acc());
       }
     }
   },

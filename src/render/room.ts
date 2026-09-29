@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import {
   FLOOR_STYLES,
-  HEDGE_H,
   isOutdoorWall,
   TILE_H,
   TILE_W,
@@ -17,10 +16,8 @@ import { shade } from './color';
 const HW = TILE_W / 2;
 const HH = TILE_H / 2;
 
-/** いけがきの色。空の色から作れないので、ここに持つ（時間帯はかける） */
-const HEDGE = 0x5f9e55;
-const HEDGE_LIGHT = 0x76b568;
-const HEDGE_DARK = 0x4a7f43;
+/** 部屋の外側（画面の余白）の色。外の部屋では、しばふの色でうめる */
+const INDOOR_BACKDROP = 0x2b2430;
 
 /**
  * マスごとの、決まった乱数（0..1）。
@@ -41,6 +38,8 @@ export class RoomView {
   private patch: Record<string, number> = {};
   /** 時間帯。null なら色調をかけない（月コロニーなど、いつも同じ空の部屋） */
   private tod: TimeOfDay | null = null;
+  /** 部屋のまわり（画面の余白）の色 */
+  private backdropColor = INDOOR_BACKDROP;
 
   /** 時間帯の色調をかけた色 */
   private tone(color: number): number {
@@ -66,8 +65,18 @@ export class RoomView {
     this.size = size;
     this.patch = patch;
     this.tod = tod;
-    this.drawWalls(WALL_STYLES[wallIdx % WALL_STYLES.length]);
-    this.drawFloor(FLOOR_STYLES[floorIdx % FLOOR_STYLES.length]);
+    const wall = WALL_STYLES[wallIdx % WALL_STYLES.length];
+    const floor = FLOOR_STYLES[floorIdx % FLOOR_STYLES.length];
+    // 外の部屋は、まわりも床とおなじ色にする。そうすると芝が画面の外まで
+    // 続いて見えて、四角い板の上に立っているように見えない
+    this.backdropColor = isOutdoorWall(wall) ? this.tone(floor.a) : INDOOR_BACKDROP;
+    this.drawWalls(wall);
+    this.drawFloor(floor);
+  }
+
+  /** 画面の余白に敷く色。`redraw` のあとに読むこと */
+  backdrop(): number {
+    return this.backdropColor;
   }
 
   private drawFloor(base: (typeof FLOOR_STYLES)[number]) {
@@ -204,6 +213,9 @@ export class RoomView {
   private drawWalls(style: WallStyle) {
     const g = this.wallG;
     g.clear();
+    // 外の部屋には壁がない。空を描いた板を立てると、庭ではなく
+    // 「空の絵をかけた部屋」に見えてしまう
+    if (isOutdoorWall(style)) return;
     const n = gridToScreen(0, 0);
     const e = gridToScreen(this.size, 0);
     const w = gridToScreen(0, this.size);
@@ -213,10 +225,9 @@ export class RoomView {
     // 左側の壁（gx = 0 の縁）
     this.wallQuad(g, n, w, this.tone(style.b), style.pattern);
 
-    // 継ぎ目。いけがきは空まで線を引くと目立つので、囲いのぶんだけ
-    const seamH = isOutdoorWall(style) ? HEDGE_H : WALL_H;
-    g.lineStyle(1, this.tone(isOutdoorWall(style) ? HEDGE_DARK : shade(style.b, 0.7)), 0.6);
-    g.lineBetween(n.x, n.y, n.x, n.y - seamH);
+    // 2枚の壁の継ぎ目
+    g.lineStyle(1, this.tone(shade(style.b, 0.7)), 0.6);
+    g.lineBetween(n.x, n.y, n.x, n.y - WALL_H);
   }
 
   private wallQuad(
@@ -235,9 +246,6 @@ export class RoomView {
     g.fillStyle(color, 1);
     g.fillPoints(pts, true);
     this.wallPattern(g, from, to, color, pattern);
-    // いけがきは部屋の壁ではなく囲いなので、モールディングも幅木も付けない。
-    // これを付けると、とたんに「みどりの部屋」に見えてしまう
-    if (pattern === 'hedge') return;
     // 上部のモールディング
     const trim = 8;
     g.fillStyle(shade(color, 1.06), 1);
@@ -315,38 +323,6 @@ export class RoomView {
             const pt = at(t, h);
             g.fillCircle(pt.x, pt.y, 2.6);
           }
-        }
-        break;
-      }
-      case 'hedge': {
-        // 上は空。すこし明るくして、空気の層があるように見せる
-        quad(0, HEDGE_H, 1, WALL_H, shade(color, 1.05));
-        quad(0, WALL_H * 0.72, 1, WALL_H, shade(color, 1.1));
-        // くも。ひとつを3つの丸で作る（ばらばらに置くと ただの点に見える）
-        g.fillStyle(this.tone(0xffffff), 0.7);
-        for (const [ct, ch] of [[0.24, 78], [0.66, 70]]) {
-          for (const [dt, dh, r] of [[-0.035, 0, 8], [0, 4, 11], [0.04, -1, 7]]) {
-            const pt = at(ct + dt, ch + dh);
-            g.fillCircle(pt.x, pt.y, r);
-          }
-        }
-        // いけがき本体
-        quad(0, 0, 1, HEDGE_H, this.tone(HEDGE));
-        // 上の輪郭を でこぼこ にする。まっすぐだと「塀」に見える
-        const bumps = 26;
-        g.fillStyle(this.tone(HEDGE_LIGHT), 1);
-        for (let i = 0; i <= bumps; i++) {
-          const t = i / bumps;
-          const pt = at(t, HEDGE_H - 2 + (i % 2 === 0 ? 1.5 : -1));
-          g.fillCircle(pt.x, pt.y, 4.6);
-        }
-        // 葉のつぶ
-        for (let i = 0; i < 90; i++) {
-          const t = noise(i, 1);
-          const h = 2 + noise(i, 2) * (HEDGE_H - 6);
-          const pt = at(t, h);
-          g.fillStyle(this.tone(noise(i, 3) < 0.5 ? HEDGE_DARK : HEDGE_LIGHT), 0.55);
-          g.fillCircle(pt.x, pt.y, 2.2);
         }
         break;
       }
