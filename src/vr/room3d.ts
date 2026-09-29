@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FLOOR_STYLES, WALL_STYLES } from '../config';
+import { FLOOR_STYLES, HEDGE_H, isOutdoorWall, WALL_STYLES } from '../config';
 import { rotatedSize } from '../core/iso';
 import { itemBottom, WALL_COL_W } from '../core/wall';
 import { TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
@@ -183,6 +183,10 @@ function shell(room: RoomData, tod: TimeOfDay | null): THREE.Group {
     g.add(patch);
   }
 
+  // 外の部屋（いけがき）は、壁ではなく囲い。低く立てて、上は空にする
+  const outdoor = isOutdoorWall(wallStyle);
+  const wallH = outdoor ? PX(HEDGE_H) : WALL_HEIGHT;
+
   // 壁は4面ぶん立てる。等角の画面では手前の2枚を描かないが、
   // 中から見る VR では抜けていると外が見えてしまう
   const wallMat = new THREE.MeshStandardMaterial({
@@ -197,12 +201,16 @@ function shell(room: RoomData, tod: TimeOfDay | null): THREE.Group {
     [size, -Math.PI / 2, size / 2], // gx=size
   ];
   for (const [x, ry, z] of walls) {
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(size, WALL_HEIGHT), wallMat);
-    w.position.set(x, WALL_HEIGHT / 2, z);
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(size, wallH), wallMat);
+    w.position.set(x, wallH / 2, z);
     w.rotation.y = ry;
     w.receiveShadow = true;
     g.add(w);
   }
+
+  // 外の部屋には、天井もモールディングも幅木も付けない。
+  // ここで返さないと、いけがきの庭が「みどりの部屋」になってしまう
+  if (outdoor) return g;
 
   // 天井。等角の画面には無いが、中から見ると「屋根がない部屋」に見えてしまう。
   // 壁より明るい色にして、閉じこめられた感じを出さないようにする

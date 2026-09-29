@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_ROOM_SIZE, SAVE_KEY, SAVE_VERSION } from '../config';
+import { DEFAULT_ROOM_SIZE, GARDEN_FLOOR, GARDEN_WALL, SAVE_KEY, SAVE_VERSION } from '../config';
 import { currentRoom, HOME_ROOM, load } from './save';
 
 // localStorage の最小実装（node には無いので差し込む）
@@ -447,5 +447,38 @@ describe('おにわのとびら', () => {
   it('配るのは1回きり（売ってはもらい直せない）', () => {
     put(oldSave({ version: SAVE_VERSION }));
     expect(load().inventory['garden-door']).toBeUndefined();
+  });
+});
+
+/**
+ * v10 でおにわの見た目を しばふ／いけがき にした。
+ * すでに庭を作っていた人の部屋も、模様替えしていなければ移す。
+ */
+describe('おにわの見た目の移行', () => {
+  const withGarden = (floor: number, wall: number) => ({
+    version: 9,
+    rooms: {
+      home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [], spawn: { gx: 2, gy: 2 } },
+      garden: { name: 'おにわ', note: '', floor, wall, size: 14, items: [], spawn: { gx: 6, gy: 2 } },
+    },
+    currentRoom: 'home',
+    inventory: {},
+    avatar: {},
+  });
+
+  it('むかしの くさ／そら の庭は、しばふ／いけがき になる', () => {
+    put(withGarden(3, 3));
+    const g = load().rooms.garden;
+    expect(g.floor).toBe(GARDEN_FLOOR);
+    expect(g.wall).toBe(GARDEN_WALL);
+    // 敷石の小道も入る
+    expect(Object.keys(g.floorPatch).length).toBeGreaterThan(0);
+  });
+
+  it('自分で模様替えした庭には さわらない', () => {
+    put(withGarden(6, 9));
+    const g = load().rooms.garden;
+    expect(g.floor).toBe(6);
+    expect(g.wall).toBe(9);
   });
 });
