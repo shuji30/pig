@@ -11,13 +11,45 @@ import {
 } from '../config';
 import { gridToScreen } from '../core/iso';
 import { applyTimeOfDay, TIME_OF_DAY, type TimeOfDay } from '../core/timeOfDay';
-import { shade } from './color';
+import { blend, shade } from './color';
 
 const HW = TILE_W / 2;
 const HH = TILE_H / 2;
 
 /** 部屋の外側（画面の余白）の色。外の部屋では、しばふの色でうめる */
 const INDOOR_BACKDROP = 0x2b2430;
+
+/**
+ * 外の部屋の遠景（VR の `vr/sky3d.ts` と同じ景色を、等角の画面にも描く）。
+ * 色はそちらと合わせてあるので、片方を変えたらもう片方も変えること。
+ */
+const SKY_TOP = 0x2f7fcc;
+const SKY_MID = 0x6fb2e8;
+const SKY_LOW = 0xcfe8f7;
+const SEA = 0x3a8dc6;
+const SEA_SHALLOW = 0x79c6dd;
+const SURF = 0xf4fbfd;
+const SAND = 0xe8dcb8;
+const MOUNTAIN_FAR = 0x9db2cc;
+const MOUNTAIN_NEAR = 0x81a0c2;
+const SUN = 0xfff8dc;
+const CLOUD = 0xffffff;
+const CLOUD_SHADE = 0xbccfe2;
+
+/** 遠景を描く横はば（部屋の北かどから左右へ）。どこへパンしても足りる大きさ */
+const SKY_W = 2600;
+/**
+ * 空のグラデーションの高さ。これより上は一色。
+ *
+ * 等角の画面は部屋に合わせて寄っているので、部屋の北かどより上に使える
+ * 高さは **70px ほどしかない**（`applyFitZoom` が壁のぶんだけ余白を取り、
+ * さらに上端は画面のヘッダーが覆う）。遠景はぜんぶその中に収めてある。
+ */
+const SKY_FADE = 300;
+/** 波打ちぎわの高さ（部屋の北かどより上へ何px） */
+const SHORE_UP = 20;
+/** 海の帯のあつみ */
+const SEA_H = 12;
 
 /**
  * マスごとの、決まった乱数（0..1）。
@@ -33,6 +65,8 @@ function noise(x: number, y: number): number {
 export class RoomView {
   private readonly floorG: Phaser.GameObjects.Graphics;
   private readonly wallG: Phaser.GameObjects.Graphics;
+  /** 外の部屋の遠景（空・雲・山・海）。床や壁より奥に敷く */
+  private readonly skyG: Phaser.GameObjects.Graphics;
   private size = 12;
   /** 部分的に張り替えた床。キーは "gx,gy" */
   private patch: Record<string, number> = {};
@@ -47,6 +81,7 @@ export class RoomView {
   }
 
   constructor(scene: Phaser.Scene) {
+    this.skyG = scene.add.graphics().setDepth(-2500);
     this.wallG = scene.add.graphics().setDepth(-2000);
     this.floorG = scene.add.graphics().setDepth(-1900);
   }
@@ -70,6 +105,7 @@ export class RoomView {
     // 外の部屋は、まわりも床とおなじ色にする。そうすると芝が画面の外まで
     // 続いて見えて、四角い板の上に立っているように見えない
     this.backdropColor = isOutdoorWall(wall) ? this.tone(floor.a) : INDOOR_BACKDROP;
+    this.drawSky(isOutdoorWall(wall));
     this.drawWalls(wall);
     this.drawFloor(floor);
   }
@@ -77,6 +113,121 @@ export class RoomView {
   /** 画面の余白に敷く色。`redraw` のあとに読むこと */
   backdrop(): number {
     return this.backdropColor;
+  }
+
+  /**
+   * 外の部屋の遠景。部屋の北かど（画面のいちばん奥）の上に、
+   * 波打ちぎわ → 海 → 山 → 空 を積む。VR で外に出たときと同じ景色。
+   *
+   * 画面に固定するのではなく、**部屋と同じ世界の座標に**大きく描いてある。
+   * そうすると、寄ったり動かしたりしたときに遠景も一緒に動いて、
+   * 部屋の奥に続いているように見える。
+   */
+  private drawSky(outdoor: boolean) {
+    const g = this.skyG;
+    g.clear();
+    if (!outdoor) return;
+
+    const cx = 0; // gridToScreen(0, 0) は原点
+    const shore = -SHORE_UP; // 波打ちぎわ
+    const horizon = shore - SEA_H; // 水平線（海のむこう端）
+    const left = cx - SKY_W;
+    const w = SKY_W * 2;
+
+    // 空。上は一色、地平線に近いほど白っぽく
+    g.fillStyle(this.tone(SKY_TOP), 1);
+    g.fillRect(left, horizon - 2400, w, 2400 - SKY_FADE);
+    const bands = 44;
+    for (let i = 0; i < bands; i++) {
+      // 白っぽくなるのは地平線のすぐ上だけ。上のほうは青のままにしたいので、
+      // 混ぜぐあいを 3乗して、変化を下に寄せる
+      const u = (i / (bands - 1)) ** 3;
+      const c = u < 0.5 ? blend(SKY_TOP, SKY_MID, u * 2) : blend(SKY_MID, SKY_LOW, (u - 0.5) * 2);
+      g.fillStyle(this.tone(c), 1);
+      // 1px かさねて、帯のすきまが出ないように
+      g.fillRect(left, horizon - SKY_FADE + (SKY_FADE * i) / bands, w, SKY_FADE / bands + 1);
+    }
+
+    this.drawSun(g, cx + 170, horizon - 50);
+    this.drawClouds(g, cx, horizon);
+    this.drawMountains(g, cx, horizon);
+
+    // 海。岸に近いほど明るくして浅瀬に見せる
+    g.fillStyle(this.tone(SEA), 1);
+    g.fillRect(left, horizon, w, SEA_H);
+    g.fillStyle(this.tone(SEA_SHALLOW), 1);
+    g.fillRect(left, shore - 5, w, 5);
+    // 沖の波のすじ
+    for (let i = 0; i < 2; i++) {
+      g.fillStyle(this.tone(0xffffff), 0.16 - i * 0.05);
+      g.fillRect(left, horizon + 4 + i * 4, w, 1.2);
+    }
+    // 白波と砂浜
+    g.fillStyle(this.tone(SURF), 1);
+    g.fillRect(left, shore - 2, w, 3);
+    g.fillStyle(this.tone(SAND), 1);
+    g.fillRect(left, shore + 1, w, 5);
+  }
+
+  /** お日さま。まわりのにじみは、うすい円をかさねて作る */
+  private drawSun(g: Phaser.GameObjects.Graphics, x: number, y: number) {
+    for (let i = 5; i >= 1; i--) {
+      g.fillStyle(this.tone(SUN), 0.07);
+      g.fillCircle(x, y, 11 + i * 6);
+    }
+    g.fillStyle(this.tone(SUN), 1);
+    g.fillCircle(x, y, 11);
+  }
+
+  /**
+   * 雲。てっぺんが もくもく で 底が平らな積雲。
+   * おなじ形を すこし下にずらして灰色で先に描くと、下側だけ影になって厚みが出る
+   */
+  private drawClouds(g: Phaser.GameObjects.Graphics, cx: number, horizon: number) {
+    for (let i = 0; i < 11; i++) {
+      const x = cx - 900 + (i + noise(i, 3) * 0.8) * 165;
+      const y = horizon - 26 - noise(i, 4) * 24;
+      const r = 7 + noise(i, 5) * 7;
+      this.puffs(g, x, y + r * 0.22, r, CLOUD_SHADE, 1);
+      this.puffs(g, x, y, r, CLOUD, 1);
+    }
+  }
+
+  /** 雲ひとつぶんの ふくらみ。底は四角でそろえる */
+  private puffs(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number, color: number, alpha: number) {
+    const lobes: Array<[number, number]> = [
+      [-1.9, 0.6],
+      [-0.85, 0.92],
+      [0.15, 1],
+      [1.15, 0.78],
+      [2.0, 0.55],
+    ];
+    g.fillStyle(this.tone(color), alpha);
+    for (const [dx, k] of lobes) g.fillCircle(x + dx * r, y - k * r * 0.62, r * k);
+    g.fillRect(x - 1.9 * r, y - r * 0.5, 3.9 * r, r * 0.5);
+  }
+
+  /** 海のむこうの山。奥の列を うすい色で、手前の列を すこし濃く */
+  private drawMountains(g: Phaser.GameObjects.Graphics, cx: number, horizon: number) {
+    for (const [seed, count, lo, hi, color] of [
+      [11, 20, 8, 20, MOUNTAIN_FAR],
+      [23, 13, 12, 30, MOUNTAIN_NEAR],
+    ] as Array<[number, number, number, number, number]>) {
+      for (let i = 0; i < count; i++) {
+        const h = lo + noise(i, seed) * (hi - lo);
+        const half = h * (0.85 + noise(i, seed + 1) * 0.7);
+        const x = cx - 950 + (i + noise(i, seed + 2) * 0.9) * (1900 / count);
+        g.fillStyle(this.tone(color), 1);
+        g.fillPoints(
+          [
+            { x: x - half, y: horizon + 2 },
+            { x, y: horizon - h },
+            { x: x + half, y: horizon + 2 },
+          ],
+          true,
+        );
+      }
+    }
   }
 
   private drawFloor(base: (typeof FLOOR_STYLES)[number]) {
