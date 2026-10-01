@@ -15,7 +15,8 @@ export type InteractionKind =
   | 'music'
   | 'water'
   | 'play'
-  | 'warm';
+  | 'warm'
+  | 'picnic';
 
 export interface InteractionDef {
   kind: InteractionKind;
@@ -50,6 +51,8 @@ export const INTERACTIONS: InteractionDef[] = [
   { kind: 'water', icon: '💧', label: 'みずやり', stance: 'beside', motion: 'water', glow: 0xc8f0c0, toast: 'みずを あげた' },
   { kind: 'play', icon: '🎹', label: 'ひく', stance: 'beside', motion: 'play', glow: 0xffe0a8, toast: 'ピアノを ひきはじめた' },
   { kind: 'warm', icon: '🔥', label: 'あたたまる', stance: 'beside', motion: 'warm', glow: 0xffb27a, toast: 'ひに あたっている' },
+  // すわるだけだが、**ともだちを呼ぶ**ところが違う（RoomScene が拾う）
+  { kind: 'picnic', icon: '🧺', label: 'ふたりで', stance: 'on', motion: null, glow: 0xffe6c0, toast: 'ともだちを さそった' },
 ];
 
 const BY_KIND = new Map(INTERACTIONS.map((i) => [i.kind, i]));

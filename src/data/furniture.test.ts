@@ -80,6 +80,7 @@ describe('カタログの整合性', () => {
       'tree',
       'door',
       'house',
+      'picnic',
     ];
     for (const f of FURNITURE) expect(drawable, f.id).toContain(f.shape);
   });

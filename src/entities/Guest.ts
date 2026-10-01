@@ -30,6 +30,12 @@ export interface GuestHost {
   onLeave(guest: Guest): void;
   /** その部屋の主なら true。帰らずに ずっと居る */
   stay?: boolean;
+  /**
+   * true のあいだは 自分で動かない。
+   * 「ふたりのおやすみ」では場が歩かせたり喋らせたりするので、
+   * そこへ勝手な行動が混ざると さそいが流れてしまう
+   */
+  busy?: () => boolean;
   /** 最初のひとこと。省略すると おきゃくさんのあいさつになる */
   greeting?: string;
 }
@@ -90,7 +96,7 @@ export class Guest {
       this.host.onLeave(this);
       return;
     }
-    if (this.state.phase !== 'looking' || this.avatar.isWalking) return;
+    if (this.state.phase !== 'looking' || this.avatar.isWalking || this.host.busy?.()) return;
 
     this.wait -= deltaMs;
     if (this.wait > 0) return;
@@ -134,12 +140,22 @@ export class Guest {
     });
   }
 
+  /**
+   * 帰ってもらう。`stay` の人にも効く。
+   * 「ふたりのおやすみ」が終わったときに、場から呼ぶ
+   */
+  goHome(line?: string) {
+    if (this.state.phase === 'leaving' || this.state.phase === 'gone') return;
+    this.state = { ...this.state, phase: 'leaving' };
+    this.startLeaving(line);
+  }
+
   /** 帰りじたく。ひとこと言ってから出口へ歩く */
-  private startLeaving() {
+  private startLeaving(line?: string) {
     if (this.saidBye) return;
     this.saidBye = true;
     if (this.avatar.sittingOn) this.avatar.standUp();
-    this.avatar.say(GUEST_BYE[Phaser.Math.Between(0, GUEST_BYE.length - 1)]);
+    this.avatar.say(line ?? GUEST_BYE[Phaser.Math.Between(0, GUEST_BYE.length - 1)]);
     const door = this.host.doorTile();
     const path = this.host.pathTo(this.avatar.tile, door);
     if (!path) {

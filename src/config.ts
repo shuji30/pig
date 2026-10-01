@@ -29,7 +29,7 @@ export const GUEST_GAP_MAX = 320_000;
 export const GUEST_GIFT = 40;
 
 export const SAVE_KEY = 'pig-sandbox.save.v1';
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 /** はじめて遊ぶときの所持コイン */
 export const START_COINS = 420;

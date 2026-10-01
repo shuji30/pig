@@ -21,6 +21,7 @@ export type FurnitureShape =
   | 'rocket' // 月へ行けるロケット（と、そのミニチュア）
   | 'slide' // すべりだい（おにわ）
   | 'tree' // 庭木（サルスベリ）
+  | 'picnic' // ピクニックシート（ふたりのおやすみ）
   | 'door' // 外へ出るとびら
   | 'house'; // おにわから見た家（おすと中へ入れる）
 
@@ -145,6 +146,8 @@ export interface DailyCounters {
   patted: number;
   /** おきゃくさんが来た回数 */
   guested: number;
+  /** ともだちと「ふたりのおやすみ」を過ごした回数 */
+  holiday: number;
 }
 
 /**

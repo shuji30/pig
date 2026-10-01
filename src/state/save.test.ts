@@ -542,3 +542,56 @@ describe('おにわの家の移行', () => {
     expect(s.inventory.house).toBeUndefined();
   });
 });
+
+/**
+ * v12 でおにわに ピクニックシート が増えた。
+ * これにすわると ともだちが来るので、無いと「ふたりのおやすみ」に入れない。
+ */
+describe('ピクニックシートの移行', () => {
+  const spot = GARDEN_LAYOUT.find((l) => l.defId === 'picnic-mat')!;
+  const withGarden = (items: unknown[]) => ({
+    version: 11,
+    rooms: {
+      home: { name: 'いえ', note: '', floor: 0, wall: 0, size: 12, items: [], spawn: { gx: 2, gy: 2 } },
+      garden: {
+        name: 'おにわ', note: '', floor: GARDEN_FLOOR, wall: GARDEN_WALL, size: 14,
+        items, spawn: { gx: 6, gy: 2 },
+      },
+    },
+    currentRoom: 'home',
+    inventory: {},
+    avatar: {},
+  });
+
+  it('無い庭には 置く', () => {
+    put(withGarden([]));
+    const s = load();
+    expect(s.rooms.garden.items.find((i) => i.defId === 'picnic-mat')).toMatchObject({
+      gx: spot.gx,
+      gy: spot.gy,
+    });
+    expect(s.inventory['picnic-mat']).toBeUndefined();
+  });
+
+  it('置く場所がふさがっていたら 持ちものへ入れる', () => {
+    put(withGarden([{ uid: 'b1', defId: 'bed', gx: spot.gx, gy: spot.gy, rot: 0 }]));
+    const s = load();
+    expect(s.rooms.garden.items.some((i) => i.defId === 'picnic-mat')).toBe(false);
+    expect(s.rooms.garden.items.some((i) => i.defId === 'bed')).toBe(true);
+    expect(s.inventory['picnic-mat']).toBe(1);
+  });
+
+  it('もうある庭では 増やさない', () => {
+    put(withGarden([{ uid: 'm1', defId: 'picnic-mat', gx: 9, gy: 9, rot: 0 }]));
+    const s = load();
+    expect(s.rooms.garden.items.filter((i) => i.defId === 'picnic-mat')).toHaveLength(1);
+    expect(s.inventory['picnic-mat']).toBeUndefined();
+  });
+
+  it('置くのは1回きり', () => {
+    put({ ...withGarden([]), version: SAVE_VERSION });
+    const s = load();
+    expect(s.rooms.garden.items.some((i) => i.defId === 'picnic-mat')).toBe(false);
+    expect(s.inventory['picnic-mat']).toBeUndefined();
+  });
+});
