@@ -22,8 +22,16 @@ import { getDef, interactionsOf, spriteSheets, wallSpriteSheets } from '../data/
 import { getInteraction, type InteractionKind } from '../data/interactions';
 import { findPet, getPet } from '../data/pets';
 import { findStamp } from '../data/stamps';
-import { pickFriend } from '../data/friends';
+import { findFriend, pickFriend } from '../data/friends';
 import { Guest } from '../entities/Guest';
+import {
+  advanceHoliday,
+  currentStep,
+  planHoliday,
+  startHoliday,
+  type HolidayState,
+  type HolidayStep,
+} from '../entities/holiday';
 import type { MissionCtx } from '../data/missions';
 import type { MotionKind } from '../data/motions';
 import { AutoPlay } from '../entities/AutoPlay';
@@ -722,6 +730,7 @@ export class RoomScene extends Phaser.Scene {
     this.avatar.update(delta);
     this.pet?.update(delta);
     this.updateGuest(delta);
+    this.updateHoliday(delta);
     this.roomOwner?.update(delta);
     this.auto.update(delta);
     this.syncUse();
@@ -1190,6 +1199,8 @@ export class RoomScene extends Phaser.Scene {
   private resetGuestSchedule() {
     this.guest?.destroy();
     this.guest = null;
+    // 部屋を移ったら、さそいも終い（相手は付いてこない）
+    this.holiday = null;
     this.guestIn = this.guestsAllowed() ? Phaser.Math.Between(GUEST_FIRST_MIN, GUEST_FIRST_MAX) : null;
   }
 
@@ -1420,6 +1431,200 @@ export class RoomScene extends Phaser.Scene {
     this.persist();
   }
 
+
+  // ---------------- ふたりのおやすみ ----------------
+
+  /**
+   * ピクニックシートにすわると ともだちが来て、いっしょに過ごす。
+   *
+   * ふだんの おきゃくさん（`Guest`）は こちらが何をしても段取りが変わらない。
+   * ここでは **相手がさそって、こちらが応じる**。相手が先に家具のところへ行き
+   * 「いっしょに○○しよう」と言うので、おなじ家具でおなじことをすると すすむ。
+   * 急かさない（待たせても減らない）。
+   *
+   * 段取りそのものは `entities/holiday.ts` に純粋関数で置いてある。
+   */
+  private holiday: {
+    steps: HolidayStep[];
+    state: HolidayState;
+    name: string;
+    /** 次のさそいまでの残り(ms)。null は「いま さそい中」 */
+    wait: number | null;
+  } | null = null;
+
+  /** さそいとさそいの あいだ。すぐ次を出すと せかされているように見える */
+  private static readonly HOLIDAY_GAP = 2600;
+  /** 来てもらってから 最初のさそいを出すまで */
+  private static readonly HOLIDAY_FIRST = 4200;
+  /** ぜんぶ終わったときにもらえるコイン（1日1回） */
+  private static readonly HOLIDAY_GIFT = 90;
+
+  /** いま おやすみ の最中か。おきゃくさんに勝手に動かれると困る */
+  private holidayBusy(): boolean {
+    return this.holiday !== null;
+  }
+
+  /** ピクニックシートにすわったときに呼ぶ。ともだちを呼んで はじめる */
+  private beginHoliday() {
+    if (this.visiting || this.holiday) return;
+    if (this.guest) {
+      // もう誰か来ている。ふたりまで（3人目が来ると だれと居るのか分からなくなる）
+      this.ui.toast(`${this.guest.name}さんが もう 来ているよ`);
+      return;
+    }
+    const friend = this.pickHolidayFriend();
+    const door = this.doorTile();
+    this.guest = new Guest(this, friend.look, door, {
+      pathTo: (from, to) => findPath(from, to, this.size, this.size, this.blockedFn),
+      lookSpots: () => this.guestLookSpots(),
+      doorTile: () => this.doorTile(),
+      trySit: (g) => this.guestSit(g),
+      onLeave: (g) => this.guestLeft(g),
+      stay: true,
+      busy: () => this.holidayBusy(),
+      greeting: 'よんでくれて ありがとう！',
+    });
+    this.guest.setDepthResolver((box) => this.furniture.depthAt(box));
+
+    const steps = planHoliday((defId) => this.furniture.all.some((i) => i.defId === defId));
+    this.holiday = {
+      steps,
+      state: startHoliday(steps),
+      name: friend.look.name,
+      wait: RoomScene.HOLIDAY_FIRST,
+    };
+
+    // 新しい人なら ともだちに残る（ふつうの来客と同じ扱い）
+    if (!this.save.friends.includes(friend.id)) {
+      this.save.friends.push(friend.id);
+      this.ui.setFriends(this.save.friends);
+    }
+    this.save.daily.guested += 1;
+    this.ui.toast(`${friend.look.name}さんが きてくれた`);
+    this.syncMissions();
+    this.persist();
+  }
+
+  /** 呼ぶ相手。もう ともだちの人を優先する（はじめての人ばかり来ると関係が育たない） */
+  private pickHolidayFriend() {
+    const known = this.save.friends;
+    if (known.length > 0) {
+      const id = known[Phaser.Math.Between(0, known.length - 1)];
+      const f = findFriend(id);
+      if (f) return f;
+    }
+    return pickFriend(this.lastGuestId);
+  }
+
+  private updateHoliday(delta: number) {
+    const h = this.holiday;
+    if (!h) return;
+    // ともだちが帰ってしまったら、おやすみも終わり
+    if (!this.guest) {
+      this.holiday = null;
+      return;
+    }
+    if (h.wait === null) return;
+    h.wait -= delta;
+    if (h.wait > 0) return;
+    // 歩いている最中に次のさそいを出すと、来る前に行き先が変わってしまう
+    if (this.guest.avatar.isWalking) {
+      h.wait = 400;
+      return;
+    }
+    h.wait = null;
+    this.offerHolidayStep();
+  }
+
+  /** つぎのさそいを出す。もう無ければ おしまいにする */
+  private offerHolidayStep() {
+    const h = this.holiday;
+    if (!h) return;
+    const step = currentStep(h.state, h.steps);
+    if (!step) {
+      this.endHoliday();
+      return;
+    }
+    const item = this.furniture.all.find((i) => i.defId === step.defId);
+    // さそう先が片づけられていたら、そのさそいは飛ばす
+    if (!item || !this.leadGuest(item, step.kind, step.invite)) {
+      h.state = { at: h.state.at + 1, done: h.state.at + 1 >= h.steps.length };
+      h.wait = 600;
+      return;
+    }
+    this.ui.setHint(`${h.name}さんが さそっている。おなじことを してみよう`);
+    // もう おなじことを していたら、待たせずに すすめる
+    const using = this.using;
+    if (using) {
+      const now = this.furniture.get(using.uid);
+      if (now) this.noteHolidayUse(now.defId, using.kind);
+    }
+  }
+
+  /**
+   * ともだちを その家具のところへ歩かせて、ひとこと言わせる。
+   * **さそう側は家具を使わない。**こちらが すわる場所をふさいでしまうため、
+   * となりに立って その家具のほうを向くだけにしてある
+   */
+  private leadGuest(item: PlacedFurniture, kind: InteractionKind, line: string): boolean {
+    const guest = this.guest;
+    if (!guest) return false;
+    const inter = getInteraction(kind);
+    const targets =
+      inter.stance === 'beside' ? this.furniture.frontTiles(item) : this.furniture.neighborTiles(item);
+    const found = findPathAdjacent(guest.avatar.tile, targets, this.size, this.size, this.blockedFn);
+    if (!found) return false;
+    if (guest.avatar.sittingOn) guest.avatar.standUp();
+    guest.avatar.walk(found.path, () => {
+      const still = this.furniture.get(item.uid);
+      if (!still) return;
+      const f = this.furniture.footprint(still);
+      const dx = f.gx + (f.w - 1) / 2 - guest.avatar.tile.gx;
+      const dy = f.gy + (f.d - 1) / 2 - guest.avatar.tile.gy;
+      if (Math.abs(dx) >= Math.abs(dy)) guest.avatar.faceToward(Math.sign(dx), 0);
+      else guest.avatar.faceToward(0, Math.sign(dy));
+      guest.avatar.say(line);
+    });
+    return true;
+  }
+
+  /** こちらが家具で何かしたことを さそいに照らす */
+  private noteHolidayUse(defId: string, kind: InteractionKind) {
+    const h = this.holiday;
+    if (!h || h.wait !== null) return;
+    const next = advanceHoliday(h.state, h.steps, { defId, kind });
+    if (next.at === h.state.at) return;
+    const step = h.steps[h.state.at];
+    h.state = next;
+    h.wait = RoomScene.HOLIDAY_GAP;
+    const stamp = findStamp(step.stamp);
+    if (this.guest) {
+      this.guest.avatar.say(step.done);
+      if (stamp) this.guest.avatar.showStamp(stamp);
+    }
+    this.setHint();
+  }
+
+  /** ぜんぶ終わり。おみやげを渡して帰ってもらう */
+  private endHoliday() {
+    const h = this.holiday;
+    if (!h) return;
+    this.holiday = null;
+    const first = this.save.daily.holiday === 0;
+    this.save.daily.holiday += 1;
+    if (first) {
+      this.save.coins += RoomScene.HOLIDAY_GIFT;
+      this.ui.toast(`ふたりの おやすみ！ +${RoomScene.HOLIDAY_GIFT}コイン`);
+    } else {
+      this.ui.toast('たのしい いちにちだったね');
+    }
+    this.guest?.goHome('きょうは ありがとう！ またね');
+    this.ui.setCoins(this.save.coins);
+    this.setHint();
+    this.syncMissions();
+    this.persist();
+  }
+
   // ---------------- 家具でできること ----------------
 
   /** いま家具でしていること（していなければ null） */
@@ -1476,6 +1681,10 @@ export class RoomScene extends Phaser.Scene {
       this.save.daily.used += 1;
       this.ui.toast(inter.toast);
     }
+    // ふたりのおやすみ。シートにすわると ともだちを呼び、
+    // さそわれているあいだは、おなじことをすると すすむ
+    if (kind === 'picnic') this.beginHoliday();
+    else this.noteHolidayUse(item.defId, kind);
     this.syncMissions();
     this.syncSelBar();
     this.persist();

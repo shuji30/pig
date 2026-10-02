@@ -43,6 +43,7 @@ export const MISSIONS: MissionDef[] = [
   { id: 'buy1', label: 'ショップで1つ買う', goal: 1, reward: 30, progress: (c) => c.daily.bought },
   { id: 'restyle', label: 'ゆかか かべを かえる', goal: 1, reward: 25, progress: (c) => c.daily.restyled },
   { id: 'sit1', label: '家具にすわる', goal: 1, reward: 20, progress: (c) => c.daily.sat },
+  { id: 'holiday', label: 'ともだちと おやすみを すごす', goal: 1, reward: 50, progress: (c) => c.daily.holiday },
   { id: 'emote2', label: 'きもちを2回だす', goal: 2, reward: 20, progress: (c) => c.daily.emoted },
   { id: 'store1', label: '家具を1つしまう', goal: 1, reward: 15, progress: (c) => c.daily.stored },
   { id: 'seats3', label: 'すわれる家具を3つ置いておく', goal: 3, reward: 45, progress: (c) => countCategory(c.items, 'seat') },

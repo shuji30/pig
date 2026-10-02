@@ -70,7 +70,10 @@ export function dayBefore(day: string): string {
 }
 
 export function emptyDaily(day: string): DailyCounters {
-  return { day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0, bought: 0, traveled: 0, used: 0, patted: 0, guested: 0 };
+  return {
+    day, placed: 0, stored: 0, sat: 0, emoted: 0, restyled: 0,
+    bought: 0, traveled: 0, used: 0, patted: 0, guested: 0, holiday: 0,
+  };
 }
 
 /**
@@ -95,6 +98,7 @@ function cleanDaily(raw: unknown, fallbackDay: string): DailyCounters {
     used: num(r.used),
     patted: num(r.patted),
     guested: num(r.guested),
+    holiday: num(r.holiday),
   };
 }
 
@@ -325,6 +329,8 @@ function cleanRoom(raw: unknown, fallbackName: string): RoomData {
  *          模様替えしていない庭は、そちらへ移す
  * v10 → v11: おにわに「おうち」が建った。すでに庭を作ってある人の庭には
  *          無いので、建てる（芝の上にぽつんと立っていた とびら は家にする）
+ * v11 → v12: 「ピクニックシート」が増えた。すわると ともだちが来て
+ *          いっしょに過ごせる（ふたりのおやすみ）。これも庭へ足す
  */
 function migrate(raw: unknown): SaveData | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -386,6 +392,11 @@ function migrate(raw: unknown): SaveData | null {
     inventory[HOUSE] = (inventory[HOUSE] ?? 0) + 1;
   }
 
+  // v12 で増えた ピクニックシート。これが無いと「ふたりのおやすみ」に入れない
+  if (old.version < 12 && garden && addToGarden(garden, PICNIC_MAT)) {
+    inventory[PICNIC_MAT] = (inventory[PICNIC_MAT] ?? 0) + 1;
+  }
+
   return {
     version: SAVE_VERSION,
     autoPlay: old.autoPlay ?? base.autoPlay,
@@ -409,21 +420,20 @@ const GARDEN_DOOR = 'garden-door';
 
 /** おにわに建っている家の id */
 const HOUSE = 'house';
+/** ピクニックシートの id（ふたりのおやすみ の入口） */
+const PICNIC_MAT = 'picnic-mat';
 
 /**
- * すでにある庭に、後から家を建てる。
- * 前の版では、芝の上に とびら だけがぽつんと立っていたので、それは片づける。
- * 建てる場所に何か置いてあったら、無理に建てず持ちものへ回す
- * （せっかく並べた家具を消さない）。
+ * すでにある庭に、`GARDEN_LAYOUT` の決まった場所へ 後から1つ足す。
+ *
+ * 置く場所に何か置いてあったら **無理に置かず** 持ちものへ回す
+ * （せっかく並べた家具を消さない）。戻り値が true なら持ちもの行き。
  */
-function buildHouse(garden: RoomData): boolean {
-  if (garden.items.some((i) => i.defId === HOUSE)) return false;
-  const spot = GARDEN_LAYOUT.find((l) => l.defId === HOUSE);
-  const def = findDef(HOUSE);
+function addToGarden(garden: RoomData, defId: string): boolean {
+  if (garden.items.some((i) => i.defId === defId)) return false;
+  const spot = GARDEN_LAYOUT.find((l) => l.defId === defId);
+  const def = findDef(defId);
   if (!spot || !def) return false;
-  // 芝の上に立っていた とびら は、家にとってかわられる
-  const door = garden.items.findIndex((i) => i.defId === GARDEN_DOOR);
-  if (door >= 0) garden.items.splice(door, 1);
 
   const box = boxOf(def.size, spot.rot, spot.gx, spot.gy);
   const busy = garden.items.some((i) => {
@@ -431,9 +441,24 @@ function buildHouse(garden: RoomData): boolean {
     return d !== undefined && overlaps(box, boxOf(d.size, i.rot, i.gx, i.gy));
   });
   if (busy || !insideRoom(box, garden.size, garden.size)) return true;
-  garden.items.push({ uid: newUid(), defId: HOUSE, gx: spot.gx, gy: spot.gy, rot: spot.rot });
-  for (const [gx, gy] of GARDEN_PATH) garden.floorPatch[`${gx},${gy}`] ??= GARDEN_PATH_FLOOR;
+  garden.items.push({ uid: newUid(), defId, gx: spot.gx, gy: spot.gy, rot: spot.rot });
   return false;
+}
+
+/**
+ * すでにある庭に、後から家を建てる。
+ * 前の版では、芝の上に とびら だけがぽつんと立っていたので、それは片づける。
+ */
+function buildHouse(garden: RoomData): boolean {
+  if (garden.items.some((i) => i.defId === HOUSE)) return false;
+  // 芝の上に立っていた とびら は、家にとってかわられる
+  const door = garden.items.findIndex((i) => i.defId === GARDEN_DOOR);
+  if (door >= 0) garden.items.splice(door, 1);
+  const toInventory = addToGarden(garden, HOUSE);
+  if (!toInventory) {
+    for (const [gx, gy] of GARDEN_PATH) garden.floorPatch[`${gx},${gy}`] ??= GARDEN_PATH_FLOOR;
+  }
+  return toInventory;
 }
 
 /** もう、とびらをどこかに持っているか（置いてある / 持ちものにある） */

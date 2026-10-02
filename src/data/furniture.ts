@@ -106,6 +106,7 @@ export const FURNITURE: FurnitureDef[] = [
   { id: 'slide', name: 'すべりだい', category: 'seat', shape: 'slide', size: [2, 2], height: 62, color: '#f2e7d5', accent: '#ff9ec4', seatHeight: 52, price: 420, rarity: 'uncommon' },
   { id: 'crape-myrtle', name: 'サルスベリ', category: 'deco', shape: 'tree', size: [2, 2], height: 128, color: '#e3d9cb', accent: '#e88fb8', interactions: ['water'], price: 460, rarity: 'rare' },
   { id: 'garden-bench', name: 'にわのベンチ', category: 'seat', shape: 'sofa', size: [2, 1], height: 44, color: '#e0cba8', accent: '#cfe0c0', seatHeight: 18, price: 260, rarity: 'common' },
+  { id: 'picnic-mat', name: 'ピクニックシート', category: 'floor', shape: 'picnic', size: [2, 2], height: 16, color: '#f6efe0', accent: '#e07f8e', seatHeight: 3, interactions: ['sit', 'picnic'], price: 220, rarity: 'uncommon' },
   { id: 'flower-bed', name: 'かだん', category: 'deco', shape: 'plant', size: [1, 1], height: 34, color: '#c89a6a', accent: '#f3a0c0', interactions: ['water'], price: 120, rarity: 'common' },
 
   // ---- かべ ----
@@ -272,6 +273,7 @@ export const MOON_WALL_LAYOUT: Array<{ defId: string; side: 'right' | 'left'; co
 export const GARDEN_LAYOUT: Array<{ defId: string; gx: number; gy: number; rot: 0 | 1 | 2 | 3 }> = [
   // 家。おにわの奥に建っていて、おすと中へ入れる
   { defId: 'house', gx: 5, gy: 0, rot: 0 },
+  { defId: 'picnic-mat', gx: 2, gy: 5, rot: 0 },
   { defId: 'slide', gx: 9, gy: 3, rot: 0 },
   { defId: 'crape-myrtle', gx: 1, gy: 1, rot: 0 },
   { defId: 'garden-bench', gx: 4, gy: 8, rot: 0 },

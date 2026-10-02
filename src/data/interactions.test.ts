@@ -65,7 +65,8 @@ describe('interactionsOf', () => {
 });
 
 describe('カタログとの整合', () => {
-  const needsSeat: InteractionKind[] = ['sit', 'sleep'];
+  // 家具の「上に乗る」こと。どれも すわる高さが要る
+  const needsSeat: InteractionKind[] = ['sit', 'sleep', 'picnic'];
 
   it('家具の上に乗ることには すわる高さが要る', () => {
     for (const f of FURNITURE) {
@@ -75,7 +76,7 @@ describe('カタログとの整合', () => {
     }
   });
 
-  it('上に乗ることは すわる・ねる だけ（そばに立つものが混ざっていない）', () => {
+  it('上に乗ることは needsSeat のものだけ（そばに立つものが混ざっていない）', () => {
     for (const inter of INTERACTIONS) {
       if (inter.stance !== 'beside') expect(needsSeat).toContain(inter.kind);
     }

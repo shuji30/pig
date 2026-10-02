@@ -262,6 +262,55 @@ export const SHAPES = {
     g.add(inner);
   },
 
+  /**
+   * ピクニックシート。敷物の上に かご と おべんとう。
+   * ここに すわると ともだちが あそびに来る（`entities/holiday.ts`）ので、
+   * **「ふたりぶん」に見えること**を優先して、おさらを2枚むかい合わせに置く
+   */
+  picnic(g, W, D) {
+    // 敷物。ふちを折り返してある
+    box(g, 0, 0, W, D, 0, 1.2, M.acc(), 0.05);
+    box(g, 0.12, 0.12, W - 0.12, D - 0.12, 1.2, 2.0, M.base(), 0.04);
+    // 市松のつぎあて。布の柄を 面で出す（焼いた絵でも柄が見えるように）
+    const n = 4;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if ((i + j) % 2 === 1) continue;
+        const u0 = 0.16 + ((W - 0.32) * i) / n;
+        const v0 = 0.16 + ((D - 0.32) * j) / n;
+        box(g, u0, v0, u0 + (W - 0.32) / n - 0.04, v0 + (D - 0.32) / n - 0.04, 2.0, 2.4, M.acc(), 0.02);
+      }
+    }
+
+    // かご。ふたを すこしずらして のぞかせる
+    const cu = W * 0.26;
+    const cv = D * 0.3;
+    box(g, cu - 0.24, cv - 0.18, cu + 0.24, cv + 0.18, 2.4, 10, M.sand(), 0.04);
+    box(g, cu - 0.27, cv - 0.21, cu + 0.27, cv + 0.21, 10, 11.5, M.base(), 0.03);
+    // 持ち手
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 8, 20, Math.PI), M.sand());
+    handle.position.set(cu, PX(11.5), cv);
+    handle.rotation.y = Math.PI / 2;
+    g.add(handle);
+
+    // おさら2枚と、コップ2つ。ふたりぶん
+    for (const [du, dv] of [
+      [W * 0.68, D * 0.3],
+      [W * 0.52, D * 0.72],
+    ]) {
+      const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.17, PX(1.4), 20), M.ivory());
+      plate.position.set(du, PX(3.1), dv);
+      plate.receiveShadow = true;
+      g.add(plate);
+      // のっているもの（おにぎり）
+      blob(g, du, dv, 5.2, 3.6, 3.2, M.ivory());
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, PX(4), 14), M.base());
+      cup.position.set(du + 0.3, PX(4.4), dv - 0.18);
+      cup.castShadow = true;
+      g.add(cup);
+    }
+  },
+
   /** 箱もの（チェスト・棚・かがみ など）。前面に金彩パネル */
   box(g, W, D, H) {
     const onLegs = H <= 50;
