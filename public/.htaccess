@@ -1,0 +1,53 @@
+# レンタルサーバ（Apache）に dist/ を置くときの設定。
+# 無くても遊べるが、入れておくと ①VRM が弾かれない ②転送量が減る
+# ③更新したのに古い版のまま、が起きない。
+#
+# Vite が public/ の中身を dist/ の直下へそのまま写すので、
+# このファイルも dist/.htaccess として出てくる。
+# Nginx や LiteSpeed(.htaccess 対応) 以外のサーバでは、同じ内容を
+# それぞれの書き方で入れること（README「レンタルサーバへの公開」参照）。
+
+# ---- MIME ----------------------------------------------------------------
+# .vrm は多くのサーバが知らない拡張子。設定によっては 403 で弾かれる
+AddType model/gltf-binary .vrm
+AddType application/manifest+json .webmanifest
+AddType image/svg+xml .svg
+
+# ---- 圧縮 ----------------------------------------------------------------
+# assets/index.js は 1.6MB ほど。gzip で 1/4 になる
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain image/svg+xml
+  AddOutputFilterByType DEFLATE application/javascript text/javascript
+  AddOutputFilterByType DEFLATE application/manifest+json application/json
+</IfModule>
+
+# ---- キャッシュ ----------------------------------------------------------
+# ⚠️ 出力ファイル名にハッシュを付けない作りなので（vite.config.ts 参照）、
+# JS/CSS を長く持たせると更新が届かない。短くすること。
+# sw.js と index.html は must-revalidate。ここを誤ると、直したはずのものが
+# いつまでも直らない端末が出る
+<IfModule mod_headers.c>
+  <FilesMatch "^(sw\.js|index\.html)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.webmanifest$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "public, max-age=300"
+  </FilesMatch>
+  # 中身が変わらないもの。スプライトとアバターは重いので長めに持たせる
+  <FilesMatch "\.(png|svg|vrm)$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+</IfModule>
+
+# ---- https へそろえる ----------------------------------------------------
+# VR(WebXR) と オフライン(Service Worker) は https でしか動かない。
+# サーバ側に「常時SSL」の設定があるならそちらを使い、ここは消してよい
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
